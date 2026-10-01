@@ -113,8 +113,9 @@ module-specific questions and are covered end-to-end by tests.
 
 ## 4. Opportunity scoring
 
-Deterministic and explainable (no LLM, no invented numbers). For each **active module with
-answers**, each listed bottleneck becomes an opportunity. Executive top pains are mapped to a
+Deterministic and explainable (no LLM, no invented numbers). Input is the tenant's **current
+Brain** (active questionnaire facts, including accepted corrections) — one Brain per tenant, so a
+later assessment refines the same facts. For each **active module with answers**, each listed bottleneck becomes an opportunity. Executive top pains are mapped to a
 module by keyword; unmapped pains become explicit **open questions**.
 
 Per opportunity:
@@ -135,6 +136,9 @@ Per opportunity:
 | phase | `Now` / `Next` / `Later` |
 | rationale | every score contribution as a sentence |
 | assumptions / open questions | every missing input |
+
+Suitability: volume ≥200/month +2, ≥30 +1; hours/week ≥15 +2, ≥4 +1; error rate ≥5% +1 →
+high (≥3) / medium (≥1) / low; `unknown` when neither volume nor hours is known.
 
 Priority score (0–100, clamped): 50 base; impact critical +25 / high +15 / medium +5 / low −5;
 suitability high +15 / medium +5 / low −10; complexity high −15 / medium −5; risk high −10;

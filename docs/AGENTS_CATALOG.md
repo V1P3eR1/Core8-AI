@@ -20,6 +20,24 @@ Each agent has `model`, `system_prompt` and an optional `allowed_tools` allow-li
 
 > Only `instagram` is scoped (`database.py → _AGENT_TOOL_SCOPES`). The other seeded agents can call every tool, including Instagram publishing — see TECH_DEBT X8.
 
+### Business Brain context scopes (CORE8-001)
+When a chat is opened for a tenant, each agent receives only its scope of the Business Brain
+(`business_brain/context.py`); tenant owners can override per agent, never above
+`confidential`.
+
+| Agent | Categories | Domains | Max sensitivity |
+|---|---|---|---|
+| `general` | profile, products, personas, tone, goals | general | internal |
+| `leads` | profile, products, personas, tone, processes, KPIs, policies, approvals, systems, pains, goals | general, sales_crm | confidential |
+| `calendar` | profile, tone, processes, policies, approvals, systems | general, email_calendar, office_admin | internal |
+| `design` | profile, products, personas, tone, goals | general, marketing_social | internal |
+| `instagram` | profile, products, personas, tone, goals, KPIs, processes, approvals | general, marketing_social | internal |
+| any other | organization profile, products, tone | general | internal |
+
+The Opportunity Engine also recommends **planned** agent roles that don't exist yet:
+`support`, `office_admin`, `operations`, `finance_ops`, `hr`, `bi_reporting`, `knowledge`,
+`integrations`, `compliance`.
+
 ### Instagram sub-agents (internal, not user-facing)
 Defined in `agents/instagram_subagents.py`; spawned by step tools in `tools/instagram_steps.py`.
 Pure generation (`allowed_tools=[]`) — the step tool performs all side effects.

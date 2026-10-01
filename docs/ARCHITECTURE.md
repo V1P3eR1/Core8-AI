@@ -68,6 +68,14 @@ Core8-AI/
 | GET | `/api/instagram/{account,plans,plans/{id},scheduled-posts,insights}` | JWT |
 | POST | `/api/instagram/media` | JWT |
 
+### Business Brain (CORE8-001)
+Tenant-scoped business-intelligence layer in `backend/business_brain/`: discovery
+questionnaire (JSON-defined, adaptive) → versioned facts with provenance → AI Opportunity
+Engine → AI Transformation Plan draft → role-scoped context for agents. REST API under
+`/api/tenants/{tenant_id}/…` and `/api/discovery/questionnaire`. Chat sessions opened with
+`/ws/{agent_id}?token=…&tenant_id=…` receive the agent's scoped Brain context as a system
+block. Full design: [business-brain/DESIGN.md](business-brain/DESIGN.md).
+
 ### Frontend
 Single page (`app/page.tsx`) with: `LoginPage`, `AgentSidebar`, `ConversationList`,
 `ChatWindow`, `ApprovalModal`, `CreateAgentDialog`, `HistoryView`, `InstagramCalendar`,
