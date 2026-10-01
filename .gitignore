@@ -1,0 +1,38 @@
+# Secrets — never commit. Only *.example / *.sample templates are allowed.
+.env
+.env.*
+!.env.example
+!.env.*.example
+!.env.sample
+*.key
+*.pem
+*.p12
+*.pfx
+secrets*
+credentials*
+*token*.json
+nginx/ssl/
+
+# Data — may contain customer / personal data
+*.db
+*.sqlite
+*.sqlite3
+data/
+uploads/
+media/
+memory/
+**/Costumers/
+**/customers/
+
+# Build / deps
+node_modules/
+.next/
+dist/
+build/
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+*.tsbuildinfo
+*.log
+.DS_Store

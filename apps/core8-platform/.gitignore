@@ -1,0 +1,51 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+.venv/
+venv/
+*.egg-info/
+dist/
+build/
+.pytest_cache/
+.mypy_cache/
+
+# Environment
+.env
+.env.local
+.env.*.local
+.env.production
+backend/.env.production
+
+# SSL certificates (never commit private keys)
+nginx/ssl/
+
+# Node / Next.js
+node_modules/
+.next/
+out/
+frontend/.next/
+frontend/out/
+frontend/node_modules/
+
+# Design previews (per-project preview apps)
+**/.prism/preview/
+
+# DB
+*.db
+*.sqlite3
+
+# Uploaded / generated post media
+backend/media/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/settings.json
+.idea/
+
+# Logs
+*.log
+logs/

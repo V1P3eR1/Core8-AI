@@ -1,0 +1,214 @@
+@import "tailwindcss";
+@import "tw-animate-css";
+@import "shadcn/tailwind.css";
+
+@custom-variant dark (&:is(.dark *));
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --font-sans: var(--font-sans);
+  --font-mono: var(--font-geist-mono);
+  --font-heading: var(--font-sans);
+  --color-sidebar-ring: var(--sidebar-ring);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar: var(--sidebar);
+  --color-chart-5: var(--chart-5);
+  --color-chart-4: var(--chart-4);
+  --color-chart-3: var(--chart-3);
+  --color-chart-2: var(--chart-2);
+  --color-chart-1: var(--chart-1);
+  --color-ring: var(--ring);
+  --color-input: var(--input);
+  --color-border: var(--border);
+  --color-destructive: var(--destructive);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-accent: var(--accent);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-muted: var(--muted);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-secondary: var(--secondary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-primary: var(--primary);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-popover: var(--popover);
+  --color-card-foreground: var(--card-foreground);
+  --color-card: var(--card);
+  --radius-sm: calc(var(--radius) * 0.6);
+  --radius-md: calc(var(--radius) * 0.8);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) * 1.4);
+  --radius-2xl: calc(var(--radius) * 1.8);
+  --radius-3xl: calc(var(--radius) * 2.2);
+  --radius-4xl: calc(var(--radius) * 2.6);
+}
+
+/* ── CORE8-AI COSMIC THEME ─────────────────────────────────────────────────── */
+:root {
+  --background: #05060f;
+  --foreground: #e8eaf6;
+  --card: rgba(13, 14, 30, 0.85);
+  --card-foreground: #e8eaf6;
+  --popover: rgba(13, 14, 30, 0.95);
+  --popover-foreground: #e8eaf6;
+  --primary: #00d4ff;
+  --primary-foreground: #05060f;
+  --secondary: rgba(124, 58, 237, 0.2);
+  --secondary-foreground: #c4b5fd;
+  --muted: rgba(255, 255, 255, 0.05);
+  --muted-foreground: #6b7db8;
+  --accent: rgba(0, 212, 255, 0.1);
+  --accent-foreground: #00d4ff;
+  --destructive: #ff4757;
+  --border: rgba(0, 212, 255, 0.12);
+  --input: rgba(0, 212, 255, 0.08);
+  --ring: rgba(0, 212, 255, 0.4);
+  --chart-1: #00d4ff;
+  --chart-2: #7c3aed;
+  --chart-3: #00ff88;
+  --chart-4: #ff6b9d;
+  --chart-5: #ffa742;
+  --radius: 0.75rem;
+  --sidebar: rgba(8, 9, 20, 0.95);
+  --sidebar-foreground: #e8eaf6;
+  --sidebar-primary: #00d4ff;
+  --sidebar-primary-foreground: #05060f;
+  --sidebar-accent: rgba(0, 212, 255, 0.08);
+  --sidebar-accent-foreground: #00d4ff;
+  --sidebar-border: rgba(0, 212, 255, 0.1);
+  --sidebar-ring: rgba(0, 212, 255, 0.4);
+  /* Custom neon vars */
+  --neon-blue: #00d4ff;
+  --neon-purple: #7c3aed;
+  --neon-green: #00ff88;
+  --neon-pink: #ff6b9d;
+}
+
+/* Keep dark vars identical — we're always dark */
+.dark {
+  --background: #05060f;
+  --foreground: #e8eaf6;
+  --card: rgba(13, 14, 30, 0.85);
+  --card-foreground: #e8eaf6;
+  --popover: rgba(13, 14, 30, 0.95);
+  --popover-foreground: #e8eaf6;
+  --primary: #00d4ff;
+  --primary-foreground: #05060f;
+  --secondary: rgba(124, 58, 237, 0.2);
+  --secondary-foreground: #c4b5fd;
+  --muted: rgba(255, 255, 255, 0.05);
+  --muted-foreground: #6b7db8;
+  --accent: rgba(0, 212, 255, 0.1);
+  --accent-foreground: #00d4ff;
+  --destructive: #ff4757;
+  --border: rgba(0, 212, 255, 0.12);
+  --input: rgba(0, 212, 255, 0.08);
+  --ring: rgba(0, 212, 255, 0.4);
+  --sidebar: rgba(8, 9, 20, 0.95);
+  --sidebar-foreground: #e8eaf6;
+  --sidebar-primary: #00d4ff;
+  --sidebar-primary-foreground: #05060f;
+  --sidebar-accent: rgba(0, 212, 255, 0.08);
+  --sidebar-accent-foreground: #00d4ff;
+  --sidebar-border: rgba(0, 212, 255, 0.1);
+  --sidebar-ring: rgba(0, 212, 255, 0.4);
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+  body {
+    @apply bg-background text-foreground;
+    background-color: #05060f;
+  }
+  html {
+    @apply font-sans;
+  }
+}
+
+/* ── Glassmorphism utility ──────────────────────────────────────────────────── */
+.glass {
+  background: rgba(13, 14, 30, 0.7);
+  backdrop-filter: blur(16px) saturate(180%);
+  -webkit-backdrop-filter: blur(16px) saturate(180%);
+  border: 1px solid rgba(0, 212, 255, 0.12);
+}
+
+/* ── Neon glow utilities ────────────────────────────────────────────────────── */
+.glow-blue  { box-shadow: 0 0 20px rgba(0, 212, 255, 0.3), 0 0 60px rgba(0, 212, 255, 0.1); }
+.glow-purple{ box-shadow: 0 0 20px rgba(124, 58, 237, 0.3), 0 0 60px rgba(124, 58, 237, 0.1); }
+.glow-green { box-shadow: 0 0 20px rgba(0, 255, 136, 0.3), 0 0 60px rgba(0, 255, 136, 0.1); }
+.text-glow  { text-shadow: 0 0 10px rgba(0, 212, 255, 0.8), 0 0 30px rgba(0, 212, 255, 0.4); }
+
+/* ── Scrollbar ─────────────────────────────────────────────────────────────── */
+::-webkit-scrollbar       { width: 4px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: rgba(0, 212, 255, 0.2); border-radius: 2px; }
+::-webkit-scrollbar-thumb:hover { background: rgba(0, 212, 255, 0.4); }
+
+/* ── Keyframe animations ────────────────────────────────────────────────────── */
+@keyframes gradient-shift {
+  0%   { background-position: 0% 50%; }
+  50%  { background-position: 100% 50%; }
+  100% { background-position: 0% 50%; }
+}
+
+@keyframes pulse-ring {
+  0%   { transform: scale(1);   opacity: 0.8; }
+  100% { transform: scale(2.5); opacity: 0; }
+}
+
+@keyframes scan-line {
+  0%   { transform: translateY(-100%); }
+  100% { transform: translateY(100vh); }
+}
+
+@keyframes float {
+  0%, 100% { transform: translateY(0px); }
+  50%       { transform: translateY(-6px); }
+}
+
+@keyframes shimmer {
+  0%   { background-position: -200% center; }
+  100% { background-position: 200% center; }
+}
+
+@keyframes waveform-bar {
+  0%, 100% { transform: scaleY(0.2); }
+  50%       { transform: scaleY(1); }
+}
+
+.animate-float   { animation: float 3s ease-in-out infinite; }
+.animate-shimmer {
+  background: linear-gradient(90deg, transparent 0%, rgba(0,212,255,0.15) 50%, transparent 100%);
+  background-size: 200% auto;
+  animation: shimmer 2s linear infinite;
+}
+
+/* ── Message entrance animations ──────────────────────────────────────────── */
+@keyframes msg-in-right {
+  from { opacity: 0; transform: translateX(20px) scale(0.95); }
+  to   { opacity: 1; transform: translateX(0)    scale(1); }
+}
+@keyframes msg-in-left {
+  from { opacity: 0; transform: translateX(-20px) scale(0.95); }
+  to   { opacity: 1; transform: translateX(0)     scale(1); }
+}
+.msg-user      { animation: msg-in-right 0.3s cubic-bezier(0.34, 1.56, 0.64, 1) forwards; }
+.msg-assistant { animation: msg-in-left  0.3s cubic-bezier(0.34, 1.56, 0.64, 1) forwards; }
+
+/* ── Gradient text ──────────────────────────────────────────────────────────── */
+.gradient-text {
+  background: linear-gradient(135deg, #00d4ff 0%, #7c3aed 50%, #00ff88 100%);
+  background-size: 200% auto;
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+  animation: shimmer 3s linear infinite;
+}

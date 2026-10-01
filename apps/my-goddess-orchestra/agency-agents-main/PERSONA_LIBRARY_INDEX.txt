@@ -1,0 +1,343 @@
+PERSONA LIBRARY INDEX (not mirrored, per instruction)
+Drive folder path: My-Goddess-Orchestra-AI/agency-agents-main/
+License: MIT, (c) AgentLand Contributors (third-party). Only LICENSE and README.md were downloaded into agency-agents-main/.
+Persona/library .md files enumerated (excluding top-level files): 270
+Not downloaded: everything except LICENSE and README.md. That includes the top-level tools.json, divisions.json, SECURITY.md, CONTRIBUTING.md, CONTRIBUTING_zh-CN.md, .gitattributes and .gitignore.
+Note: the subfolders flagged below were NOT enumerated recursively, so the true file count is higher.
+
+Per-division .md counts:
+  .github              1
+  academic             6
+  design               11
+  engineering          58
+  examples             6
+  finance              5
+  game-development     5
+  gis                  13
+  healthcare           3
+  integrations         1
+  marketing            37
+  paid-media           7
+  product              6
+  project-management   7
+  sales                9
+  security             13
+  spatial-computing    6
+  specialized          58
+  strategy             3
+  support              6
+  testing              9
+
+Persona .md files:
+  My-Goddess-Orchestra-AI/agency-agents-main/.github/PULL_REQUEST_TEMPLATE.md
+  My-Goddess-Orchestra-AI/agency-agents-main/academic/academic-anthropologist.md
+  My-Goddess-Orchestra-AI/agency-agents-main/academic/academic-geographer.md
+  My-Goddess-Orchestra-AI/agency-agents-main/academic/academic-historian.md
+  My-Goddess-Orchestra-AI/agency-agents-main/academic/academic-narratologist.md
+  My-Goddess-Orchestra-AI/agency-agents-main/academic/academic-psychologist.md
+  My-Goddess-Orchestra-AI/agency-agents-main/academic/academic-statistician.md
+  My-Goddess-Orchestra-AI/agency-agents-main/design/design-brand-guardian.md
+  My-Goddess-Orchestra-AI/agency-agents-main/design/design-image-prompt-engineer.md
+  My-Goddess-Orchestra-AI/agency-agents-main/design/design-inclusive-visuals-specialist.md
+  My-Goddess-Orchestra-AI/agency-agents-main/design/design-persona-walkthrough.md
+  My-Goddess-Orchestra-AI/agency-agents-main/design/design-ui-designer.md
+  My-Goddess-Orchestra-AI/agency-agents-main/design/design-ui-finish-gate-reviewer.md
+  My-Goddess-Orchestra-AI/agency-agents-main/design/design-ui-polish-critic.md
+  My-Goddess-Orchestra-AI/agency-agents-main/design/design-ux-architect.md
+  My-Goddess-Orchestra-AI/agency-agents-main/design/design-ux-researcher.md
+  My-Goddess-Orchestra-AI/agency-agents-main/design/design-visual-storyteller.md
+  My-Goddess-Orchestra-AI/agency-agents-main/design/design-whimsy-injector.md
+  My-Goddess-Orchestra-AI/agency-agents-main/engineering/engineering-ai-data-remediation-engineer.md
+  My-Goddess-Orchestra-AI/agency-agents-main/engineering/engineering-ai-engineer.md
+  My-Goddess-Orchestra-AI/agency-agents-main/engineering/engineering-api-platform-engineer.md
+  My-Goddess-Orchestra-AI/agency-agents-main/engineering/engineering-autonomous-optimization-architect.md
+  My-Goddess-Orchestra-AI/agency-agents-main/engineering/engineering-backend-architect.md
+  My-Goddess-Orchestra-AI/agency-agents-main/engineering/engineering-cms-developer.md
+  My-Goddess-Orchestra-AI/agency-agents-main/engineering/engineering-code-reviewer.md
+  My-Goddess-Orchestra-AI/agency-agents-main/engineering/engineering-codebase-onboarding-engineer.md
+  My-Goddess-Orchestra-AI/agency-agents-main/engineering/engineering-data-engineer.md
+  My-Goddess-Orchestra-AI/agency-agents-main/engineering/engineering-data-visualization-engineer.md
+  My-Goddess-Orchestra-AI/agency-agents-main/engineering/engineering-database-optimizer.md
+  My-Goddess-Orchestra-AI/agency-agents-main/engineering/engineering-database-reliability-engineer.md
+  My-Goddess-Orchestra-AI/agency-agents-main/engineering/engineering-desktop-app-engineer.md
+  My-Goddess-Orchestra-AI/agency-agents-main/engineering/engineering-developer-tooling-engineer.md
+  My-Goddess-Orchestra-AI/agency-agents-main/engineering/engineering-devops-automator.md
+  My-Goddess-Orchestra-AI/agency-agents-main/engineering/engineering-drupal-performance.md
+  My-Goddess-Orchestra-AI/agency-agents-main/engineering/engineering-drupal-shopping-cart.md
+  My-Goddess-Orchestra-AI/agency-agents-main/engineering/engineering-email-intelligence-engineer.md
+  My-Goddess-Orchestra-AI/agency-agents-main/engineering/engineering-embedded-firmware-engineer.md
+  My-Goddess-Orchestra-AI/agency-agents-main/engineering/engineering-feishu-integration-developer.md
+  My-Goddess-Orchestra-AI/agency-agents-main/engineering/engineering-filament-optimization-specialist.md
+  My-Goddess-Orchestra-AI/agency-agents-main/engineering/engineering-finops-engineer.md
+  My-Goddess-Orchestra-AI/agency-agents-main/engineering/engineering-frontend-developer.md
+  My-Goddess-Orchestra-AI/agency-agents-main/engineering/engineering-gaussdb-expert.md
+  My-Goddess-Orchestra-AI/agency-agents-main/engineering/engineering-git-workflow-master.md
+  My-Goddess-Orchestra-AI/agency-agents-main/engineering/engineering-i18n-engineer.md
+  My-Goddess-Orchestra-AI/agency-agents-main/engineering/engineering-identity-access-engineer.md
+  My-Goddess-Orchestra-AI/agency-agents-main/engineering/engineering-incident-response-commander.md
+  My-Goddess-Orchestra-AI/agency-agents-main/engineering/engineering-iot-fleet-engineer.md
+  My-Goddess-Orchestra-AI/agency-agents-main/engineering/engineering-it-service-manager.md
+  My-Goddess-Orchestra-AI/agency-agents-main/engineering/engineering-llm-post-training-engineer.md
+  My-Goddess-Orchestra-AI/agency-agents-main/engineering/engineering-minimal-change-engineer.md
+  My-Goddess-Orchestra-AI/agency-agents-main/engineering/engineering-mobile-app-builder.md
+  My-Goddess-Orchestra-AI/agency-agents-main/engineering/engineering-mobile-release-engineer.md
+  My-Goddess-Orchestra-AI/agency-agents-main/engineering/engineering-multi-agent-systems-architect.md
+  My-Goddess-Orchestra-AI/agency-agents-main/engineering/engineering-network-engineer.md
+  My-Goddess-Orchestra-AI/agency-agents-main/engineering/engineering-orgscript-engineer.md
+  My-Goddess-Orchestra-AI/agency-agents-main/engineering/engineering-payments-billing-engineer.md
+  My-Goddess-Orchestra-AI/agency-agents-main/engineering/engineering-privacy-engineer.md
+  My-Goddess-Orchestra-AI/agency-agents-main/engineering/engineering-prompt-engineer.md
+  My-Goddess-Orchestra-AI/agency-agents-main/engineering/engineering-rag-pipeline-engineer.md
+  My-Goddess-Orchestra-AI/agency-agents-main/engineering/engineering-rapid-prototyper.md
+  My-Goddess-Orchestra-AI/agency-agents-main/engineering/engineering-realtime-collaboration-engineer.md
+  My-Goddess-Orchestra-AI/agency-agents-main/engineering/engineering-rust-refactoring-specialist.md
+  My-Goddess-Orchestra-AI/agency-agents-main/engineering/engineering-search-relevance-engineer.md
+  My-Goddess-Orchestra-AI/agency-agents-main/engineering/engineering-section-508-specialist.md
+  My-Goddess-Orchestra-AI/agency-agents-main/engineering/engineering-senior-developer.md
+  My-Goddess-Orchestra-AI/agency-agents-main/engineering/engineering-software-architect.md
+  My-Goddess-Orchestra-AI/agency-agents-main/engineering/engineering-solidity-smart-contract-engineer.md
+  My-Goddess-Orchestra-AI/agency-agents-main/engineering/engineering-sre.md
+  My-Goddess-Orchestra-AI/agency-agents-main/engineering/engineering-technical-writer.md
+  My-Goddess-Orchestra-AI/agency-agents-main/engineering/engineering-uswds-developer.md
+  My-Goddess-Orchestra-AI/agency-agents-main/engineering/engineering-video-streaming-engineer.md
+  My-Goddess-Orchestra-AI/agency-agents-main/engineering/engineering-voice-ai-integration-engineer.md
+  My-Goddess-Orchestra-AI/agency-agents-main/engineering/engineering-webassembly-engineer.md
+  My-Goddess-Orchestra-AI/agency-agents-main/engineering/engineering-wechat-mini-program-developer.md
+  My-Goddess-Orchestra-AI/agency-agents-main/engineering/engineering-wordpress-performance.md
+  My-Goddess-Orchestra-AI/agency-agents-main/engineering/engineering-wordpress-shopping-cart.md
+  My-Goddess-Orchestra-AI/agency-agents-main/examples/README.md
+  My-Goddess-Orchestra-AI/agency-agents-main/examples/nexus-spatial-discovery.md
+  My-Goddess-Orchestra-AI/agency-agents-main/examples/workflow-book-chapter.md
+  My-Goddess-Orchestra-AI/agency-agents-main/examples/workflow-landing-page.md
+  My-Goddess-Orchestra-AI/agency-agents-main/examples/workflow-startup-mvp.md
+  My-Goddess-Orchestra-AI/agency-agents-main/examples/workflow-with-memory.md
+  My-Goddess-Orchestra-AI/agency-agents-main/finance/finance-bookkeeper-controller.md
+  My-Goddess-Orchestra-AI/agency-agents-main/finance/finance-financial-analyst.md
+  My-Goddess-Orchestra-AI/agency-agents-main/finance/finance-fpa-analyst.md
+  My-Goddess-Orchestra-AI/agency-agents-main/finance/finance-investment-researcher.md
+  My-Goddess-Orchestra-AI/agency-agents-main/finance/finance-tax-strategist.md
+  My-Goddess-Orchestra-AI/agency-agents-main/game-development/game-audio-engineer.md
+  My-Goddess-Orchestra-AI/agency-agents-main/game-development/game-designer.md
+  My-Goddess-Orchestra-AI/agency-agents-main/game-development/level-designer.md
+  My-Goddess-Orchestra-AI/agency-agents-main/game-development/narrative-designer.md
+  My-Goddess-Orchestra-AI/agency-agents-main/game-development/technical-artist.md
+  My-Goddess-Orchestra-AI/agency-agents-main/gis/gis-3d-scene-developer.md
+  My-Goddess-Orchestra-AI/agency-agents-main/gis/gis-analyst.md
+  My-Goddess-Orchestra-AI/agency-agents-main/gis/gis-bim-specialist.md
+  My-Goddess-Orchestra-AI/agency-agents-main/gis/gis-cartography-designer.md
+  My-Goddess-Orchestra-AI/agency-agents-main/gis/gis-drone-reality-mapping.md
+  My-Goddess-Orchestra-AI/agency-agents-main/gis/gis-geoai-ml-engineer.md
+  My-Goddess-Orchestra-AI/agency-agents-main/gis/gis-geoprocessing-specialist.md
+  My-Goddess-Orchestra-AI/agency-agents-main/gis/gis-qa-engineer.md
+  My-Goddess-Orchestra-AI/agency-agents-main/gis/gis-solution-engineer.md
+  My-Goddess-Orchestra-AI/agency-agents-main/gis/gis-spatial-data-engineer.md
+  My-Goddess-Orchestra-AI/agency-agents-main/gis/gis-spatial-data-scientist.md
+  My-Goddess-Orchestra-AI/agency-agents-main/gis/gis-technical-consultant.md
+  My-Goddess-Orchestra-AI/agency-agents-main/gis/gis-web-gis-developer.md
+  My-Goddess-Orchestra-AI/agency-agents-main/healthcare/healthcare-clinical-evidence-agent.md
+  My-Goddess-Orchestra-AI/agency-agents-main/healthcare/healthcare-innovation-strategist.md
+  My-Goddess-Orchestra-AI/agency-agents-main/healthcare/healthcare-sovereign-health-systems-agent.md
+  My-Goddess-Orchestra-AI/agency-agents-main/integrations/README.md
+  My-Goddess-Orchestra-AI/agency-agents-main/marketing/marketing-aeo-foundations.md
+  My-Goddess-Orchestra-AI/agency-agents-main/marketing/marketing-agentic-search-optimizer.md
+  My-Goddess-Orchestra-AI/agency-agents-main/marketing/marketing-ai-citation-strategist.md
+  My-Goddess-Orchestra-AI/agency-agents-main/marketing/marketing-app-store-optimizer.md
+  My-Goddess-Orchestra-AI/agency-agents-main/marketing/marketing-baidu-seo-specialist.md
+  My-Goddess-Orchestra-AI/agency-agents-main/marketing/marketing-bilibili-content-strategist.md
+  My-Goddess-Orchestra-AI/agency-agents-main/marketing/marketing-book-co-author.md
+  My-Goddess-Orchestra-AI/agency-agents-main/marketing/marketing-carousel-growth-engine.md
+  My-Goddess-Orchestra-AI/agency-agents-main/marketing/marketing-china-ecommerce-operator.md
+  My-Goddess-Orchestra-AI/agency-agents-main/marketing/marketing-china-market-localization-strategist.md
+  My-Goddess-Orchestra-AI/agency-agents-main/marketing/marketing-content-creator.md
+  My-Goddess-Orchestra-AI/agency-agents-main/marketing/marketing-cross-border-ecommerce.md
+  My-Goddess-Orchestra-AI/agency-agents-main/marketing/marketing-douyin-strategist.md
+  My-Goddess-Orchestra-AI/agency-agents-main/marketing/marketing-email-strategist.md
+  My-Goddess-Orchestra-AI/agency-agents-main/marketing/marketing-global-podcast-strategist.md
+  My-Goddess-Orchestra-AI/agency-agents-main/marketing/marketing-growth-hacker.md
+  My-Goddess-Orchestra-AI/agency-agents-main/marketing/marketing-instagram-curator.md
+  My-Goddess-Orchestra-AI/agency-agents-main/marketing/marketing-kuaishou-strategist.md
+  My-Goddess-Orchestra-AI/agency-agents-main/marketing/marketing-linkedin-content-creator.md
+  My-Goddess-Orchestra-AI/agency-agents-main/marketing/marketing-livestream-commerce-coach.md
+  My-Goddess-Orchestra-AI/agency-agents-main/marketing/marketing-multi-platform-publisher.md
+  My-Goddess-Orchestra-AI/agency-agents-main/marketing/marketing-podcast-strategist.md
+  My-Goddess-Orchestra-AI/agency-agents-main/marketing/marketing-pr-communications-manager.md
+  My-Goddess-Orchestra-AI/agency-agents-main/marketing/marketing-private-domain-operator.md
+  My-Goddess-Orchestra-AI/agency-agents-main/marketing/marketing-prose-humanizer.md
+  My-Goddess-Orchestra-AI/agency-agents-main/marketing/marketing-reddit-community-builder.md
+  My-Goddess-Orchestra-AI/agency-agents-main/marketing/marketing-seo-specialist.md
+  My-Goddess-Orchestra-AI/agency-agents-main/marketing/marketing-short-video-editing-coach.md
+  My-Goddess-Orchestra-AI/agency-agents-main/marketing/marketing-social-media-strategist.md
+  My-Goddess-Orchestra-AI/agency-agents-main/marketing/marketing-tiktok-strategist.md
+  My-Goddess-Orchestra-AI/agency-agents-main/marketing/marketing-twitter-engager.md
+  My-Goddess-Orchestra-AI/agency-agents-main/marketing/marketing-video-optimization-specialist.md
+  My-Goddess-Orchestra-AI/agency-agents-main/marketing/marketing-wechat-official-account.md
+  My-Goddess-Orchestra-AI/agency-agents-main/marketing/marketing-weibo-strategist.md
+  My-Goddess-Orchestra-AI/agency-agents-main/marketing/marketing-x-twitter-intelligence-analyst.md
+  My-Goddess-Orchestra-AI/agency-agents-main/marketing/marketing-xiaohongshu-specialist.md
+  My-Goddess-Orchestra-AI/agency-agents-main/marketing/marketing-zhihu-strategist.md
+  My-Goddess-Orchestra-AI/agency-agents-main/paid-media/paid-media-auditor.md
+  My-Goddess-Orchestra-AI/agency-agents-main/paid-media/paid-media-creative-strategist.md
+  My-Goddess-Orchestra-AI/agency-agents-main/paid-media/paid-media-paid-social-strategist.md
+  My-Goddess-Orchestra-AI/agency-agents-main/paid-media/paid-media-ppc-strategist.md
+  My-Goddess-Orchestra-AI/agency-agents-main/paid-media/paid-media-programmatic-buyer.md
+  My-Goddess-Orchestra-AI/agency-agents-main/paid-media/paid-media-search-query-analyst.md
+  My-Goddess-Orchestra-AI/agency-agents-main/paid-media/paid-media-tracking-specialist.md
+  My-Goddess-Orchestra-AI/agency-agents-main/product/product-behavioral-nudge-engine.md
+  My-Goddess-Orchestra-AI/agency-agents-main/product/product-feedback-synthesizer.md
+  My-Goddess-Orchestra-AI/agency-agents-main/product/product-manager.md
+  My-Goddess-Orchestra-AI/agency-agents-main/product/product-requirements-interrogator.md
+  My-Goddess-Orchestra-AI/agency-agents-main/product/product-sprint-prioritizer.md
+  My-Goddess-Orchestra-AI/agency-agents-main/product/product-trend-researcher.md
+  My-Goddess-Orchestra-AI/agency-agents-main/project-management/project-management-experiment-tracker.md
+  My-Goddess-Orchestra-AI/agency-agents-main/project-management/project-management-jira-workflow-steward.md
+  My-Goddess-Orchestra-AI/agency-agents-main/project-management/project-management-meeting-notes-specialist.md
+  My-Goddess-Orchestra-AI/agency-agents-main/project-management/project-management-project-shepherd.md
+  My-Goddess-Orchestra-AI/agency-agents-main/project-management/project-management-studio-operations.md
+  My-Goddess-Orchestra-AI/agency-agents-main/project-management/project-management-studio-producer.md
+  My-Goddess-Orchestra-AI/agency-agents-main/project-management/project-manager-senior.md
+  My-Goddess-Orchestra-AI/agency-agents-main/sales/sales-account-strategist.md
+  My-Goddess-Orchestra-AI/agency-agents-main/sales/sales-coach.md
+  My-Goddess-Orchestra-AI/agency-agents-main/sales/sales-deal-strategist.md
+  My-Goddess-Orchestra-AI/agency-agents-main/sales/sales-discovery-coach.md
+  My-Goddess-Orchestra-AI/agency-agents-main/sales/sales-engineer.md
+  My-Goddess-Orchestra-AI/agency-agents-main/sales/sales-offer-lead-gen-strategist.md
+  My-Goddess-Orchestra-AI/agency-agents-main/sales/sales-outbound-strategist.md
+  My-Goddess-Orchestra-AI/agency-agents-main/sales/sales-pipeline-analyst.md
+  My-Goddess-Orchestra-AI/agency-agents-main/sales/sales-proposal-strategist.md
+  My-Goddess-Orchestra-AI/agency-agents-main/security/security-ai-generated-code-auditor.md
+  My-Goddess-Orchestra-AI/agency-agents-main/security/security-appsec-engineer.md
+  My-Goddess-Orchestra-AI/agency-agents-main/security/security-architect.md
+  My-Goddess-Orchestra-AI/agency-agents-main/security/security-blockchain-security-auditor.md
+  My-Goddess-Orchestra-AI/agency-agents-main/security/security-cloud-security-architect.md
+  My-Goddess-Orchestra-AI/agency-agents-main/security/security-compliance-auditor.md
+  My-Goddess-Orchestra-AI/agency-agents-main/security/security-incident-responder.md
+  My-Goddess-Orchestra-AI/agency-agents-main/security/security-media-forensics-analyst.md
+  My-Goddess-Orchestra-AI/agency-agents-main/security/security-penetration-tester.md
+  My-Goddess-Orchestra-AI/agency-agents-main/security/security-secrets-credential-engineer.md
+  My-Goddess-Orchestra-AI/agency-agents-main/security/security-senior-secops.md
+  My-Goddess-Orchestra-AI/agency-agents-main/security/security-threat-detection-engineer.md
+  My-Goddess-Orchestra-AI/agency-agents-main/security/security-threat-intelligence-analyst.md
+  My-Goddess-Orchestra-AI/agency-agents-main/spatial-computing/macos-spatial-metal-engineer.md
+  My-Goddess-Orchestra-AI/agency-agents-main/spatial-computing/terminal-integration-specialist.md
+  My-Goddess-Orchestra-AI/agency-agents-main/spatial-computing/visionos-spatial-engineer.md
+  My-Goddess-Orchestra-AI/agency-agents-main/spatial-computing/xr-cockpit-interaction-specialist.md
+  My-Goddess-Orchestra-AI/agency-agents-main/spatial-computing/xr-immersive-developer.md
+  My-Goddess-Orchestra-AI/agency-agents-main/spatial-computing/xr-interface-architect.md
+  My-Goddess-Orchestra-AI/agency-agents-main/specialized/accounts-payable-agent.md
+  My-Goddess-Orchestra-AI/agency-agents-main/specialized/agentic-identity-trust.md
+  My-Goddess-Orchestra-AI/agency-agents-main/specialized/agents-orchestrator.md
+  My-Goddess-Orchestra-AI/agency-agents-main/specialized/automation-governance-architect.md
+  My-Goddess-Orchestra-AI/agency-agents-main/specialized/business-strategist.md
+  My-Goddess-Orchestra-AI/agency-agents-main/specialized/change-management-consultant.md
+  My-Goddess-Orchestra-AI/agency-agents-main/specialized/chief-financial-officer.md
+  My-Goddess-Orchestra-AI/agency-agents-main/specialized/corporate-training-designer.md
+  My-Goddess-Orchestra-AI/agency-agents-main/specialized/customer-service.md
+  My-Goddess-Orchestra-AI/agency-agents-main/specialized/customer-success-manager.md
+  My-Goddess-Orchestra-AI/agency-agents-main/specialized/data-consolidation-agent.md
+  My-Goddess-Orchestra-AI/agency-agents-main/specialized/data-privacy-officer.md
+  My-Goddess-Orchestra-AI/agency-agents-main/specialized/esg-sustainability-officer.md
+  My-Goddess-Orchestra-AI/agency-agents-main/specialized/government-digital-presales-consultant.md
+  My-Goddess-Orchestra-AI/agency-agents-main/specialized/grant-writer.md
+  My-Goddess-Orchestra-AI/agency-agents-main/specialized/healthcare-aging-parent-care-companion.md
+  My-Goddess-Orchestra-AI/agency-agents-main/specialized/healthcare-customer-service.md
+  My-Goddess-Orchestra-AI/agency-agents-main/specialized/healthcare-marketing-compliance.md
+  My-Goddess-Orchestra-AI/agency-agents-main/specialized/hospitality-guest-services.md
+  My-Goddess-Orchestra-AI/agency-agents-main/specialized/hr-onboarding.md
+  My-Goddess-Orchestra-AI/agency-agents-main/specialized/identity-graph-operator.md
+  My-Goddess-Orchestra-AI/agency-agents-main/specialized/language-translator.md
+  My-Goddess-Orchestra-AI/agency-agents-main/specialized/legal-billing-time-tracking.md
+  My-Goddess-Orchestra-AI/agency-agents-main/specialized/legal-client-intake.md
+  My-Goddess-Orchestra-AI/agency-agents-main/specialized/legal-document-review.md
+  My-Goddess-Orchestra-AI/agency-agents-main/specialized/loan-officer-assistant.md
+  My-Goddess-Orchestra-AI/agency-agents-main/specialized/loop-doctor.md
+  My-Goddess-Orchestra-AI/agency-agents-main/specialized/lsp-index-engineer.md
+  My-Goddess-Orchestra-AI/agency-agents-main/specialized/ma-integration-manager.md
+  My-Goddess-Orchestra-AI/agency-agents-main/specialized/medical-billing-coding-specialist.md
+  My-Goddess-Orchestra-AI/agency-agents-main/specialized/operations-manager.md
+  My-Goddess-Orchestra-AI/agency-agents-main/specialized/organizational-psychologist.md
+  My-Goddess-Orchestra-AI/agency-agents-main/specialized/personal-growth-mentor.md
+  My-Goddess-Orchestra-AI/agency-agents-main/specialized/real-estate-buyer-seller.md
+  My-Goddess-Orchestra-AI/agency-agents-main/specialized/recruitment-specialist.md
+  My-Goddess-Orchestra-AI/agency-agents-main/specialized/report-distribution-agent.md
+  My-Goddess-Orchestra-AI/agency-agents-main/specialized/resume-tailor.md
+  My-Goddess-Orchestra-AI/agency-agents-main/specialized/retail-customer-returns.md
+  My-Goddess-Orchestra-AI/agency-agents-main/specialized/sales-data-extraction-agent.md
+  My-Goddess-Orchestra-AI/agency-agents-main/specialized/sales-outreach.md
+  My-Goddess-Orchestra-AI/agency-agents-main/specialized/specialized-chief-of-staff.md
+  My-Goddess-Orchestra-AI/agency-agents-main/specialized/specialized-civil-engineer.md
+  My-Goddess-Orchestra-AI/agency-agents-main/specialized/specialized-codebase-archaeologist.md
+  My-Goddess-Orchestra-AI/agency-agents-main/specialized/specialized-cultural-intelligence-strategist.md
+  My-Goddess-Orchestra-AI/agency-agents-main/specialized/specialized-developer-advocate.md
+  My-Goddess-Orchestra-AI/agency-agents-main/specialized/specialized-document-generator.md
+  My-Goddess-Orchestra-AI/agency-agents-main/specialized/specialized-fedramp-rmf-compliance.md
+  My-Goddess-Orchestra-AI/agency-agents-main/specialized/specialized-french-consulting-market.md
+  My-Goddess-Orchestra-AI/agency-agents-main/specialized/specialized-korean-business-navigator.md
+  My-Goddess-Orchestra-AI/agency-agents-main/specialized/specialized-mcp-builder.md
+  My-Goddess-Orchestra-AI/agency-agents-main/specialized/specialized-model-qa.md
+  My-Goddess-Orchestra-AI/agency-agents-main/specialized/specialized-pricing-analyst.md
+  My-Goddess-Orchestra-AI/agency-agents-main/specialized/specialized-salesforce-architect.md
+  My-Goddess-Orchestra-AI/agency-agents-main/specialized/specialized-strategy-duel-agent.md
+  My-Goddess-Orchestra-AI/agency-agents-main/specialized/specialized-workflow-architect.md
+  My-Goddess-Orchestra-AI/agency-agents-main/specialized/study-abroad-advisor.md
+  My-Goddess-Orchestra-AI/agency-agents-main/specialized/supply-chain-strategist.md
+  My-Goddess-Orchestra-AI/agency-agents-main/specialized/zk-steward.md
+  My-Goddess-Orchestra-AI/agency-agents-main/strategy/EXECUTIVE-BRIEF.md
+  My-Goddess-Orchestra-AI/agency-agents-main/strategy/QUICKSTART.md
+  My-Goddess-Orchestra-AI/agency-agents-main/strategy/nexus-strategy.md
+  My-Goddess-Orchestra-AI/agency-agents-main/support/support-analytics-reporter.md
+  My-Goddess-Orchestra-AI/agency-agents-main/support/support-executive-summary-generator.md
+  My-Goddess-Orchestra-AI/agency-agents-main/support/support-finance-tracker.md
+  My-Goddess-Orchestra-AI/agency-agents-main/support/support-infrastructure-maintainer.md
+  My-Goddess-Orchestra-AI/agency-agents-main/support/support-legal-compliance-checker.md
+  My-Goddess-Orchestra-AI/agency-agents-main/support/support-support-responder.md
+  My-Goddess-Orchestra-AI/agency-agents-main/testing/testing-accessibility-auditor.md
+  My-Goddess-Orchestra-AI/agency-agents-main/testing/testing-api-tester.md
+  My-Goddess-Orchestra-AI/agency-agents-main/testing/testing-evidence-collector.md
+  My-Goddess-Orchestra-AI/agency-agents-main/testing/testing-performance-benchmarker.md
+  My-Goddess-Orchestra-AI/agency-agents-main/testing/testing-reality-checker.md
+  My-Goddess-Orchestra-AI/agency-agents-main/testing/testing-test-automation-engineer.md
+  My-Goddess-Orchestra-AI/agency-agents-main/testing/testing-test-results-analyzer.md
+  My-Goddess-Orchestra-AI/agency-agents-main/testing/testing-tool-evaluator.md
+  My-Goddess-Orchestra-AI/agency-agents-main/testing/testing-workflow-optimizer.md
+
+Other files / subfolders (not downloaded):
+  My-Goddess-Orchestra-AI/agency-agents-main/strategy/runbooks/ (subfolder)
+  My-Goddess-Orchestra-AI/agency-agents-main/strategy/playbooks/ (subfolder)
+  My-Goddess-Orchestra-AI/agency-agents-main/strategy/coordination/ (subfolder)
+  My-Goddess-Orchestra-AI/agency-agents-main/scripts/i18n/ (subfolder)
+  My-Goddess-Orchestra-AI/agency-agents-main/strategy/runbooks.json
+  My-Goddess-Orchestra-AI/agency-agents-main/scripts/lint-agents.sh
+  My-Goddess-Orchestra-AI/agency-agents-main/scripts/build-hermes-plugin.py
+  My-Goddess-Orchestra-AI/agency-agents-main/scripts/check-runbooks.sh
+  My-Goddess-Orchestra-AI/agency-agents-main/scripts/check-divisions.sh
+  My-Goddess-Orchestra-AI/agency-agents-main/scripts/convert.sh
+  My-Goddess-Orchestra-AI/agency-agents-main/scripts/install.sh
+  My-Goddess-Orchestra-AI/agency-agents-main/scripts/lib.sh
+  My-Goddess-Orchestra-AI/agency-agents-main/scripts/check-agent-originality.sh
+  My-Goddess-Orchestra-AI/agency-agents-main/scripts/check-tools.sh
+  My-Goddess-Orchestra-AI/agency-agents-main/scripts/check-hermes-plugin.py
+  My-Goddess-Orchestra-AI/agency-agents-main/scripts/agents-to-install.example
+  My-Goddess-Orchestra-AI/agency-agents-main/integrations/opencode/ (subfolder, not enumerated)
+  My-Goddess-Orchestra-AI/agency-agents-main/integrations/windsurf/ (subfolder, not enumerated)
+  My-Goddess-Orchestra-AI/agency-agents-main/integrations/qwen/ (subfolder, not enumerated)
+  My-Goddess-Orchestra-AI/agency-agents-main/integrations/vibe/ (subfolder, not enumerated)
+  My-Goddess-Orchestra-AI/agency-agents-main/integrations/zcode/ (subfolder, not enumerated)
+  My-Goddess-Orchestra-AI/agency-agents-main/integrations/openclaw/ (subfolder, not enumerated)
+  My-Goddess-Orchestra-AI/agency-agents-main/integrations/mcp-memory/ (subfolder, not enumerated)
+  My-Goddess-Orchestra-AI/agency-agents-main/integrations/kimi/ (subfolder, not enumerated)
+  My-Goddess-Orchestra-AI/agency-agents-main/integrations/hermes/ (subfolder, not enumerated)
+  My-Goddess-Orchestra-AI/agency-agents-main/integrations/cursor/ (subfolder, not enumerated)
+  My-Goddess-Orchestra-AI/agency-agents-main/integrations/gemini-cli/ (subfolder, not enumerated)
+  My-Goddess-Orchestra-AI/agency-agents-main/integrations/github-copilot/ (subfolder, not enumerated)
+  My-Goddess-Orchestra-AI/agency-agents-main/integrations/claude-code/ (subfolder, not enumerated)
+  My-Goddess-Orchestra-AI/agency-agents-main/integrations/codex/ (subfolder, not enumerated)
+  My-Goddess-Orchestra-AI/agency-agents-main/integrations/aider/ (subfolder, not enumerated)
+  My-Goddess-Orchestra-AI/agency-agents-main/integrations/antigravity/ (subfolder, not enumerated)
+  My-Goddess-Orchestra-AI/agency-agents-main/.github/ISSUE_TEMPLATE/ (subfolder)
+  My-Goddess-Orchestra-AI/agency-agents-main/.github/workflows/ (subfolder)
+  My-Goddess-Orchestra-AI/agency-agents-main/.github/FUNDING.yml
+  My-Goddess-Orchestra-AI/agency-agents-main/game-development/unreal-engine/ (subfolder, not enumerated)
+  My-Goddess-Orchestra-AI/agency-agents-main/game-development/roblox-studio/ (subfolder, not enumerated)
+  My-Goddess-Orchestra-AI/agency-agents-main/game-development/godot/ (subfolder, not enumerated)
+  My-Goddess-Orchestra-AI/agency-agents-main/game-development/unity/ (subfolder, not enumerated)
+  My-Goddess-Orchestra-AI/agency-agents-main/game-development/blender/ (subfolder, not enumerated)
