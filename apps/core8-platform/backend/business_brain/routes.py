@@ -3,6 +3,7 @@
 Logs carry IDs and counts only — never answer values or fact contents.
 """
 
+import json
 import logging
 from typing import Any, Literal
 
@@ -24,6 +25,8 @@ from security.jwt_auth import get_user_by_email, require_jwt
 logger = logging.getLogger("core8.business_brain")
 
 router = APIRouter(tags=["business-brain"], dependencies=[Depends(require_jwt)])
+
+MAX_FACT_CHARS = 20000
 
 viewer = tenant_role("viewer")
 editor = tenant_role("editor")
@@ -260,6 +263,8 @@ async def add_fact(req: FactIn, access: TenantAccess = Depends(editor)):
         raise HTTPException(status_code=422, detail="unknown domain")
     if req.sensitivity not in SENSITIVITY_LEVELS:
         raise HTTPException(status_code=422, detail=f"sensitivity must be one of {SENSITIVITY_LEVELS}")
+    if len(json.dumps(req.value, ensure_ascii=False)) > MAX_FACT_CHARS:
+        raise HTTPException(status_code=413, detail=f"fact value larger than {MAX_FACT_CHARS} characters")
     fact, _ = await access.repo.upsert_fact(
         fact_key=f"manual:{req.key}", category=req.category, domain=req.domain, value=req.value,
         sensitivity=req.sensitivity, source_type="manual", source_ref=f"user:{access.user_id}",

@@ -307,6 +307,14 @@ def test_agent_context_is_scoped_by_role(api):
     assert not any(f["domain"] == "office_admin" for f in cal["facts"])
 
 
+def test_manual_fact_size_limited(api):
+    owner = api.user("o@t.test")
+    tid = api.tenant("T", owner_email="o@t.test")
+    r = api.c.post(f"/api/tenants/{tid}/brain/facts", headers=owner,
+                   json={"key": "big", "category": "goals", "value": "x" * 30000})
+    assert r.status_code == 413
+
+
 def test_scope_override_validated_and_never_restricted(api):
     owner = api.user("o@t.test")
     tid = api.tenant("T", owner_email="o@t.test")
