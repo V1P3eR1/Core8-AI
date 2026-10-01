@@ -6,7 +6,7 @@ _Audit date: 2026-10-01 · Severity: 🔴 high · 🟠 medium · 🟡 low_
 
 | # | Sev | Item | Recommendation |
 |---|---|---|---|
-| S1 | 🔴 | **Two disconnected agent systems** (Core8 Platform vs My Goddess) while the business plan sells one "Agent Office". | Decide the target: likely Core8 Platform as the base (auth, DB, approvals, tools) with My Goddess's orchestrator/delegation + persona roster ported in as an "orchestrator agent". Needs Lev's decision. |
+| S1 | 🟡 | ~~Two disconnected agent systems~~ — **decided 2026-10-01:** keep Core8 Platform (SMB/mid-market) and My Goddess (Enterprise AI OS) as separate products. | Extract shared infrastructure only deliberately, behind stable interfaces, when a second consumer actually needs it. |
 | S2 | 🔴 | Source of truth was **Google Drive folders**, not git. History, reviews and CI were missing. | This repo is now canonical. Retire Drive copies to read-only archive once this PR merges. |
 | S3 | 🟠 | Positioning drift: README says "multi-agent business automation", Notion says "private local Agent Office", Projects page says "full rebrand". | One product brief in `docs/` before more feature work. |
 

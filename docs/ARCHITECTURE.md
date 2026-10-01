@@ -97,12 +97,14 @@ No database, no auth (localhost-only by design), no persistence across restarts.
 
 | | Core8 Platform | My Goddess |
 |---|---|---|
-| Audience | Business customers (SaaS / managed) | Lev (internal), future "Agent Office" product |
+| Product | SMB / mid-market AI transformation + managed AI workforce | Long-term Enterprise AI OS / orchestration |
 | Agents | 5 deep, tool-rich vertical agents | 274 shallow persona agents, 4 tools |
 | Orchestration | User picks an agent | CEO-AI delegates automatically |
 | Auth / multi-user | Yes (JWT) | No |
 | Persistence | SQLite | None |
 
-The Notion "Agent Office" business plan describes a product that is effectively **My Goddess's
-orchestration + Core8 Platform's security/tooling/persistence**. Converging the two is the
-main architectural decision ahead (see TECH_DEBT §1).
+**Product decision (2026-10-01, PR #1 review):** these remain **two separate products and
+applications** — do not collapse My Goddess into Core8 Platform. Shared infrastructure (e.g. the
+security layer, tool registry, agent runtime) may be extracted later, deliberately, behind stable
+interfaces. Core8 Platform roadmap: CORE8-001 Business Brain + Discovery (#2), CORE8-002
+Commercial Engine (#3).
