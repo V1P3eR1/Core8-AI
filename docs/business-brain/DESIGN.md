@@ -84,7 +84,7 @@ creates `version+1` and marks the previous one `superseded`.
 
 ## 3. Questionnaire schema and branching
 
-Defined in `business_brain/questionnaire_v1.json` — **data, not code**.
+Defined in `business_brain/questionnaire.json` — **data, not code**.
 
 ```jsonc
 {
@@ -107,6 +107,15 @@ Question: `id`, `text`, `type` (`text` | `long_text` | `number` | `boolean` | `s
 `multi_choice` | `list`), `options`, `required`, `max_items`, `sensitivity`,
 `maps_to: {category, key?}`. Module questions are generated from `module_template` with ids
 `<module>.<field>` plus the module's `extra_questions`.
+
+**Languages (decided by Lev, 2026-10-02): English, Hebrew, Russian.** Every question text,
+section/module title and option label is stored as `{"en", "he", "ru"}`; loading fails if any
+translation is missing (tested). Option values are stable codes (`sales_crm`, `high`, …), so
+answers, branching rules and analysis are language-independent. Each assessment has a `locale`
+(`POST …/assessments {"locale": "he"}`); `?lang=` overrides per request. Hebrew is served with
+`direction: "rtl"`. Brain facts store the English canonical question text plus the client's
+answer exactly as written, so agents get one consistent vocabulary. Adding a language = adding a
+key to every text in the JSON.
 
 **Activation operators:** `includes`, `includes_any`, `gt`, `equals`, `count_gte`, `answered`.
 **Next question:** walk intake, then active modules in definition order; return the first
@@ -203,3 +212,7 @@ behaviour is unchanged.
   TECH_DEBT C5.
 - No UI in this issue (API only, as allowed).
 - No LLM summarisation of the plan yet; narrative text is templated from facts.
+- The **Transformation Plan is generated in English** only; localising the plan output to
+  he/ru is a follow-up. Free-text answers are kept in the language the client wrote them.
+- Hebrew and Russian questionnaire texts were written by Claude Code and should be checked by a
+  native speaker before client use.

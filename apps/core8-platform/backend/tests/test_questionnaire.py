@@ -78,3 +78,24 @@ def test_invalid_answers_rejected(qid, value):
 
 def test_list_answers_are_trimmed_and_empty_items_dropped():
     assert validate_answer(qn.questions["exec.goals"], ["  grow ", "", "hire"]) == ["grow", "hire"]
+
+
+def test_every_text_and_option_is_translated():
+    for q in qn.questions.values():
+        for lc in ("en", "he", "ru"):
+            assert q["text_i18n"][lc].strip(), (q["id"], lc)
+            for o in q.get("options", []):
+                assert q["option_labels"][o][lc].strip(), (q["id"], o, lc)
+    for m in qn.modules:
+        assert all(m["title_i18n"][lc].strip() for lc in ("en", "he", "ru"))
+
+
+def test_missing_translation_fails_loading(tmp_path):
+    import json
+    from business_brain.questionnaire import _DEFINITION_PATH
+    raw = json.load(open(_DEFINITION_PATH, encoding="utf-8"))
+    del raw["intake"]["questions"][0]["text"]["ru"]
+    bad = tmp_path / "q.json"
+    bad.write_text(json.dumps(raw), encoding="utf-8")
+    with pytest.raises(ValueError, match="missing translations"):
+        load_questionnaire.__wrapped__(str(bad))

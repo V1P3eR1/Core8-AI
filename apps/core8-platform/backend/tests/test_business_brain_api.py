@@ -399,5 +399,44 @@ def test_existing_agents_and_endpoints_unaffected(api):
 
 def test_questionnaire_endpoint_hides_internal_routing(api):
     q = api.c.get("/api/discovery/questionnaire", headers=api.admin).json()
-    assert q["version"] == "1.0.0" and len(q["modules"]) == 12
+    assert q["version"] == "1.1.0" and len(q["modules"]) == 12
+    assert q["available_locales"] == ["en", "he", "ru"] and q["locale"] == "en"
     assert "activation" not in q["modules"][0] and "pain_keywords" not in q["modules"][0]
+
+
+# ── Languages ────────────────────────────────────────────────────────────────
+
+def test_questionnaire_served_in_hebrew_and_russian(api):
+    c = api.c
+    he = c.get("/api/discovery/questionnaire?lang=he", headers=api.admin).json()
+    ru = c.get("/api/discovery/questionnaire?lang=ru", headers=api.admin).json()
+    xx = c.get("/api/discovery/questionnaire?lang=xx", headers=api.admin).json()
+    assert he["direction"] == "rtl" and ru["direction"] == "ltr" and xx["locale"] == "en"
+    assert he["intake"]["questions"][0]["text"] == "שם החברה"
+    assert ru["intake"]["questions"][0]["text"] == "Название компании"
+    focus = next(q for q in he["intake"]["questions"] if q["id"] == "exec.focus_areas")
+    # Option codes are language-independent; only labels change.
+    assert focus["options"][0] == "sales_crm" and focus["option_labels"]["sales_crm"] == "מכירות ו-CRM"
+
+
+def test_assessment_locale_drives_next_question_and_facts_stay_canonical(api):
+    owner = api.user("o@t.test")
+    tid = api.tenant("T", owner_email="o@t.test")
+    c = api.c
+    r = c.post(f"/api/tenants/{tid}/assessments", json={"locale": "he"}, headers=owner)
+    assert r.status_code == 201
+    a = r.json()
+    assert a["locale"] == "he" and a["next_question"]["text"] == "שם החברה"
+    aid = a["id"]
+    # Override per request.
+    assert c.get(f"/api/tenants/{tid}/assessments/{aid}/next?lang=ru", headers=owner).json()["next_question"]["text"] \
+        == "Название компании"
+    # Answers in Hebrew are stored as given; choice answers use codes; fact text stays English.
+    api.answer(tid, aid, {"exec.company_name": "מרפאות שיניים אקמי", "exec.focus_areas": ["sales_crm"]}, owner)
+    facts = {f["fact_key"]: f for f in c.get(f"/api/tenants/{tid}/brain/facts", headers=owner).json()}
+    assert facts["q:exec.company_name"]["value"] == {
+        "question": "Company name", "answer": "מרפאות שיניים אקמי", "field": "company_name"}
+    assert facts["q:exec.focus_areas"]["value"]["answer"] == ["sales_crm"]
+    assert c.post(f"/api/tenants/{tid}/assessments", json={"locale": "fr"}, headers=owner).status_code == 422
+    # No body → English default.
+    assert c.post(f"/api/tenants/{tid}/assessments", headers=owner).json()["locale"] == "en"

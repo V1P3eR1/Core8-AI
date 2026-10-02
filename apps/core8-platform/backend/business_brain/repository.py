@@ -273,13 +273,13 @@ class BrainRepository:
             return cur.rowcount
 
     # Assessments
-    async def create_assessment(self, questionnaire_version: str, created_by: str) -> dict:
+    async def create_assessment(self, questionnaire_version: str, created_by: str, locale: str = "en") -> dict:
         aid = _new_id()
         async with _conn() as db:
             await db.execute(
-                """INSERT INTO discovery_assessments (id, tenant_id, questionnaire_version, created_by)
-                   VALUES (?,?,?,?)""",
-                (aid, self.tenant_id, questionnaire_version, created_by),
+                """INSERT INTO discovery_assessments (id, tenant_id, questionnaire_version, locale, created_by)
+                   VALUES (?,?,?,?,?)""",
+                (aid, self.tenant_id, questionnaire_version, locale, created_by),
             )
             await db.commit()
         return await self.get_assessment(aid)

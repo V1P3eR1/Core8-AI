@@ -17,7 +17,7 @@ from business_brain.discovery import AssessmentClosed, submit_answers
 from business_brain.opportunities import analyse, brain_answers
 from business_brain.plan import build_plan, render_markdown
 from business_brain.questionnaire import (
-    AnswerError, INTAKE_DOMAIN, active_modules, load_questionnaire, next_question, progress,
+    AnswerError, INTAKE_DOMAIN, active_modules, load_questionnaire, localize_question, next_question, progress,
 )
 from business_brain.schema import FACT_CATEGORIES, SENSITIVITY_LEVELS
 from security.jwt_auth import get_user_by_email, require_jwt
@@ -43,6 +43,10 @@ class TenantCreate(BaseModel):
 class MemberSet(BaseModel):
     email: str
     role: Literal["owner", "editor", "viewer"]
+
+
+class AssessmentCreate(BaseModel):
+    locale: str = "en"
 
 
 class AnswersIn(BaseModel):
@@ -87,30 +91,26 @@ async def _assessment_or_404(access: TenantAccess, assessment_id: str) -> dict:
     return a
 
 
-async def _assessment_view(access: TenantAccess, a: dict) -> dict:
+async def _assessment_view(access: TenantAccess, a: dict, lang: str | None = None) -> dict:
     qn = load_questionnaire()
     answers = await access.repo.get_answers(a["id"])
-    nq = next_question(qn, answers)
+    locale = qn.resolve_locale(lang or a.get("locale"))
     return {
         **a,
         "answers": answers,
         "active_modules": active_modules(qn, answers),
         "progress": progress(qn, answers),
-        "next_question": _public_q(nq),
+        "next_question": localize_question(next_question(qn, answers), locale),
+        "display_locale": locale,
     }
-
-
-def _public_q(q: dict | None) -> dict | None:
-    if not q:
-        return None
-    return {k: q[k] for k in ("id", "text", "type", "required", "options", "max_items", "module") if k in q}
 
 
 # ── Questionnaire & tenants ──────────────────────────────────────────────────
 
 @router.get("/api/discovery/questionnaire")
-async def get_questionnaire():
-    return load_questionnaire().public_definition()
+async def get_questionnaire(lang: str | None = None):
+    """?lang=en|he|ru (falls back to en)."""
+    return load_questionnaire().public_definition(lang)
 
 
 @router.post("/api/tenants", status_code=201)
@@ -181,15 +181,19 @@ async def remove_member(user_id: str, access: TenantAccess = Depends(owner)):
 # ── Assessments ──────────────────────────────────────────────────────────────
 
 @router.post("/api/tenants/{tenant_id}/assessments", status_code=201)
-async def start_assessment(access: TenantAccess = Depends(editor)):
-    a = await access.repo.create_assessment(load_questionnaire().version, access.user_id)
+async def start_assessment(req: AssessmentCreate | None = None, access: TenantAccess = Depends(editor)):
+    qn = load_questionnaire()
+    locale = (req or AssessmentCreate()).locale
+    if locale not in qn.locales:
+        raise HTTPException(status_code=422, detail=f"locale must be one of {qn.locales}")
+    a = await access.repo.create_assessment(qn.version, access.user_id, locale)
     logger.info("assessment started tenant=%s id=%s", access.tenant_id, a["id"])
     return await _assessment_view(access, a)
 
 
 @router.get("/api/tenants/{tenant_id}/assessments/{assessment_id}")
-async def get_assessment(assessment_id: str, access: TenantAccess = Depends(viewer)):
-    return await _assessment_view(access, await _assessment_or_404(access, assessment_id))
+async def get_assessment(assessment_id: str, lang: str | None = None, access: TenantAccess = Depends(viewer)):
+    return await _assessment_view(access, await _assessment_or_404(access, assessment_id), lang)
 
 
 @router.put("/api/tenants/{tenant_id}/assessments/{assessment_id}/answers")
@@ -207,11 +211,13 @@ async def put_answers(assessment_id: str, req: AnswersIn, access: TenantAccess =
 
 
 @router.get("/api/tenants/{tenant_id}/assessments/{assessment_id}/next")
-async def get_next(assessment_id: str, access: TenantAccess = Depends(viewer)):
-    await _assessment_or_404(access, assessment_id)
+async def get_next(assessment_id: str, lang: str | None = None, access: TenantAccess = Depends(viewer)):
+    a = await _assessment_or_404(access, assessment_id)
     qn = load_questionnaire()
     answers = await access.repo.get_answers(assessment_id)
-    return {"next_question": _public_q(next_question(qn, answers)), "progress": progress(qn, answers)}
+    locale = qn.resolve_locale(lang or a["locale"])
+    return {"next_question": localize_question(next_question(qn, answers), locale),
+            "progress": progress(qn, answers), "display_locale": locale}
 
 
 @router.post("/api/tenants/{tenant_id}/assessments/{assessment_id}/complete")

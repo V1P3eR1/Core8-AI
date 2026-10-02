@@ -1,7 +1,11 @@
 """Data-driven discovery questionnaire: loading, validation, branching and progress.
 
-The questionnaire is defined in questionnaire_v1.json. This module only interprets it —
-adding a module or question is a JSON change, not a code change.
+The questionnaire is defined in questionnaire.json. This module only interprets it —
+adding a module, question or language is a JSON change, not a code change.
+
+Texts are localised ({"en": ..., "he": ..., "ru": ...}). Internally `text`/`title` hold the
+English canonical string (used for Brain facts and agent context); `*_i18n` hold all locales.
+Option values are stable codes; only their labels are localised.
 """
 
 import copy
@@ -12,12 +16,14 @@ from functools import lru_cache
 
 from business_brain.schema import FACT_CATEGORIES, SENSITIVITY_LEVELS
 
-_DEFINITION_PATH = os.path.join(os.path.dirname(__file__), "questionnaire_v1.json")
+_DEFINITION_PATH = os.path.join(os.path.dirname(__file__), "questionnaire.json")
 
 QUESTION_TYPES = {"text", "long_text", "number", "boolean", "single_choice", "multi_choice", "list"}
 MAX_TEXT = 4000
 MAX_LIST_ITEMS = 50
 INTAKE_DOMAIN = "general"
+DEFAULT_LOCALE = "en"
+RTL_LOCALES = {"he", "ar"}
 
 
 class AnswerError(ValueError):
@@ -27,7 +33,8 @@ class AnswerError(ValueError):
 @dataclass(frozen=True)
 class Questionnaire:
     version: str
-    title: str
+    locales: list[str]
+    title_i18n: dict
     intake: dict
     modules: list[dict]          # expanded: each module has "questions"
     questions: dict[str, dict]   # id -> question (with "module" and "domain")
@@ -35,28 +42,49 @@ class Questionnaire:
     def module(self, module_id: str) -> dict | None:
         return next((m for m in self.modules if m["id"] == module_id), None)
 
-    def public_definition(self) -> dict:
-        """The definition as served to clients (no internal routing hints)."""
+    def resolve_locale(self, lang: str | None) -> str:
+        return lang if lang in self.locales else DEFAULT_LOCALE
+
+    def public_definition(self, lang: str | None = None) -> dict:
+        """The definition as served to clients, in one locale (no internal routing hints)."""
+        lang = self.resolve_locale(lang)
         return {
             "version": self.version,
-            "title": self.title,
-            "intake": _strip(self.intake),
+            "locale": lang,
+            "direction": "rtl" if lang in RTL_LOCALES else "ltr",
+            "available_locales": self.locales,
+            "title": self.title_i18n[lang],
+            "intake": localize_section(self.intake, lang),
             "modules": [
-                {**_strip(m), "capability": {k: m["capability"][k] for k in ("agent_role", "availability", "capability")}}
+                {**localize_section(m, lang),
+                 "capability": {k: m["capability"][k] for k in ("agent_role", "availability", "capability")}}
                 for m in self.modules
             ],
         }
 
 
-def _strip(section: dict) -> dict:
+def localize_question(q: dict | None, lang: str) -> dict | None:
+    if q is None:
+        return None
+    out = {k: q[k] for k in ("id", "type", "required", "options", "max_items", "module") if k in q}
+    out["text"] = q["text_i18n"][lang]
+    if "option_labels" in q:
+        out["option_labels"] = {o: q["option_labels"][o][lang] for o in q["options"]}
+    return out
+
+
+def localize_section(section: dict, lang: str) -> dict:
     return {
         "id": section["id"],
-        "title": section["title"],
-        "questions": [
-            {k: q[k] for k in ("id", "text", "type", "required", "options", "max_items") if k in q}
-            for q in section["questions"]
-        ],
+        "title": section["title_i18n"][lang],
+        "questions": [localize_question(q, lang) for q in section["questions"]],
     }
+
+
+def _canonicalize(q: dict) -> dict:
+    q["text_i18n"] = q["text"]
+    q["text"] = q["text_i18n"][DEFAULT_LOCALE]
+    return q
 
 
 @lru_cache(maxsize=1)
@@ -65,15 +93,18 @@ def load_questionnaire(path: str = _DEFINITION_PATH) -> Questionnaire:
         raw = json.load(f)
 
     questions: dict[str, dict] = {}
-    intake = {"id": raw["intake"]["id"], "title": raw["intake"]["title"], "questions": []}
+    intake = {"id": raw["intake"]["id"], "title_i18n": raw["intake"]["title"],
+              "title": raw["intake"]["title"][DEFAULT_LOCALE], "questions": []}
     for q in raw["intake"]["questions"]:
-        q = {**q, "module": raw["intake"]["id"], "domain": INTAKE_DOMAIN}
+        q = _canonicalize({**copy.deepcopy(q), "module": raw["intake"]["id"], "domain": INTAKE_DOMAIN})
         intake["questions"].append(q)
         questions[q["id"]] = q
 
     modules = []
     for m in raw["modules"]:
         module = {k: v for k, v in m.items() if k != "extra_questions"}
+        module["title_i18n"] = m["title"]
+        module["title"] = m["title"][DEFAULT_LOCALE]
         module["questions"] = []
         for tmpl in raw["module_template"] + m.get("extra_questions", []):
             q = copy.deepcopy(tmpl)
@@ -82,17 +113,32 @@ def load_questionnaire(path: str = _DEFINITION_PATH) -> Questionnaire:
             q["field"] = field
             q["module"] = m["id"]
             q["domain"] = m["id"]
-            module["questions"].append(q)
+            module["questions"].append(_canonicalize(q))
             questions[q["id"]] = q
         modules.append(module)
 
-    qn = Questionnaire(raw["version"], raw["title"], intake, modules, questions)
+    qn = Questionnaire(raw["version"], raw["locales"], raw["title"], intake, modules, questions)
     _validate_definition(qn)
     return qn
 
 
 def _validate_definition(qn: Questionnaire) -> None:
+    if DEFAULT_LOCALE not in qn.locales:
+        raise ValueError(f"locales must include {DEFAULT_LOCALE}")
+
+    def need_all(texts, where: str) -> None:
+        missing = [lc for lc in qn.locales if not (isinstance(texts, dict) and str(texts.get(lc, "")).strip())]
+        if missing:
+            raise ValueError(f"{where}: missing translations {missing}")
+
+    need_all(qn.title_i18n, "title")
+    need_all(qn.intake["title_i18n"], "intake.title")
+    for m in qn.modules:
+        need_all(m["title_i18n"], f"{m['id']}.title")
     for qid, q in qn.questions.items():
+        need_all(q["text_i18n"], qid)
+        for o in q.get("options", []):
+            need_all(q.get("option_labels", {}).get(o), f"{qid} option {o}")
         if q["type"] not in QUESTION_TYPES:
             raise ValueError(f"{qid}: unknown type {q['type']}")
         if q["type"] in ("single_choice", "multi_choice") and not q.get("options"):

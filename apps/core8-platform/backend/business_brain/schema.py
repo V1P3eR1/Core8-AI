@@ -59,6 +59,7 @@ CREATE TABLE IF NOT EXISTS discovery_assessments (
     id                    TEXT PRIMARY KEY,
     tenant_id             TEXT NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
     questionnaire_version TEXT NOT NULL,
+    locale                TEXT NOT NULL DEFAULT 'en',
     status                TEXT NOT NULL DEFAULT 'in_progress'
                           CHECK(status IN ('in_progress','completed')),
     created_by            TEXT NOT NULL,
