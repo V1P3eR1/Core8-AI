@@ -39,31 +39,42 @@ def _fact_row(row) -> dict:
 
 # ── Tenant directory (not tenant-scoped by nature) ───────────────────────────
 
-async def create_tenant(name: str, created_by: str, owner_user_id: str | None = None) -> dict:
+async def create_tenant(name: str, created_by: str, owner_user_ids: list[str] = ()) -> dict:
+    """Create a tenant. Each user in owner_user_ids gets an explicit 'owner' membership."""
     tenant_id = _new_id()
     async with _conn() as db:
         await db.execute(
             "INSERT INTO tenants (id, name, created_by) VALUES (?,?,?)", (tenant_id, name, created_by)
         )
-        if owner_user_id:
+        for uid in dict.fromkeys(owner_user_ids):
             await db.execute(
-                "INSERT INTO tenant_members (tenant_id, user_id, role) VALUES (?,?, 'owner')",
-                (tenant_id, owner_user_id),
+                "INSERT INTO tenant_members (tenant_id, user_id, role, granted_by) VALUES (?,?, 'owner', ?)",
+                (tenant_id, uid, created_by),
             )
         await db.commit()
     return {"id": tenant_id, "name": name}
 
 
-async def list_tenants_for_user(user_id: str, is_platform_admin: bool) -> list[dict]:
+async def list_tenants_for_user(user_id: str) -> list[dict]:
+    """Tenants the user is an explicit member of."""
     async with _conn() as db:
-        if is_platform_admin:
-            sql, args = "SELECT id, name, created_at, 'admin' AS role FROM tenants ORDER BY created_at", ()
-        else:
-            sql = """SELECT t.id, t.name, t.created_at, m.role FROM tenants t
-                     JOIN tenant_members m ON m.tenant_id = t.id
-                     WHERE m.user_id = ? ORDER BY t.created_at"""
-            args = (user_id,)
-        async with db.execute(sql, args) as cur:
+        async with db.execute(
+            """SELECT t.id, t.name, t.created_at, m.role FROM tenants t
+               JOIN tenant_members m ON m.tenant_id = t.id
+               WHERE m.user_id = ? ORDER BY t.created_at""",
+            (user_id,),
+        ) as cur:
+            return [dict(r) for r in await cur.fetchall()]
+
+
+async def tenant_directory() -> list[dict]:
+    """Names only, for platform admins to manage clients. Contains no Brain data."""
+    async with _conn() as db:
+        async with db.execute(
+            """SELECT t.id, t.name, t.created_at,
+                      (SELECT COUNT(*) FROM tenant_members m WHERE m.tenant_id = t.id) AS member_count
+               FROM tenants t ORDER BY t.created_at"""
+        ) as cur:
             return [dict(r) for r in await cur.fetchall()]
 
 
@@ -99,12 +110,40 @@ class BrainRepository:
                 row = await cur.fetchone()
         return dict(row) if row else None
 
-    async def set_member(self, user_id: str, role: str) -> None:
+    async def set_member(self, user_id: str, role: str, granted_by: str) -> None:
         async with _conn() as db:
             await db.execute(
-                """INSERT INTO tenant_members (tenant_id, user_id, role) VALUES (?,?,?)
-                   ON CONFLICT(tenant_id, user_id) DO UPDATE SET role = excluded.role""",
-                (self.tenant_id, user_id, role),
+                """INSERT INTO tenant_members (tenant_id, user_id, role, granted_by) VALUES (?,?,?,?)
+                   ON CONFLICT(tenant_id, user_id) DO UPDATE SET
+                     role = excluded.role, granted_by = excluded.granted_by""",
+                (self.tenant_id, user_id, role, granted_by),
+            )
+            await db.commit()
+
+    async def list_members(self) -> list[dict]:
+        async with _conn() as db:
+            async with db.execute(
+                """SELECT m.user_id, u.email, m.role, m.granted_by, m.created_at
+                   FROM tenant_members m JOIN users u ON u.id = m.user_id
+                   WHERE m.tenant_id = ? ORDER BY m.created_at""",
+                (self.tenant_id,),
+            ) as cur:
+                return [dict(r) for r in await cur.fetchall()]
+
+    async def count_owners(self) -> int:
+        async with _conn() as db:
+            async with db.execute(
+                "SELECT COUNT(*) FROM tenant_members WHERE tenant_id = ? AND role = 'owner'", (self.tenant_id,)
+            ) as cur:
+                return (await cur.fetchone())[0]
+
+    async def get_member_role(self, user_id: str) -> str | None:
+        return await get_membership_role(self.tenant_id, user_id)
+
+    async def remove_member(self, user_id: str) -> None:
+        async with _conn() as db:
+            await db.execute(
+                "DELETE FROM tenant_members WHERE tenant_id = ? AND user_id = ?", (self.tenant_id, user_id)
             )
             await db.commit()
 

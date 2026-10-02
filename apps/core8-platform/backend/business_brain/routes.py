@@ -115,22 +115,33 @@ async def get_questionnaire():
 
 @router.post("/api/tenants", status_code=201)
 async def create_tenant(req: TenantCreate, user: dict = Depends(require_jwt)):
+    """Platform admins create client tenants. The creator becomes an owner of this tenant only;
+    other staff get access per client via /members."""
     if user.get("role") != PLATFORM_ADMIN:
         raise HTTPException(status_code=403, detail="Admin role required")
-    owner_id = None
+    owners = [user["sub"]]
     if req.owner_email:
         u = await get_user_by_email(req.owner_email)
         if not u:
             raise HTTPException(status_code=404, detail="Owner user not found")
-        owner_id = u["id"]
-    tenant = await repository.create_tenant(req.name.strip(), user["sub"], owner_id)
+        owners.append(u["id"])
+    tenant = await repository.create_tenant(req.name.strip(), user["sub"], owners)
     logger.info("tenant created id=%s by=%s", tenant["id"], user["sub"])
     return tenant
 
 
 @router.get("/api/tenants")
 async def list_tenants(user: dict = Depends(require_jwt)):
-    return await repository.list_tenants_for_user(user["sub"], user.get("role") == PLATFORM_ADMIN)
+    """Only tenants the caller is an explicit member of."""
+    return await repository.list_tenants_for_user(user["sub"])
+
+
+@router.get("/api/admin/tenants")
+async def tenant_directory(user: dict = Depends(require_jwt)):
+    """Client directory for platform admins: names and member counts only, no Brain data."""
+    if user.get("role") != PLATFORM_ADMIN:
+        raise HTTPException(status_code=403, detail="Admin role required")
+    return await repository.tenant_directory()
 
 
 @router.get("/api/tenants/{tenant_id}")
@@ -138,14 +149,33 @@ async def get_tenant(access: TenantAccess = Depends(viewer)):
     return {**await access.repo.get_tenant(), "your_role": access.role}
 
 
+@router.get("/api/tenants/{tenant_id}/members")
+async def list_members(access: TenantAccess = Depends(owner)):
+    return await access.repo.list_members()
+
+
 @router.post("/api/tenants/{tenant_id}/members")
 async def set_member(req: MemberSet, access: TenantAccess = Depends(owner)):
     u = await get_user_by_email(req.email)
     if not u:
         raise HTTPException(status_code=404, detail="User not found")
-    await access.repo.set_member(u["id"], req.role)
-    logger.info("tenant member set tenant=%s user=%s role=%s", access.tenant_id, u["id"], req.role)
+    current = await access.repo.get_member_role(u["id"])
+    if current == "owner" and req.role != "owner" and await access.repo.count_owners() <= 1:
+        raise HTTPException(status_code=409, detail="A tenant must keep at least one owner")
+    await access.repo.set_member(u["id"], req.role, granted_by=access.user_id)
+    logger.info("tenant member set tenant=%s user=%s role=%s by=%s", access.tenant_id, u["id"], req.role, access.user_id)
     return {"user_id": u["id"], "role": req.role}
+
+
+@router.delete("/api/tenants/{tenant_id}/members/{user_id}", status_code=204)
+async def remove_member(user_id: str, access: TenantAccess = Depends(owner)):
+    current = await access.repo.get_member_role(user_id)
+    if current is None:
+        raise HTTPException(status_code=404, detail="Member not found")
+    if current == "owner" and await access.repo.count_owners() <= 1:
+        raise HTTPException(status_code=409, detail="A tenant must keep at least one owner")
+    await access.repo.remove_member(user_id)
+    logger.info("tenant member removed tenant=%s user=%s by=%s", access.tenant_id, user_id, access.user_id)
 
 
 # ── Assessments ──────────────────────────────────────────────────────────────

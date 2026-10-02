@@ -136,8 +136,53 @@ def test_tenant_isolation(api):
     # B's brain is empty; listing tenants shows only B's.
     assert c.get(f"/api/tenants/{tb}/brain/facts", headers=b_user).json() == []
     assert [t["id"] for t in c.get("/api/tenants", headers=b_user).json()] == [tb]
-    # Platform admin sees both.
-    assert {t["id"] for t in c.get("/api/tenants", headers=api.admin).json()} == {ta, tb}
+    # Platform admin's directory lists both (names only).
+    assert {t["id"] for t in c.get("/api/admin/tenants", headers=api.admin).json()} == {ta, tb}
+    assert c.get("/api/admin/tenants", headers=b_user).status_code == 403
+
+
+def test_platform_admin_needs_explicit_per_client_access(api):
+    import asyncio
+    from business_brain.repository import create_tenant
+
+    client_owner = api.user("owner@client.test")
+    owner_id = api.c.get("/api/auth/me", headers=client_owner).json()["id"]
+    # A tenant the admin did not create and was not granted.
+    tid = asyncio.run(create_tenant("Client X", "system", [owner_id]))["id"]
+    aid = api.assessment(tid, client_owner)
+    api.answer(tid, aid, INTAKE, client_owner)
+    c = api.c
+
+    for path in (f"/api/tenants/{tid}", f"/api/tenants/{tid}/brain/facts",
+                 f"/api/tenants/{tid}/assessments/{aid}", f"/api/tenants/{tid}/brain/context?agent_role=general"):
+        assert c.get(path, headers=api.admin).status_code == 404, path
+    assert tid not in {t["id"] for t in c.get("/api/tenants", headers=api.admin).json()}
+    # The directory shows the client exists, but no data.
+    entry = next(t for t in c.get("/api/admin/tenants", headers=api.admin).json() if t["id"] == tid)
+    assert set(entry) == {"id", "name", "created_at", "member_count"}
+
+    # The client owner grants the admin access → now visible; revoking removes it again.
+    assert c.post(f"/api/tenants/{tid}/members", json={"email": "admin@core8.test", "role": "editor"},
+                  headers=client_owner).status_code == 200
+    assert c.get(f"/api/tenants/{tid}/brain/facts", headers=api.admin).status_code == 200
+    members = c.get(f"/api/tenants/{tid}/members", headers=client_owner).json()
+    admin_row = next(m for m in members if m["email"] == "admin@core8.test")
+    assert admin_row["granted_by"] == owner_id
+    assert c.delete(f"/api/tenants/{tid}/members/{admin_row['user_id']}", headers=client_owner).status_code == 204
+    assert c.get(f"/api/tenants/{tid}/brain/facts", headers=api.admin).status_code == 404
+
+
+def test_last_owner_cannot_be_removed_or_demoted(api):
+    owner = api.user("solo@t.test")
+    tid = api.tenant("T", owner_email="solo@t.test")
+    c = api.c
+    admin_id = c.get("/api/auth/me", headers=api.admin).json()["id"]
+    owner_id = c.get("/api/auth/me", headers=owner).json()["id"]
+    # Creator (admin) and solo are both owners; removing one is fine, the last is protected.
+    assert c.delete(f"/api/tenants/{tid}/members/{admin_id}", headers=owner).status_code == 204
+    assert c.delete(f"/api/tenants/{tid}/members/{owner_id}", headers=owner).status_code == 409
+    assert c.post(f"/api/tenants/{tid}/members", json={"email": "solo@t.test", "role": "viewer"},
+                  headers=owner).status_code == 409
 
 
 def test_repository_queries_are_tenant_bound(api):

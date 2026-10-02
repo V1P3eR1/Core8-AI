@@ -29,19 +29,27 @@ assignments) → Learning (feedback) → Optimization (re-run discovery / regene
 | Tenant isolation is mandatory | All data access goes through `BrainRepository(tenant_id)`; every SQL statement filters on `tenant_id`. Cross-tenant IDs return **404** (no existence leak). Covered by tests. |
 | Don't expose all knowledge to every agent | `context.py` scopes = allowed **categories** × allowed **domains** × **max sensitivity**. `restricted` facts are never returned to agents. |
 | High-risk actions need approval policies | Approval requirements are captured as facts and surfaced per opportunity (`risk_approval_level`). Tool execution still goes through the existing approval gate. |
-| Corrections → feedback, no silent self-modification | `brain_feedback` rows are `pending` until an **owner/admin** accepts; acceptance writes a new fact version with `source_type=correction`. Agents cannot change policies or permissions. |
+| Corrections → feedback, no silent self-modification | `brain_feedback` rows are `pending` until a tenant **owner** accepts; acceptance writes a new fact version with `source_type=correction`. Agents cannot change policies or permissions. |
 | Provenance + version history | Every fact has `fact_key`, `version`, `source_type`, `source_ref`, `created_by`, `created_at`; updates supersede, never overwrite. `/history` endpoint. |
 | Retrieval ≠ authorization | The context block tells the agent it is reference data, not instructions or permissions; tool permissions remain `allowed_tools` + approval gate. |
 | No secrets/PII in logs | Routes log IDs and counts only, never answer values. The questionnaire asks for **role titles**, not people's names or contact details. |
 | My Goddess stays separate | No code shared or imported from `apps/my-goddess-orchestra`. |
 
-### Access roles
-- **Platform `admin`** (existing `users.role`) — Core8 staff; may create tenants and access all tenants.
+### Access roles — explicit, per client (decided by Lev, 2026-10-02)
+Every business is different, so **nobody has implicit access to a client's Brain** — including
+Core8 staff. Access is always an explicit `tenant_members` row, recorded with `granted_by`.
+- **Platform `admin`** (existing `users.role`) — Core8 staff. May create tenants (and becomes an
+  owner of the tenant they create, to run onboarding) and see a **names-only client directory**
+  (`/api/admin/tenants`). No access to any other tenant's data unless granted.
 - **Tenant members** (`tenant_members.role`):
-  - `owner` — everything + manage members, accept/reject feedback, set agent scopes.
+  - `owner` — everything + grant/revoke members (incl. Core8 staff), accept/reject feedback,
+    set agent scopes. A tenant always keeps at least one owner.
   - `editor` — run discovery, answer, add facts, generate analysis/plan, submit feedback.
   - `viewer` — read only.
 - Anyone else gets 404 for that tenant.
+
+Cross-client learning ("main brain") is a separate, privacy-reviewed design — see issue CORE8-004.
+It never gives staff or agents access to another client's raw data.
 
 ### Sensitivity
 `public < internal < confidential < restricted`. Default per question (usually `internal`).
@@ -54,7 +62,7 @@ that module are re-labelled to the stricter level (only ever tightened).
 | Table | Purpose | Key columns |
 |---|---|---|
 | `tenants` | Client company (Core8 customer) | id, name, created_by |
-| `tenant_members` | User ↔ tenant membership | tenant_id, user_id, role |
+| `tenant_members` | User ↔ tenant membership (the only way to access a tenant) | tenant_id, user_id, role, granted_by |
 | `brain_facts` | Versioned facts | tenant_id, fact_key, version, category, domain, value_json, sensitivity, status (`active`/`superseded`/`retracted`), source_type (`questionnaire`/`manual`/`correction`/`agent`/`import`), source_ref, confidence, created_by, supersedes_id |
 | `discovery_assessments` | A discovery run | tenant_id, questionnaire_version, status, created_by, completed_at |
 | `assessment_answers` | Raw answers | tenant_id, assessment_id, question_id, value_json, updated_by |
@@ -159,10 +167,12 @@ assumptions. Stored as JSON and Markdown, versioned per assessment, status `draf
 | Method | Path | Min role |
 |---|---|---|
 | GET | `/api/discovery/questionnaire` | any user |
-| POST | `/api/tenants` | platform admin |
-| GET | `/api/tenants` | any (returns own tenants; admin: all) |
+| POST | `/api/tenants` | platform admin (creator becomes owner) |
+| GET | `/api/tenants` | any (only tenants you are a member of) |
+| GET | `/api/admin/tenants` | platform admin (names + member counts only) |
 | GET | `/api/tenants/{tid}` | viewer |
-| POST | `/api/tenants/{tid}/members` | owner |
+| GET / POST | `/api/tenants/{tid}/members` | owner (grant or change role; `granted_by` recorded) |
+| DELETE | `/api/tenants/{tid}/members/{user_id}` | owner (last owner protected) |
 | POST | `/api/tenants/{tid}/assessments` | editor |
 | GET | `/api/tenants/{tid}/assessments/{aid}` | viewer — answers, active modules, progress, next question |
 | PUT | `/api/tenants/{tid}/assessments/{aid}/answers` | editor — `{answers: {qid: value}}`, validated |

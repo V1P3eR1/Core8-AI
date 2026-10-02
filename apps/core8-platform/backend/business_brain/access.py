@@ -1,4 +1,9 @@
-"""Tenant access checks. Unknown tenant and no access both return 404 (no existence leak)."""
+"""Tenant access checks. Unknown tenant and no access both return 404 (no existence leak).
+
+Access is per client: everyone, including Core8 platform admins, needs an explicit
+tenant_members row. Platform admins may create tenants (and become owner of the ones they
+create) but have no implicit access to other tenants' data.
+"""
 
 from dataclasses import dataclass
 
@@ -15,23 +20,16 @@ PLATFORM_ADMIN = "admin"
 class TenantAccess:
     tenant_id: str
     user_id: str
-    role: str          # 'owner' | 'editor' | 'viewer' | 'admin' (platform)
+    role: str          # 'owner' | 'editor' | 'viewer'
     repo: BrainRepository
-
-    @property
-    def is_platform_admin(self) -> bool:
-        return self.role == PLATFORM_ADMIN
 
 
 async def resolve_access(tenant_id: str, user: dict) -> TenantAccess | None:
     if not await tenant_exists(tenant_id):
         return None
-    if user.get("role") == PLATFORM_ADMIN:
-        role = PLATFORM_ADMIN
-    else:
-        role = await get_membership_role(tenant_id, user["sub"])
-        if role is None:
-            return None
+    role = await get_membership_role(tenant_id, user["sub"])
+    if role is None:
+        return None
     return TenantAccess(tenant_id, user["sub"], role, BrainRepository(tenant_id))
 
 
@@ -43,7 +41,7 @@ def tenant_role(min_role: str):
         access = await resolve_access(tenant_id, user)
         if access is None:
             raise HTTPException(status_code=404, detail="Tenant not found")
-        if not access.is_platform_admin and ROLE_RANK[access.role] < needed:
+        if ROLE_RANK[access.role] < needed:
             raise HTTPException(status_code=403, detail=f"Requires tenant role '{min_role}'")
         return access
 
