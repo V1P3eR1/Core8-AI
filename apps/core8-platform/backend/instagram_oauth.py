@@ -20,6 +20,7 @@ from tools.instagram_api import (
     get_long_lived_token, resolve_ig_account,
 )
 from tools.instagram_accounts import save_ig_account
+from tenancy import use_tenant
 
 logger = logging.getLogger("core8.instagram.oauth")
 
@@ -54,7 +55,8 @@ async def instagram_oauth_callback(request: Request):
         return _page("Connection failed",
                      "Missing code or state in the callback.", ok=False)
 
-    if not consume_oauth_state(state):
+    tenant_id = consume_oauth_state(state)
+    if not tenant_id:
         logger.warning("Instagram OAuth callback with an invalid or expired state")
         return _page(
             "Connection failed",
@@ -75,14 +77,16 @@ async def instagram_oauth_callback(request: Request):
         expires_at = (datetime.datetime.utcnow()
                       + datetime.timedelta(seconds=expires_in)).isoformat()
 
-    await save_ig_account(
-        ig_user_id=account["ig_user_id"],
-        fb_page_id=account["fb_page_id"],
-        username=account["username"],
-        access_token=long_token,
-        token_expires_at=expires_at,
-    )
-    logger.info("Instagram account connected: @%s", account["username"])
+    # The tenant comes from the server-side state, never from the callback's query string.
+    with use_tenant(tenant_id):
+        await save_ig_account(
+            ig_user_id=account["ig_user_id"],
+            fb_page_id=account["fb_page_id"],
+            username=account["username"],
+            access_token=long_token,
+            token_expires_at=expires_at,
+        )
+    logger.info("Instagram account connected for tenant=%s", tenant_id)
     return _page(
         "Instagram connected",
         f"Connected as <b>@{html.escape(account['username'])}</b>. "

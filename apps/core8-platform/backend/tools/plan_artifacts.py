@@ -9,6 +9,7 @@ through these tools, so each step builds on the last.
 import uuid
 import aiosqlite
 from database import get_db
+from tenancy import current_tenant
 from tools.registry import ToolDef, registry
 
 _VALID_STATUSES = {"planning", "scheduled", "active"}
@@ -16,7 +17,8 @@ _VALID_STEPS = {"niche", "viral", "caption", "hashtag", "schedule", "monetize"}
 
 
 async def _plan_exists(db, plan_id: str) -> bool:
-    async with db.execute("SELECT 1 FROM content_plans WHERE id=?", (plan_id,)) as cur:
+    async with db.execute("SELECT 1 FROM content_plans WHERE tenant_id=? AND id=?",
+                          (current_tenant(), plan_id)) as cur:
         return await cur.fetchone() is not None
 
 
@@ -24,8 +26,8 @@ async def create_content_plan(niche: str = "") -> dict:
     plan_id = str(uuid.uuid4())
     async with get_db() as db:
         await db.execute(
-            "INSERT INTO content_plans (id, niche) VALUES (?, ?)",
-            (plan_id, niche),
+            "INSERT INTO content_plans (tenant_id, id, niche) VALUES (?, ?, ?)",
+            (current_tenant(), plan_id, niche),
         )
         await db.commit()
     return {"id": plan_id, "niche": niche, "status": "planning"}
@@ -38,11 +40,12 @@ async def list_content_plans(limit: int = 50) -> list[dict]:
             """SELECT p.id, p.niche, p.status, p.created_at, p.updated_at,
                       COUNT(a.id) AS artifact_count
                FROM content_plans p
-               LEFT JOIN plan_artifacts a ON a.plan_id = p.id
+               LEFT JOIN plan_artifacts a ON a.plan_id = p.id AND a.tenant_id = p.tenant_id
+               WHERE p.tenant_id = ?
                GROUP BY p.id
                ORDER BY p.updated_at DESC
                LIMIT ?""",
-            (min(limit, 200),),
+            (current_tenant(), min(limit, 200)),
         ) as cur:
             rows = await cur.fetchall()
     return [dict(r) for r in rows]
@@ -52,15 +55,15 @@ async def get_content_plan(plan_id: str) -> dict:
     async with get_db() as db:
         db.row_factory = aiosqlite.Row
         async with db.execute(
-            "SELECT * FROM content_plans WHERE id=?", (plan_id,)
+            "SELECT * FROM content_plans WHERE tenant_id=? AND id=?", (current_tenant(), plan_id)
         ) as cur:
             plan = await cur.fetchone()
         if not plan:
             return {"error": f"Content plan {plan_id} not found"}
         async with db.execute(
             """SELECT step, length(content) AS size_bytes, updated_at
-               FROM plan_artifacts WHERE plan_id=? ORDER BY created_at""",
-            (plan_id,),
+               FROM plan_artifacts WHERE tenant_id=? AND plan_id=? ORDER BY created_at""",
+            (current_tenant(), plan_id),
         ) as cur:
             artifacts = await cur.fetchall()
     result = dict(plan)
@@ -81,12 +84,12 @@ async def update_content_plan(plan_id: str, niche: str = "", status: str = "") -
     if not updates:
         return {"error": "No fields to update (provide niche and/or status)"}
     updates.append("updated_at=datetime('now')")
-    params.append(plan_id)
+    params += [current_tenant(), plan_id]
     async with get_db() as db:
         if not await _plan_exists(db, plan_id):
             return {"error": f"Content plan {plan_id} not found"}
         await db.execute(
-            f"UPDATE content_plans SET {', '.join(updates)} WHERE id=?", params
+            f"UPDATE content_plans SET {', '.join(updates)} WHERE tenant_id=? AND id=?", params
         )
         await db.commit()
     return {"updated": plan_id}
@@ -101,15 +104,17 @@ async def save_plan_artifact(plan_id: str, step: str, content: str) -> dict:
         if not await _plan_exists(db, plan_id):
             return {"error": f"Content plan {plan_id} not found — call create_content_plan first"}
         await db.execute(
-            """INSERT INTO plan_artifacts (id, plan_id, step, content)
-               VALUES (?, ?, ?, ?)
+            """INSERT INTO plan_artifacts (tenant_id, id, plan_id, step, content)
+               VALUES (?, ?, ?, ?, ?)
                ON CONFLICT(plan_id, step) DO UPDATE SET
                  content=excluded.content,
-                 updated_at=datetime('now')""",
-            (str(uuid.uuid4()), plan_id, step, content),
+                 updated_at=datetime('now')
+               WHERE plan_artifacts.tenant_id = excluded.tenant_id""",
+            (current_tenant(), str(uuid.uuid4()), plan_id, step, content),
         )
         await db.execute(
-            "UPDATE content_plans SET updated_at=datetime('now') WHERE id=?", (plan_id,)
+            "UPDATE content_plans SET updated_at=datetime('now') WHERE tenant_id=? AND id=?",
+            (current_tenant(), plan_id)
         )
         await db.commit()
     return {"saved": f"{plan_id}/{step}", "bytes": len(content)}
@@ -121,8 +126,8 @@ async def read_plan_artifact(plan_id: str, step: str) -> dict:
     async with get_db() as db:
         db.row_factory = aiosqlite.Row
         async with db.execute(
-            "SELECT content, updated_at FROM plan_artifacts WHERE plan_id=? AND step=?",
-            (plan_id, step),
+            "SELECT content, updated_at FROM plan_artifacts WHERE tenant_id=? AND plan_id=? AND step=?",
+            (current_tenant(), plan_id, step),
         ) as cur:
             row = await cur.fetchone()
     if not row:
