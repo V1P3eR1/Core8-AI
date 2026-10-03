@@ -137,7 +137,7 @@ def test_tenant_isolation(api):
     assert c.get(f"/api/tenants/{tb}/brain/facts", headers=b_user).json() == []
     assert [t["id"] for t in c.get("/api/tenants", headers=b_user).json()] == [tb]
     # Platform admin's directory lists both (names only).
-    assert {t["id"] for t in c.get("/api/admin/tenants", headers=api.admin).json()} == {ta, tb}
+    assert {t["id"] for t in c.get("/api/admin/tenants", headers=api.admin).json()} == {ta, tb, "core8-internal"}
     assert c.get("/api/admin/tenants", headers=b_user).status_code == 403
 
 

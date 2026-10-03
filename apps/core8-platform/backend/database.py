@@ -4,6 +4,12 @@ import os
 
 DB_PATH = os.getenv("DB_PATH", os.path.join(os.path.dirname(__file__), "core8.db"))
 
+# Operational tables that carry tenant_id (CORE8-005).
+_TENANT_SCOPED_TABLES = [
+    "conversations", "messages", "leads", "events", "design_docs", "content_plans",
+    "plan_artifacts", "ig_accounts", "scheduled_posts", "media_assets",
+]
+
 
 def get_db() -> aiosqlite.Connection:
     db = aiosqlite.connect(DB_PATH)
@@ -194,12 +200,14 @@ async def init_db():
             );
 
             CREATE TABLE IF NOT EXISTS conversations (
+                tenant_id   TEXT NOT NULL,
                 id          TEXT PRIMARY KEY,
                 agent_id    TEXT NOT NULL REFERENCES agents(id),
                 created_at  TEXT NOT NULL DEFAULT (datetime('now'))
             );
 
             CREATE TABLE IF NOT EXISTS messages (
+                tenant_id   TEXT NOT NULL,
                 id              TEXT PRIMARY KEY,
                 conversation_id TEXT NOT NULL REFERENCES conversations(id),
                 role            TEXT NOT NULL CHECK(role IN ('user','assistant','tool')),
@@ -208,6 +216,7 @@ async def init_db():
             );
 
             CREATE TABLE IF NOT EXISTS leads (
+                tenant_id   TEXT NOT NULL,
                 id          TEXT PRIMARY KEY,
                 name        TEXT NOT NULL,
                 email       TEXT,
@@ -220,6 +229,7 @@ async def init_db():
             );
 
             CREATE TABLE IF NOT EXISTS events (
+                tenant_id   TEXT NOT NULL,
                 id          TEXT PRIMARY KEY,
                 title       TEXT NOT NULL,
                 start_time  TEXT NOT NULL,
@@ -230,13 +240,14 @@ async def init_db():
             );
 
             CREATE TABLE IF NOT EXISTS design_docs (
+                tenant_id   TEXT NOT NULL,
                 id          TEXT PRIMARY KEY,
                 project     TEXT NOT NULL,
                 path        TEXT NOT NULL,
                 content     TEXT NOT NULL,
                 created_at  TEXT NOT NULL DEFAULT (datetime('now')),
                 updated_at  TEXT NOT NULL DEFAULT (datetime('now')),
-                UNIQUE(project, path)
+                UNIQUE(tenant_id, project, path)
             );
 
             CREATE TABLE IF NOT EXISTS users (
@@ -257,6 +268,7 @@ async def init_db():
             );
 
             CREATE TABLE IF NOT EXISTS content_plans (
+                tenant_id   TEXT NOT NULL,
                 id            TEXT PRIMARY KEY,
                 owner_user_id TEXT REFERENCES users(id),  -- nullable until multi-tenancy is decided
                 niche         TEXT,
@@ -267,6 +279,7 @@ async def init_db():
             );
 
             CREATE TABLE IF NOT EXISTS plan_artifacts (
+                tenant_id   TEXT NOT NULL,
                 id          TEXT PRIMARY KEY,
                 plan_id     TEXT NOT NULL REFERENCES content_plans(id),
                 step        TEXT NOT NULL
@@ -277,10 +290,11 @@ async def init_db():
                 UNIQUE(plan_id, step)
             );
 
-            -- The single connected Instagram Business account (singleton row,
-            -- id='primary'). access_token is Fernet-encrypted at rest.
+            -- One connected Instagram Business account per tenant (id = tenant_id).
+            -- access_token is Fernet-encrypted at rest.
             CREATE TABLE IF NOT EXISTS ig_accounts (
                 id               TEXT PRIMARY KEY,
+                tenant_id        TEXT NOT NULL,
                 ig_user_id       TEXT NOT NULL,
                 fb_page_id       TEXT NOT NULL,
                 username         TEXT,
@@ -294,6 +308,7 @@ async def init_db():
             -- For carousel posts media_urls (JSON array of 2-10 urls) holds the
             -- children; media_url stays NOT NULL and is set to the first url.
             CREATE TABLE IF NOT EXISTS scheduled_posts (
+                tenant_id   TEXT NOT NULL,
                 id            TEXT PRIMARY KEY,
                 plan_id       TEXT REFERENCES content_plans(id),
                 post_type     TEXT NOT NULL CHECK(post_type IN ('image','reel','carousel')),
@@ -312,6 +327,7 @@ async def init_db():
 
             -- The media library: uploaded and Gemini-generated post media.
             CREATE TABLE IF NOT EXISTS media_assets (
+                tenant_id   TEXT NOT NULL,
                 id          TEXT PRIMARY KEY,
                 filename    TEXT NOT NULL,
                 source      TEXT NOT NULL CHECK(source IN ('upload','generated')),
@@ -363,6 +379,46 @@ async def init_db():
                 DROP TABLE _scheduled_posts_v1;
             """)
             await db.commit()
+
+    # CORE8-005: tenant-scope legacy tables (one shared DB, every row labelled by client).
+    # Existing rows are assigned to the internal tenant.
+    async with aiosqlite.connect(DB_PATH) as db:
+        for table in _TENANT_SCOPED_TABLES:
+            async with db.execute(f"PRAGMA table_info({table})") as cur:
+                cols = [r[1] for r in await cur.fetchall()]
+            if cols and "tenant_id" not in cols:
+                await db.execute(
+                    f"ALTER TABLE {table} ADD COLUMN tenant_id TEXT NOT NULL DEFAULT 'core8-internal'"
+                )
+            await db.execute(f"CREATE INDEX IF NOT EXISTS ix_{table}_tenant ON {table} (tenant_id)")
+        # design_docs: (project, path) must be unique per tenant, not globally.
+        async with db.execute(
+            "SELECT sql FROM sqlite_master WHERE type='table' AND name='design_docs'"
+        ) as cur:
+            ddl = (await cur.fetchone())[0]
+        if "UNIQUE(tenant_id, project, path)" not in ddl:
+            await db.executescript("""
+                ALTER TABLE design_docs RENAME TO _design_docs_v1;
+                CREATE TABLE design_docs (
+                    tenant_id   TEXT NOT NULL,
+                    id          TEXT PRIMARY KEY,
+                    project     TEXT NOT NULL,
+                    path        TEXT NOT NULL,
+                    content     TEXT NOT NULL,
+                    created_at  TEXT NOT NULL DEFAULT (datetime('now')),
+                    updated_at  TEXT NOT NULL DEFAULT (datetime('now')),
+                    UNIQUE(tenant_id, project, path)
+                );
+                INSERT INTO design_docs (tenant_id, id, project, path, content, created_at, updated_at)
+                SELECT tenant_id, id, project, path, content, created_at, updated_at FROM _design_docs_v1;
+                DROP TABLE _design_docs_v1;
+                CREATE INDEX IF NOT EXISTS ix_design_docs_tenant ON design_docs (tenant_id);
+            """)
+        # ig_accounts: the old singleton row 'primary' becomes the internal tenant's account.
+        await db.execute(
+            "UPDATE ig_accounts SET id = tenant_id WHERE id = 'primary'"
+        )
+        await db.commit()
 
     # Seed specialist agents. allowed_tools is reconciled on every boot — it is a
     # security boundary and must always match _AGENT_TOOL_SCOPES, even for an

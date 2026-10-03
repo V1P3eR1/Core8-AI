@@ -38,7 +38,7 @@ _Audit date: 2026-10-01 · Severity: 🔴 high · 🟠 medium · 🟡 low_
 | C9 | 🟡 | My Goddess is a single 622-line `server.py` + 134 KB `index.html` with an embedded base64 image. | Split modules; serve image as a static file. |
 | C10 | 🟡 | Persona library is copied by folder, not versioned. | Add as git submodule pinned to a commit, or a setup script that fetches it. |
 | C11 | 🟡 | `agents/__init__.py`, `security/__init__.py`, `tools/__init__.py` are empty — fine, noted for completeness. | — |
-| C12 | 🟠 | Legacy tables (`leads`, `events`, `conversations`, `messages`, `design_docs`, IG tables) are **not tenant-scoped**; only Business Brain tables are. | Add `tenant_id` to legacy tables and scope their tools before onboarding a second client on one instance. |
+| C12 | ✅ | ~~Legacy tables not tenant-scoped.~~ Resolved by CORE8-005 (#7): one shared DB, `tenant_id` on every operational table, server-side tenant context for tools, per-tenant scheduler/token refresh/OAuth/media. | Postgres row-level security as defence in depth when moving off SQLite (C5). |
 | C13 | ✅ | `requirements.txt` was uninstallable (httpx 0.27.2 vs google-genai ≥0.28.1). | Fixed in CORE8-001 branch: httpx 0.28.1. |
 
 ## 4. Unknowns to resolve
