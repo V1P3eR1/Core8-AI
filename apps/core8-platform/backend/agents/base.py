@@ -31,15 +31,19 @@ class BaseAgent:
         messages: list[dict],
         on_event=None,
         approval_gate: Callable[[str, dict], Awaitable[bool]] | None = None,
+        system_context: str | None = None,
     ) -> tuple[str, str]:
         history = list(messages)
+        system = self.config.system_prompt
+        if system_context:
+            system = f"{system}\n\n{system_context}"
         tools = registry.get_schemas(self.config.allowed_tools)
 
         while True:
             params = {
                 "model": self.config.model,
                 "max_tokens": 4096,
-                "system": self.config.system_prompt,
+                "system": system,
                 "messages": history,
             }
             if tools:

@@ -1,0 +1,1328 @@
+{
+ "version": "1.1.0",
+ "title": {
+  "en": "Core8 Smart Discovery Questionnaire",
+  "he": "שאלון האבחון החכם של Core8",
+  "ru": "Умная диагностическая анкета Core8"
+ },
+ "intake": {
+  "id": "exec",
+  "title": {
+   "en": "Executive intake",
+   "he": "שאלון הנהלה",
+   "ru": "Анкета для руководства"
+  },
+  "questions": [
+   {
+    "id": "exec.company_name",
+    "text": {
+     "en": "Company name",
+     "he": "שם החברה",
+     "ru": "Название компании"
+    },
+    "type": "text",
+    "required": true,
+    "sensitivity": "public",
+    "maps_to": {
+     "category": "organization_profile",
+     "key": "company_name"
+    }
+   },
+   {
+    "id": "exec.industry",
+    "text": {
+     "en": "Industry",
+     "he": "תחום פעילות",
+     "ru": "Отрасль"
+    },
+    "type": "text",
+    "required": true,
+    "sensitivity": "public",
+    "maps_to": {
+     "category": "organization_profile",
+     "key": "industry"
+    }
+   },
+   {
+    "id": "exec.location_timezone",
+    "text": {
+     "en": "Main location and timezone",
+     "he": "מיקום עיקרי ואזור זמן",
+     "ru": "Основное местоположение и часовой пояс"
+    },
+    "type": "text",
+    "required": false,
+    "sensitivity": "public",
+    "maps_to": {
+     "category": "organization_profile",
+     "key": "location_timezone"
+    }
+   },
+   {
+    "id": "exec.website",
+    "text": {
+     "en": "Website",
+     "he": "אתר אינטרנט",
+     "ru": "Веб-сайт"
+    },
+    "type": "text",
+    "required": false,
+    "sensitivity": "public",
+    "maps_to": {
+     "category": "organization_profile",
+     "key": "website"
+    }
+   },
+   {
+    "id": "exec.employee_count",
+    "text": {
+     "en": "Number of employees",
+     "he": "מספר עובדים",
+     "ru": "Количество сотрудников"
+    },
+    "type": "number",
+    "required": true,
+    "maps_to": {
+     "category": "organization_profile",
+     "key": "employee_count"
+    }
+   },
+   {
+    "id": "exec.products_services",
+    "text": {
+     "en": "Key products and services",
+     "he": "מוצרים ושירותים עיקריים",
+     "ru": "Основные продукты и услуги"
+    },
+    "type": "long_text",
+    "required": true,
+    "sensitivity": "public",
+    "maps_to": {
+     "category": "products_services",
+     "key": "summary"
+    }
+   },
+   {
+    "id": "exec.customer_types",
+    "text": {
+     "en": "Primary customer types",
+     "he": "סוגי הלקוחות העיקריים",
+     "ru": "Основные типы клиентов"
+    },
+    "type": "long_text",
+    "required": true,
+    "maps_to": {
+     "category": "customer_personas",
+     "key": "summary"
+    }
+   },
+   {
+    "id": "exec.decision_maker_role",
+    "text": {
+     "en": "Role/title of the owner or decision maker (no names)",
+     "he": "תפקיד הבעלים או מקבל ההחלטות (ללא שמות)",
+     "ru": "Должность владельца или лица, принимающего решения (без имён)"
+    },
+    "type": "text",
+    "required": true,
+    "maps_to": {
+     "category": "roles",
+     "key": "decision_maker"
+    }
+   },
+   {
+    "id": "exec.implementation_owner_role",
+    "text": {
+     "en": "Role/title of the implementation owner (no names)",
+     "he": "תפקיד האחראי על ההטמעה (ללא שמות)",
+     "ru": "Должность ответственного за внедрение (без имён)"
+    },
+    "type": "text",
+    "required": false,
+    "maps_to": {
+     "category": "roles",
+     "key": "implementation_owner"
+    }
+   },
+   {
+    "id": "exec.software_stack",
+    "text": {
+     "en": "Current software stack (one per item)",
+     "he": "מערכות התוכנה הנוכחיות (אחת בכל פריט)",
+     "ru": "Текущие программные системы (по одной в пункте)"
+    },
+    "type": "list",
+    "required": true,
+    "maps_to": {
+     "category": "systems",
+     "key": "current_stack"
+    }
+   },
+   {
+    "id": "exec.top_pains",
+    "text": {
+     "en": "Top 3 business pains",
+     "he": "3 הכאבים העסקיים המרכזיים",
+     "ru": "3 главные бизнес-проблемы"
+    },
+    "type": "list",
+    "required": true,
+    "max_items": 3,
+    "maps_to": {
+     "category": "pain_points",
+     "key": "top_pains"
+    }
+   },
+   {
+    "id": "exec.repetitive_processes",
+    "text": {
+     "en": "Top 3 repetitive/manual processes",
+     "he": "3 התהליכים הידניים/החוזרים המרכזיים",
+     "ru": "3 главных повторяющихся/ручных процесса"
+    },
+    "type": "list",
+    "required": true,
+    "max_items": 3,
+    "maps_to": {
+     "category": "processes",
+     "key": "repetitive_processes"
+    }
+   },
+   {
+    "id": "exec.leakage_areas",
+    "text": {
+     "en": "Where are leads, customers or tasks lost or delayed?",
+     "he": "איפה לידים, לקוחות או משימות הולכים לאיבוד או מתעכבים?",
+     "ru": "Где теряются или задерживаются лиды, клиенты или задачи?"
+    },
+    "type": "long_text",
+    "required": false,
+    "maps_to": {
+     "category": "pain_points",
+     "key": "leakage_areas"
+    }
+   },
+   {
+    "id": "exec.monthly_leads",
+    "text": {
+     "en": "Approx. new leads per month",
+     "he": "מספר משוער של לידים חדשים בחודש",
+     "ru": "Примерное число новых лидов в месяц"
+    },
+    "type": "number",
+    "required": false,
+    "maps_to": {
+     "category": "metrics",
+     "key": "monthly_leads"
+    }
+   },
+   {
+    "id": "exec.monthly_support_requests",
+    "text": {
+     "en": "Approx. support requests per month",
+     "he": "מספר משוער של פניות שירות בחודש",
+     "ru": "Примерное число обращений в поддержку в месяц"
+    },
+    "type": "number",
+    "required": false,
+    "maps_to": {
+     "category": "metrics",
+     "key": "monthly_support_requests"
+    }
+   },
+   {
+    "id": "exec.monthly_emails",
+    "text": {
+     "en": "Approx. business emails handled per month",
+     "he": "מספר משוער של מיילים עסקיים בחודש",
+     "ru": "Примерное число деловых писем в месяц"
+    },
+    "type": "number",
+    "required": false,
+    "maps_to": {
+     "category": "metrics",
+     "key": "monthly_emails"
+    }
+   },
+   {
+    "id": "exec.monthly_appointments",
+    "text": {
+     "en": "Approx. appointments/meetings per month",
+     "he": "מספר משוער של תורים/פגישות בחודש",
+     "ru": "Примерное число записей/встреч в месяц"
+    },
+    "type": "number",
+    "required": false,
+    "maps_to": {
+     "category": "metrics",
+     "key": "monthly_appointments"
+    }
+   },
+   {
+    "id": "exec.monthly_transactions",
+    "text": {
+     "en": "Approx. transactions/orders per month",
+     "he": "מספר משוער של עסקאות/הזמנות בחודש",
+     "ru": "Примерное число сделок/заказов в месяц"
+    },
+    "type": "number",
+    "required": false,
+    "maps_to": {
+     "category": "metrics",
+     "key": "monthly_transactions"
+    }
+   },
+   {
+    "id": "exec.goals",
+    "text": {
+     "en": "Business goals for the next 6–12 months",
+     "he": "יעדים עסקיים ל-6–12 החודשים הקרובים",
+     "ru": "Бизнес-цели на ближайшие 6–12 месяцев"
+    },
+    "type": "list",
+    "required": true,
+    "maps_to": {
+     "category": "goals",
+     "key": "business_goals"
+    }
+   },
+   {
+    "id": "exec.never_without_approval",
+    "text": {
+     "en": "Processes AI must never execute without human approval",
+     "he": "תהליכים ש-AI אסור לו לבצע בלי אישור אנושי",
+     "ru": "Процессы, которые ИИ никогда не должен выполнять без одобрения человека"
+    },
+    "type": "list",
+    "required": true,
+    "maps_to": {
+     "category": "approval_requirements",
+     "key": "never_without_approval"
+    }
+   },
+   {
+    "id": "exec.sensitive_data_categories",
+    "text": {
+     "en": "Sensitive/restricted data categories you handle",
+     "he": "סוגי מידע רגיש/מוגבל שהעסק מטפל בהם",
+     "ru": "Категории конфиденциальных/ограниченных данных, с которыми вы работаете"
+    },
+    "type": "multi_choice",
+    "required": true,
+    "options": [
+     "none",
+     "customer_pii",
+     "payment_cards",
+     "financial_records",
+     "health",
+     "children",
+     "employee_hr",
+     "legal",
+     "trade_secrets"
+    ],
+    "maps_to": {
+     "category": "policies",
+     "key": "sensitive_data_categories"
+    },
+    "option_labels": {
+     "none": {
+      "en": "None",
+      "he": "אין",
+      "ru": "Нет"
+     },
+     "customer_pii": {
+      "en": "Customer personal data",
+      "he": "מידע אישי של לקוחות",
+      "ru": "Персональные данные клиентов"
+     },
+     "payment_cards": {
+      "en": "Payment cards",
+      "he": "כרטיסי אשראי",
+      "ru": "Платёжные карты"
+     },
+     "financial_records": {
+      "en": "Financial records",
+      "he": "רשומות פיננסיות",
+      "ru": "Финансовые записи"
+     },
+     "health": {
+      "en": "Health data",
+      "he": "מידע רפואי",
+      "ru": "Медицинские данные"
+     },
+     "children": {
+      "en": "Children's data",
+      "he": "מידע על קטינים",
+      "ru": "Данные детей"
+     },
+     "employee_hr": {
+      "en": "Employee / HR data",
+      "he": "מידע על עובדים / משאבי אנוש",
+      "ru": "Данные сотрудников / HR"
+     },
+     "legal": {
+      "en": "Legal documents",
+      "he": "מסמכים משפטיים",
+      "ru": "Юридические документы"
+     },
+     "trade_secrets": {
+      "en": "Trade secrets",
+      "he": "סודות מסחריים",
+      "ru": "Коммерческая тайна"
+     }
+    }
+   },
+   {
+    "id": "exec.tone_of_voice",
+    "text": {
+     "en": "Brand tone of voice (e.g. formal, warm, concise)",
+     "he": "טון הדיבור של המותג (למשל רשמי, חם, תמציתי)",
+     "ru": "Тон бренда (например, официальный, тёплый, лаконичный)"
+    },
+    "type": "text",
+    "required": false,
+    "sensitivity": "public",
+    "maps_to": {
+     "category": "tone_brand",
+     "key": "tone_of_voice"
+    }
+   },
+   {
+    "id": "exec.knowledge_sources",
+    "text": {
+     "en": "Where business knowledge lives (docs, drives, wikis)",
+     "he": "איפה נמצא הידע העסקי (מסמכים, כוננים, ויקי)",
+     "ru": "Где хранятся знания компании (документы, диски, вики)"
+    },
+    "type": "list",
+    "required": false,
+    "maps_to": {
+     "category": "knowledge_sources",
+     "key": "locations"
+    }
+   },
+   {
+    "id": "exec.focus_areas",
+    "text": {
+     "en": "Which areas should we look at?",
+     "he": "באילו תחומים כדאי שנתמקד?",
+     "ru": "Какие направления нам стоит рассмотреть?"
+    },
+    "type": "multi_choice",
+    "required": true,
+    "options": [
+     "sales_crm",
+     "customer_service",
+     "office_admin",
+     "email_calendar",
+     "marketing_social",
+     "operations",
+     "finance",
+     "hr",
+     "management_bi",
+     "knowledge_docs",
+     "integrations_it",
+     "security_compliance"
+    ],
+    "maps_to": {
+     "category": "goals",
+     "key": "focus_areas"
+    },
+    "option_labels": {
+     "sales_crm": {
+      "en": "Sales & CRM",
+      "he": "מכירות ו-CRM",
+      "ru": "Продажи и CRM"
+     },
+     "customer_service": {
+      "en": "Customer Service",
+      "he": "שירות לקוחות",
+      "ru": "Обслуживание клиентов"
+     },
+     "office_admin": {
+      "en": "Office / Admin",
+      "he": "משרד / מנהלה",
+      "ru": "Офис / администрирование"
+     },
+     "email_calendar": {
+      "en": "Email & Calendar",
+      "he": "מייל ויומן",
+      "ru": "Почта и календарь"
+     },
+     "marketing_social": {
+      "en": "Marketing / Social",
+      "he": "שיווק / רשתות חברתיות",
+      "ru": "Маркетинг / соцсети"
+     },
+     "operations": {
+      "en": "Operations",
+      "he": "תפעול",
+      "ru": "Операционная деятельность"
+     },
+     "finance": {
+      "en": "Finance (workflow only)",
+      "he": "כספים (תהליכי עבודה בלבד)",
+      "ru": "Финансы (только рабочие процессы)"
+     },
+     "hr": {
+      "en": "HR",
+      "he": "משאבי אנוש",
+      "ru": "Кадры (HR)"
+     },
+     "management_bi": {
+      "en": "Management / BI",
+      "he": "ניהול / BI",
+      "ru": "Управление / BI"
+     },
+     "knowledge_docs": {
+      "en": "Knowledge / Documents",
+      "he": "ידע / מסמכים",
+      "ru": "Знания / документы"
+     },
+     "integrations_it": {
+      "en": "Integrations & IT",
+      "he": "אינטגרציות ו-IT",
+      "ru": "Интеграции и ИТ"
+     },
+     "security_compliance": {
+      "en": "Security / Permissions / Compliance",
+      "he": "אבטחה / הרשאות / רגולציה",
+      "ru": "Безопасность / права доступа / соответствие"
+     }
+    }
+   }
+  ]
+ },
+ "module_template": [
+  {
+   "field": "data_sensitivity",
+   "text": {
+    "en": "How sensitive is the data in this area?",
+    "he": "עד כמה רגיש המידע בתחום הזה?",
+    "ru": "Насколько конфиденциальны данные в этой области?"
+   },
+   "type": "single_choice",
+   "required": true,
+   "options": [
+    "public",
+    "internal",
+    "confidential",
+    "restricted"
+   ],
+   "maps_to": {
+    "category": "policies"
+   },
+   "option_labels": {
+    "public": {
+     "en": "Public",
+     "he": "ציבורי",
+     "ru": "Публичные"
+    },
+    "internal": {
+     "en": "Internal",
+     "he": "פנימי",
+     "ru": "Внутренние"
+    },
+    "confidential": {
+     "en": "Confidential",
+     "he": "חסוי",
+     "ru": "Конфиденциальные"
+    },
+    "restricted": {
+     "en": "Restricted",
+     "he": "מוגבל ביותר",
+     "ru": "Строго ограниченные"
+    }
+   }
+  },
+  {
+   "field": "current_workflow",
+   "text": {
+    "en": "Describe the current workflow, step by step",
+    "he": "תארו את תהליך העבודה הנוכחי, שלב אחר שלב",
+    "ru": "Опишите текущий рабочий процесс шаг за шагом"
+   },
+   "type": "long_text",
+   "required": true,
+   "maps_to": {
+    "category": "processes"
+   }
+  },
+  {
+   "field": "people_involved",
+   "text": {
+    "en": "Roles involved (titles, not names)",
+    "he": "תפקידים מעורבים (תפקידים, לא שמות)",
+    "ru": "Задействованные роли (должности, не имена)"
+   },
+   "type": "list",
+   "required": false,
+   "maps_to": {
+    "category": "roles"
+   }
+  },
+  {
+   "field": "systems_used",
+   "text": {
+    "en": "Systems/tools used in this area",
+    "he": "מערכות/כלים שבשימוש בתחום הזה",
+    "ru": "Системы/инструменты, используемые в этой области"
+   },
+   "type": "list",
+   "required": false,
+   "maps_to": {
+    "category": "systems"
+   }
+  },
+  {
+   "field": "monthly_volume",
+   "text": {
+    "en": "Approx. monthly volume (items handled)",
+    "he": "נפח חודשי משוער (פריטים מטופלים)",
+    "ru": "Примерный месячный объём (обработанных единиц)"
+   },
+   "type": "number",
+   "required": false,
+   "maps_to": {
+    "category": "metrics"
+   }
+  },
+  {
+   "field": "hours_per_week",
+   "text": {
+    "en": "Approx. staff hours per week spent on this",
+    "he": "מספר משוער של שעות עבודה שבועיות על זה",
+    "ru": "Примерно часов работы сотрудников в неделю на это"
+   },
+   "type": "number",
+   "required": false,
+   "maps_to": {
+    "category": "metrics"
+   }
+  },
+  {
+   "field": "bottlenecks",
+   "text": {
+    "en": "Main bottlenecks or pains",
+    "he": "צווארי הבקבוק או הכאבים העיקריים",
+    "ru": "Основные узкие места или проблемы"
+   },
+   "type": "list",
+   "required": true,
+   "maps_to": {
+    "category": "pain_points"
+   }
+  },
+  {
+   "field": "error_rate_pct",
+   "text": {
+    "en": "Error/rework rate in % (if known)",
+    "he": "שיעור טעויות/עבודה חוזרת ב-% (אם ידוע)",
+    "ru": "Доля ошибок/переделок в % (если известно)"
+   },
+   "type": "number",
+   "required": false,
+   "maps_to": {
+    "category": "metrics"
+   }
+  },
+  {
+   "field": "business_impact",
+   "text": {
+    "en": "Business impact of these problems",
+    "he": "ההשפעה העסקית של הבעיות האלה",
+    "ru": "Влияние этих проблем на бизнес"
+   },
+   "type": "single_choice",
+   "required": true,
+   "options": [
+    "low",
+    "medium",
+    "high",
+    "critical"
+   ],
+   "maps_to": {
+    "category": "pain_points"
+   },
+   "option_labels": {
+    "low": {
+     "en": "Low",
+     "he": "נמוכה",
+     "ru": "Низкое"
+    },
+    "medium": {
+     "en": "Medium",
+     "he": "בינונית",
+     "ru": "Среднее"
+    },
+    "high": {
+     "en": "High",
+     "he": "גבוהה",
+     "ru": "Высокое"
+    },
+    "critical": {
+     "en": "Critical",
+     "he": "קריטית",
+     "ru": "Критическое"
+    }
+   }
+  },
+  {
+   "field": "desired_outcome",
+   "text": {
+    "en": "Desired outcome",
+    "he": "התוצאה הרצויה",
+    "ru": "Желаемый результат"
+   },
+   "type": "long_text",
+   "required": true,
+   "maps_to": {
+    "category": "goals"
+   }
+  },
+  {
+   "field": "required_approvals",
+   "text": {
+    "en": "Steps that must stay under human approval",
+    "he": "שלבים שחייבים להישאר באישור אנושי",
+    "ru": "Шаги, которые должны оставаться под контролем человека"
+   },
+   "type": "list",
+   "required": false,
+   "maps_to": {
+    "category": "approval_requirements"
+   }
+  },
+  {
+   "field": "kpi",
+   "text": {
+    "en": "How would you measure success here (KPI)?",
+    "he": "איך תמדדו הצלחה כאן (KPI)?",
+    "ru": "Как вы будете измерять успех здесь (KPI)?"
+   },
+   "type": "text",
+   "required": false,
+   "maps_to": {
+    "category": "kpis"
+   }
+  }
+ ],
+ "modules": [
+  {
+   "id": "sales_crm",
+   "title": {
+    "en": "Sales & CRM",
+    "he": "מכירות ו-CRM",
+    "ru": "Продажи и CRM"
+   },
+   "activation": {
+    "any": [
+     {
+      "question": "exec.focus_areas",
+      "op": "includes",
+      "value": "sales_crm"
+     },
+     {
+      "question": "exec.monthly_leads",
+      "op": "gt",
+      "value": 0
+     }
+    ]
+   },
+   "capability": {
+    "agent_role": "leads",
+    "availability": "available",
+    "capability": "Lead capture, qualification, follow-up and CRM hygiene",
+    "base_complexity": "medium",
+    "risk": "medium",
+    "default_kpi": "Median lead response time; lead-to-meeting conversion rate"
+   },
+   "pain_keywords": [
+    "lead",
+    "sales",
+    "follow up",
+    "follow-up",
+    "crm",
+    "quote",
+    "deal",
+    "prospect",
+    "conversion"
+   ],
+   "volume_question": "exec.monthly_leads",
+   "extra_questions": [
+    {
+     "field": "lead_sources",
+     "text": {
+      "en": "Where do leads come from?",
+      "he": "מאיפה מגיעים הלידים?",
+      "ru": "Откуда приходят лиды?"
+     },
+     "type": "list",
+     "required": true,
+     "maps_to": {
+      "category": "processes"
+     }
+    },
+    {
+     "field": "response_time_hours",
+     "text": {
+      "en": "Typical time to first response to a new lead (hours)",
+      "he": "זמן תגובה ראשונה טיפוסי לליד חדש (בשעות)",
+      "ru": "Типичное время первого ответа новому лиду (часы)"
+     },
+     "type": "number",
+     "required": false,
+     "maps_to": {
+      "category": "metrics"
+     }
+    },
+    {
+     "field": "crm_system",
+     "text": {
+      "en": "CRM system in use (if any)",
+      "he": "מערכת CRM בשימוש (אם יש)",
+      "ru": "Используемая CRM-система (если есть)"
+     },
+     "type": "text",
+     "required": false,
+     "maps_to": {
+      "category": "systems"
+     }
+    }
+   ]
+  },
+  {
+   "id": "customer_service",
+   "title": {
+    "en": "Customer Service",
+    "he": "שירות לקוחות",
+    "ru": "Обслуживание клиентов"
+   },
+   "activation": {
+    "any": [
+     {
+      "question": "exec.focus_areas",
+      "op": "includes",
+      "value": "customer_service"
+     },
+     {
+      "question": "exec.monthly_support_requests",
+      "op": "gt",
+      "value": 0
+     }
+    ]
+   },
+   "capability": {
+    "agent_role": "support",
+    "availability": "planned",
+    "capability": "First-line support triage and answers from the approved knowledge base",
+    "base_complexity": "medium",
+    "risk": "medium",
+    "default_kpi": "First response time; % requests resolved without escalation"
+   },
+   "pain_keywords": [
+    "support",
+    "customer service",
+    "complaint",
+    "ticket",
+    "response time",
+    "whatsapp",
+    "service"
+   ],
+   "volume_question": "exec.monthly_support_requests",
+   "extra_questions": [
+    {
+     "field": "channels",
+     "text": {
+      "en": "Support channels",
+      "he": "ערוצי שירות",
+      "ru": "Каналы поддержки"
+     },
+     "type": "multi_choice",
+     "required": true,
+     "options": [
+      "whatsapp",
+      "phone",
+      "email",
+      "web_chat",
+      "social",
+      "in_person"
+     ],
+     "maps_to": {
+      "category": "processes"
+     },
+     "option_labels": {
+      "whatsapp": {
+       "en": "WhatsApp",
+       "he": "וואטסאפ",
+       "ru": "WhatsApp"
+      },
+      "phone": {
+       "en": "Phone",
+       "he": "טלפון",
+       "ru": "Телефон"
+      },
+      "email": {
+       "en": "Email",
+       "he": "מייל",
+       "ru": "Электронная почта"
+      },
+      "web_chat": {
+       "en": "Website chat",
+       "he": "צ'אט באתר",
+       "ru": "Чат на сайте"
+      },
+      "social": {
+       "en": "Social media",
+       "he": "רשתות חברתיות",
+       "ru": "Соцсети"
+      },
+      "in_person": {
+       "en": "In person",
+       "he": "פנים אל פנים",
+       "ru": "Лично"
+      }
+     }
+    },
+    {
+     "field": "first_response_hours",
+     "text": {
+      "en": "Typical first response time (hours)",
+      "he": "זמן תגובה ראשונה טיפוסי (בשעות)",
+      "ru": "Типичное время первого ответа (часы)"
+     },
+     "type": "number",
+     "required": false,
+     "maps_to": {
+      "category": "metrics"
+     }
+    },
+    {
+     "field": "top_request_types",
+     "text": {
+      "en": "Most common request types",
+      "he": "סוגי הפניות הנפוצים ביותר",
+      "ru": "Самые частые типы обращений"
+     },
+     "type": "list",
+     "required": true,
+     "maps_to": {
+      "category": "processes"
+     }
+    }
+   ]
+  },
+  {
+   "id": "office_admin",
+   "title": {
+    "en": "Office / Admin",
+    "he": "משרד / מנהלה",
+    "ru": "Офис / администрирование"
+   },
+   "activation": {
+    "any": [
+     {
+      "question": "exec.focus_areas",
+      "op": "includes",
+      "value": "office_admin"
+     }
+    ]
+   },
+   "capability": {
+    "agent_role": "office_admin",
+    "availability": "planned",
+    "capability": "Back-office admin: data entry, document preparation, reminders and routing",
+    "base_complexity": "low",
+    "risk": "low",
+    "default_kpi": "Admin hours per week; document turnaround time"
+   },
+   "pain_keywords": [
+    "admin",
+    "paperwork",
+    "document",
+    "data entry",
+    "filing",
+    "manual entry",
+    "forms"
+   ],
+   "extra_questions": [
+    {
+     "field": "admin_tasks",
+     "text": {
+      "en": "Recurring admin tasks",
+      "he": "משימות מנהלה חוזרות",
+      "ru": "Повторяющиеся административные задачи"
+     },
+     "type": "list",
+     "required": true,
+     "maps_to": {
+      "category": "processes"
+     }
+    },
+    {
+     "field": "document_types",
+     "text": {
+      "en": "Document types handled",
+      "he": "סוגי מסמכים שמטופלים",
+      "ru": "Типы обрабатываемых документов"
+     },
+     "type": "list",
+     "required": false,
+     "maps_to": {
+      "category": "processes"
+     }
+    }
+   ]
+  },
+  {
+   "id": "email_calendar",
+   "title": {
+    "en": "Email & Calendar",
+    "he": "מייל ויומן",
+    "ru": "Почта и календарь"
+   },
+   "activation": {
+    "any": [
+     {
+      "question": "exec.focus_areas",
+      "op": "includes",
+      "value": "email_calendar"
+     },
+     {
+      "question": "exec.monthly_appointments",
+      "op": "gt",
+      "value": 0
+     }
+    ]
+   },
+   "capability": {
+    "agent_role": "calendar",
+    "availability": "available",
+    "capability": "Scheduling, reminders and inbox triage",
+    "base_complexity": "low",
+    "risk": "medium",
+    "default_kpi": "Time to book a meeting; no-show rate"
+   },
+   "pain_keywords": [
+    "email",
+    "inbox",
+    "calendar",
+    "schedule",
+    "meeting",
+    "appointment",
+    "booking"
+   ],
+   "volume_question": "exec.monthly_appointments",
+   "extra_questions": []
+  },
+  {
+   "id": "marketing_social",
+   "title": {
+    "en": "Marketing / Social",
+    "he": "שיווק / רשתות חברתיות",
+    "ru": "Маркетинг / соцсети"
+   },
+   "activation": {
+    "any": [
+     {
+      "question": "exec.focus_areas",
+      "op": "includes",
+      "value": "marketing_social"
+     }
+    ]
+   },
+   "capability": {
+    "agent_role": "instagram",
+    "availability": "available",
+    "capability": "Content planning, captions and scheduled social publishing",
+    "base_complexity": "medium",
+    "risk": "medium",
+    "default_kpi": "Posts published per week; engagement rate"
+   },
+   "pain_keywords": [
+    "marketing",
+    "social",
+    "instagram",
+    "content",
+    "post",
+    "campaign",
+    "brand"
+   ],
+   "extra_questions": []
+  },
+  {
+   "id": "operations",
+   "title": {
+    "en": "Operations",
+    "he": "תפעול",
+    "ru": "Операционная деятельность"
+   },
+   "activation": {
+    "any": [
+     {
+      "question": "exec.focus_areas",
+      "op": "includes",
+      "value": "operations"
+     }
+    ]
+   },
+   "capability": {
+    "agent_role": "operations",
+    "availability": "planned",
+    "capability": "Workflow orchestration, status tracking and exception alerts",
+    "base_complexity": "high",
+    "risk": "medium",
+    "default_kpi": "Cycle time; exceptions per week"
+   },
+   "pain_keywords": [
+    "operations",
+    "inventory",
+    "delivery",
+    "logistics",
+    "order",
+    "supplier",
+    "production"
+   ],
+   "volume_question": "exec.monthly_transactions",
+   "extra_questions": []
+  },
+  {
+   "id": "finance",
+   "title": {
+    "en": "Finance (workflow only)",
+    "he": "כספים (תהליכי עבודה בלבד)",
+    "ru": "Финансы (только рабочие процессы)"
+   },
+   "activation": {
+    "any": [
+     {
+      "question": "exec.focus_areas",
+      "op": "includes",
+      "value": "finance"
+     },
+     {
+      "question": "exec.monthly_transactions",
+      "op": "gt",
+      "value": 0
+     }
+    ]
+   },
+   "capability": {
+    "agent_role": "finance_ops",
+    "availability": "planned",
+    "capability": "Finance workflow support (drafting, reconciliation prep, reminders) — no autonomous transactions",
+    "base_complexity": "high",
+    "risk": "high",
+    "default_kpi": "Days sales outstanding; month-end close time"
+   },
+   "pain_keywords": [
+    "invoice",
+    "payment",
+    "billing",
+    "accounting",
+    "collection",
+    "expense",
+    "finance",
+    "cash"
+   ],
+   "volume_question": "exec.monthly_transactions",
+   "extra_questions": []
+  },
+  {
+   "id": "hr",
+   "title": {
+    "en": "HR",
+    "he": "משאבי אנוש",
+    "ru": "Кадры (HR)"
+   },
+   "activation": {
+    "any": [
+     {
+      "question": "exec.focus_areas",
+      "op": "includes",
+      "value": "hr"
+     }
+    ]
+   },
+   "capability": {
+    "agent_role": "hr",
+    "availability": "planned",
+    "capability": "Recruiting coordination, onboarding checklists and policy Q&A",
+    "base_complexity": "medium",
+    "risk": "high",
+    "default_kpi": "Time to hire; onboarding completion time"
+   },
+   "pain_keywords": [
+    "hiring",
+    "recruit",
+    "employee",
+    "onboarding",
+    "hr",
+    "staff",
+    "payroll"
+   ],
+   "extra_questions": []
+  },
+  {
+   "id": "management_bi",
+   "title": {
+    "en": "Management / BI",
+    "he": "ניהול / BI",
+    "ru": "Управление / BI"
+   },
+   "activation": {
+    "any": [
+     {
+      "question": "exec.focus_areas",
+      "op": "includes",
+      "value": "management_bi"
+     }
+    ]
+   },
+   "capability": {
+    "agent_role": "bi_reporting",
+    "availability": "planned",
+    "capability": "Automated KPI reporting and management summaries",
+    "base_complexity": "medium",
+    "risk": "low",
+    "default_kpi": "Time to produce weekly report; report adoption"
+   },
+   "pain_keywords": [
+    "report",
+    "dashboard",
+    "kpi",
+    "visibility",
+    "data",
+    "analytics",
+    "forecast"
+   ],
+   "extra_questions": []
+  },
+  {
+   "id": "knowledge_docs",
+   "title": {
+    "en": "Knowledge / Documents",
+    "he": "ידע / מסמכים",
+    "ru": "Знания / документы"
+   },
+   "activation": {
+    "any": [
+     {
+      "question": "exec.focus_areas",
+      "op": "includes",
+      "value": "knowledge_docs"
+     }
+    ]
+   },
+   "capability": {
+    "agent_role": "knowledge",
+    "availability": "planned",
+    "capability": "Searchable knowledge base and document Q&A over approved sources",
+    "base_complexity": "medium",
+    "risk": "medium",
+    "default_kpi": "Time to find an answer; repeated internal questions"
+   },
+   "pain_keywords": [
+    "knowledge",
+    "procedure",
+    "sop",
+    "wiki",
+    "find information",
+    "training"
+   ],
+   "extra_questions": []
+  },
+  {
+   "id": "integrations_it",
+   "title": {
+    "en": "Integrations & IT",
+    "he": "אינטגרציות ו-IT",
+    "ru": "Интеграции и ИТ"
+   },
+   "activation": {
+    "any": [
+     {
+      "question": "exec.focus_areas",
+      "op": "includes",
+      "value": "integrations_it"
+     },
+     {
+      "question": "exec.software_stack",
+      "op": "count_gte",
+      "value": 5
+     }
+    ]
+   },
+   "capability": {
+    "agent_role": "integrations",
+    "availability": "planned",
+    "capability": "System integration and data synchronisation between existing tools",
+    "base_complexity": "high",
+    "risk": "medium",
+    "default_kpi": "Manual copy-paste steps removed; sync error rate"
+   },
+   "pain_keywords": [
+    "integration",
+    "sync",
+    "copy paste",
+    "duplicate",
+    "systems don't talk",
+    "it"
+   ],
+   "extra_questions": []
+  },
+  {
+   "id": "security_compliance",
+   "title": {
+    "en": "Security / Permissions / Compliance",
+    "he": "אבטחה / הרשאות / רגולציה",
+    "ru": "Безопасность / права доступа / соответствие"
+   },
+   "activation": {
+    "any": [
+     {
+      "question": "exec.focus_areas",
+      "op": "includes",
+      "value": "security_compliance"
+     },
+     {
+      "question": "exec.sensitive_data_categories",
+      "op": "includes_any",
+      "value": [
+       "customer_pii",
+       "payment_cards",
+       "financial_records",
+       "health",
+       "children",
+       "employee_hr",
+       "legal"
+      ]
+     }
+    ]
+   },
+   "capability": {
+    "agent_role": "compliance",
+    "availability": "planned",
+    "capability": "Access reviews, policy checks and audit-trail preparation",
+    "base_complexity": "high",
+    "risk": "high",
+    "default_kpi": "Open access-review findings; audit preparation time"
+   },
+   "pain_keywords": [
+    "security",
+    "compliance",
+    "privacy",
+    "gdpr",
+    "audit",
+    "permission",
+    "access"
+   ],
+   "extra_questions": []
+  }
+ ],
+ "locales": [
+  "en",
+  "he",
+  "ru"
+ ]
+}

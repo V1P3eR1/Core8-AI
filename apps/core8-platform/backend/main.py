@@ -39,6 +39,10 @@ from instagram_oauth import router as instagram_oauth_router
 from instagram_routes import router as instagram_api_router
 from media_routes import router as media_router
 from scheduler import start_scheduler
+from business_brain.schema import init_brain_schema
+from business_brain.routes import router as business_brain_router
+from business_brain.access import resolve_access
+from business_brain.context import get_agent_context, render_context_block
 from token_refresher import start_token_refresher
 
 # In-memory kill switch — starts from env var but can be toggled at runtime
@@ -81,6 +85,7 @@ async def lifespan(app: FastAPI):
     register_instagram_publish_tools()
     register_media_tools()
     await init_db()
+    await init_brain_schema()
     async with get_db() as db:
         db.row_factory = aiosqlite.Row
         async with db.execute("SELECT * FROM agents") as cursor:
@@ -115,6 +120,7 @@ app.add_middleware(
 app.include_router(instagram_oauth_router)
 app.include_router(instagram_api_router)
 app.include_router(media_router)
+app.include_router(business_brain_router)
 app.mount("/media", StaticFiles(directory=MEDIA_DIR), name="media")
 
 
@@ -317,6 +323,18 @@ async def websocket_endpoint(websocket: WebSocket, agent_id: str):
             await websocket.close(code=4001)
             return
 
+    # Optional Business Brain context: requires a JWT user who has access to the tenant.
+    tenant_id = websocket.query_params.get("tenant_id")
+    tenant_access = None
+    if tenant_id:
+        if ws_user is None or ws_user.get("type") != "access":
+            await websocket.close(code=4001)
+            return
+        tenant_access = await resolve_access(tenant_id, ws_user)
+        if tenant_access is None:
+            await websocket.close(code=4004)
+            return
+
     await websocket.accept()
 
     if _kill_switch_active:
@@ -338,7 +356,8 @@ async def websocket_endpoint(websocket: WebSocket, agent_id: str):
         )
         await db.commit()
 
-    await websocket.send_json({"type": "connected", "conversation_id": conversation_id, "agent": agent_id})
+    await websocket.send_json({"type": "connected", "conversation_id": conversation_id, "agent": agent_id,
+                               "tenant_id": tenant_access.tenant_id if tenant_access else None})
     logger.info("WebSocket connected: agent=%s conv=%s", agent_id, conversation_id)
 
     history: list[dict] = []
@@ -419,7 +438,12 @@ async def websocket_endpoint(websocket: WebSocket, agent_id: str):
                 await websocket.send_json(event)
 
             gate = approval_gate if cfg.approval_mode != "off" else None
-            await agent.run(history, on_event=on_event, approval_gate=gate)
+            system_context = None
+            if tenant_access is not None:
+                # Re-read each turn so Brain updates and scope changes apply immediately.
+                ctx = await get_agent_context(tenant_access.repo, agent_id)
+                system_context = render_context_block(ctx)
+            await agent.run(history, on_event=on_event, approval_gate=gate, system_context=system_context)
 
             if full_response:
                 history.append({"role": "assistant", "content": full_response})

@@ -30,7 +30,7 @@ _Audit date: 2026-10-01 · Severity: 🔴 high · 🟠 medium · 🟡 low_
 | C1 | 🟠 | **shadcn UI components missing**: `frontend/components/ui/` was empty on Drive, but code imports `button`, `dialog`, `label`, `textarea`, `scroll-area`. Frontend will not build from this repo as-is. | Re-generate with `npx shadcn add button dialog label textarea scroll-area` and commit. |
 | C2 | 🟠 | `package-lock.json` not imported (transfer limit). | Run `npm install` and commit the lockfile. |
 | C3 | 🟠 | Public assets not imported (`public/*.svg`, `favicon.ico`, `goddess*.png`). | Re-add from Drive in a follow-up PR (binary, no secrets). |
-| C4 | 🟠 | **No automated tests** besides `_carousel_test.py` (manual script). No CI. | Add pytest for security/*, registry, scheduler; add lint + type-check + test workflow. |
+| C4 | 🟡 | Test coverage started: `backend/tests` (pytest, 37 tests, Business Brain + WS context) runs in the `backend-tests` CI workflow. Legacy modules (leads, calendar, design, Instagram, security/*) still lack tests. | Add tests for security/*, registry and scheduler. |
 | C5 | 🟠 | SQLite + in-process scheduler = single instance only. | Fine for MVP. For SaaS move to Postgres (Supabase project already exists) and a durable job queue. |
 | C6 | 🟡 | README says Next.js 15; `package.json` pins `next 16.2.6`. | Update README. |
 | C7 | 🟡 | Model IDs hard-coded in several files (`claude-sonnet-4-6`, `claude-haiku-4-5-20251001`, My Goddess default `claude-sonnet-4-5`). | Centralise in config; review against current model lineup. |
@@ -38,6 +38,8 @@ _Audit date: 2026-10-01 · Severity: 🔴 high · 🟠 medium · 🟡 low_
 | C9 | 🟡 | My Goddess is a single 622-line `server.py` + 134 KB `index.html` with an embedded base64 image. | Split modules; serve image as a static file. |
 | C10 | 🟡 | Persona library is copied by folder, not versioned. | Add as git submodule pinned to a commit, or a setup script that fetches it. |
 | C11 | 🟡 | `agents/__init__.py`, `security/__init__.py`, `tools/__init__.py` are empty — fine, noted for completeness. | — |
+| C12 | 🟠 | Legacy tables (`leads`, `events`, `conversations`, `messages`, `design_docs`, IG tables) are **not tenant-scoped**; only Business Brain tables are. | Add `tenant_id` to legacy tables and scope their tools before onboarding a second client on one instance. |
+| C13 | ✅ | `requirements.txt` was uninstallable (httpx 0.27.2 vs google-genai ≥0.28.1). | Fixed in CORE8-001 branch: httpx 0.28.1. |
 
 ## 4. Unknowns to resolve
 
