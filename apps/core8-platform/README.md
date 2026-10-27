@@ -19,6 +19,10 @@ core8-ai/
 └── docs/             # Architecture & runbooks
 ```
 
+## Core8AI Social Manager
+Instagram research → content → approval → publishing module. Dashboard at `/social`, API under `/api/social/*`,
+worker `python -m social.worker`. Docs: [`docs/social-manager/`](docs/social-manager/README.md).
+
 ## Quick Start
 
 ### Backend
