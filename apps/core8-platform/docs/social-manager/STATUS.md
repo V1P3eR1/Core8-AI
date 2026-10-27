@@ -20,7 +20,7 @@ _Build session: 2026-10-27 (Claude Code, cloud sandbox without outbound internet
 | Metrics store (api/manual/demo), weekly report with missing-metrics list and observation≠recommendation | `metrics.py`, `reports.py` | demo flow test |
 | Leads CRUD + retention purge; inbound draft-only replies | `leads.py`, `routes.py` | 2 tests |
 | Secrets never in API/audit; redaction of Meta/Anthropic/JWT shapes | `security/log_redact.py` | 3 tests (bundle scan skips if frontend not built) |
-| Hebrew RTL dashboard (12 sections) | `frontend/app/social/` | `npm run lint`, `npm run build` (see final report) |
+| Hebrew RTL dashboard (12 sections) | `frontend/app/social/` | `npx tsc --noEmit` clean; `eslint` clean on all new files; `next build` → 15/15 pages (built in the sandbox with Google Fonts mocked — the sandbox has no egress; on your machine plain `npm run build` works). Playwright smoke: login → overview, research, content item, instagram, jobs render RTL. |
 
 Test run: `cd backend && python -m pytest -q` → **81 passed, 1 skipped** (the skip is the client-bundle scan, which runs once the frontend is built).
 
@@ -46,6 +46,8 @@ Everything in this table is **unverified** against real services. The code paths
 - Dashboard authentication beyond the platform's JWT (no SSO/2FA).
 
 ## Known risks & next actions
+
+0. **Pre-existing frontend lint errors** (not from this work): `npm run lint` reports 8 errors/2 warnings in `components/ChatWindow.tsx`, `ConversationList.tsx`, `HistoryView.tsx`, `InstagramCalendar.tsx`, `SecurityDashboard.tsx`, `ParticleBackground.tsx` under the new `react-hooks` rules of eslint-config-next 16. They do not break the build. Also added the missing `components/ui/*` (button, dialog, label, textarea, scroll-area) and `types/speech-recognition.d.ts` that the existing chat UI imported but never committed (TECH_DEBT C1) — without them `next build` failed before this work.
 
 1. **Graph API version sunset**: `tools/instagram_api.py` pins v21.0 (OAuth) and `social/providers/instagram.py` v22.0. v21 is removed 2027-01-21 — bump before then.
 2. **Unified Login**: Meta recommends it for new integrations; migrate the OAuth module if the Facebook-Login path causes friction with your Page setup.
