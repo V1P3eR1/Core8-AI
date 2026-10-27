@@ -56,6 +56,8 @@ class SocialConfig:
     ]
 
     notify_webhook_url: str = os.getenv("SOCIAL_NOTIFY_WEBHOOK_URL", "")
+    # Shared secret the website lead form (lead.php) sends in X-Lead-Token. Empty = inbound webhook disabled.
+    lead_webhook_token: str = os.getenv("SOCIAL_LEAD_WEBHOOK_TOKEN", "")
 
     @property
     def llm_live(self) -> bool:

@@ -11,7 +11,7 @@ import os
 import json
 from typing import Literal
 
-from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, Response, UploadFile
+from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, Request, Response, UploadFile
 from fastapi.responses import FileResponse
 from pydantic import BaseModel, Field
 
@@ -842,6 +842,36 @@ async def leads_delete(lid: str, payload: dict = Depends(require_jwt)):
     if not await leads.delete_lead(lid, _actor(payload)):
         raise HTTPException(404)
     return {"deleted": True}
+
+
+class LeadWebhookIn(BaseModel):
+    name: str
+    phone: str | None = None
+    email: str | None = None
+    business: str | None = None
+    notes: str | None = None
+    source: str | None = "website_form"
+
+
+@public_router.post("/leads/webhook", status_code=201)
+async def leads_webhook(body: LeadWebhookIn, request: Request):
+    """Inbound lead from the core8-ai.com form (lead.php). Shared secret in X-Lead-Token; disabled when unset."""
+    import hmac as _hmac
+    token = request.headers.get("X-Lead-Token", "")
+    if not scfg.lead_webhook_token or not _hmac.compare_digest(token, scfg.lead_webhook_token):
+        raise HTTPException(401)
+    from security.injection_gate import gate
+    g = gate(" ".join(filter(None, [body.name, body.business, body.notes])), "web_form")
+    handle = " / ".join(filter(None, [body.phone, body.email]))
+    row = await leads.create_lead({
+        "name": body.name[:200], "handle": handle[:200] or None, "lead_date": utc_str()[:10],
+        "source": (body.source or "website_form")[:100], "business_type": (body.business or "")[:200] or None,
+        "need": (body.notes or "")[:2000] or None, "status": "new", "next_action": "ליצור קשר",
+        "notes": ("⚠ טקסט חשוד: " + ",".join(g.flag_reasons)) if g.flagged else None,
+        "consent_note": "הגיע מטופס האתר (הסכמה לפרטיות בטופס)",
+    }, "website_form")
+    await notifier.send("lead_received", f"ליד חדש מהאתר: {body.name[:60]}", {"lead_id": row["id"]})
+    return {"id": row["id"], "status": "received"}
 
 
 class PurgeIn(BaseModel):

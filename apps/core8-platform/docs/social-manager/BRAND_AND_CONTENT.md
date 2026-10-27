@@ -8,14 +8,13 @@ Seeded only with what the owner's brief states. Everything else is marked `לא 
 
 | Field | Seeded value | Status |
 |---|---|---|
-| Brand / owner / site | Core8AI · Lev Shoihat · https://core8-ai.com | from brief |
-| Description | AI agents for businesses; WhatsApp agents (service, lead qualification, sales support); AI secretary/office manager; process automation; connecting business tools; SaaS and custom AI solutions; SMB to enterprise | from brief |
-| Positioning | credible personal + business brand around practical AI | from brief |
-| Approved services | the five areas above — **availability/stage unknown** | assumption flagged |
-| Services in development | empty | unknown |
-| Approved claims | only "Core8AI works on AI agents for businesses" and the website | from brief |
-| Prohibited claims | customers, testimonials, results, percentages, prices, discounts, contractual promises, certifications, partnerships, integrations not approved, legal/medical/financial advice, competitor claims | from brief |
-| Contact details | unknown | needs Lev |
+| Brand / owner / site | **Core8-AI** (always in English) · Lev Shoihat · https://core8-ai.com | confirmed 2026-10-27 |
+| Services offered today | WhatsApp bot, CRM, lead system, publishing management, websites & landing pages | confirmed 2026-10-27 — may be presented as available |
+| Services in development | smart agents (Superagents); orchestration of 257 AI agents | confirmed 2026-10-27 — **not** to be presented as available; "behind the scenes" only with approval |
+| Contact allowed in posts | email Office.core8ai@gmail.com, website, lead form https://core8-ai.com/#lead | confirmed; phone withheld until the business number exists |
+| Lead capture | CTA → website lead form (link in bio / story link sticker). Instagram API cannot embed forms in posts. Form → `POST /api/social/leads/webhook` (shared secret) → פניות ולידים | design decision |
+| Approved claims | services above, website, email, founder background | confirmed |
+| Prohibited claims | customers, testimonials, results, percentages, prices, contracts, certifications, partnerships, advice, competitor claims, presenting in-development agents as a product | from brief + 2026-10-27 |
 | Topics to cover / avoid | the nine pillars / politics, competitor bashing, return promises, client secrets | from brief + defaults |
 
 Assumptions recorded in the profile: product stage, customer count, case studies, pricing and integrations are unknown; every scenario is a demonstration; Lev's face/voice are never generated or simulated without explicit consent.
