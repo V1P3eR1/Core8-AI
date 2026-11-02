@@ -8,6 +8,11 @@ os.environ.setdefault("ANTHROPIC_API_KEY", "test-key-not-real")
 os.environ["DB_PATH"] = os.path.join(tempfile.mkdtemp(), "bootstrap.db")
 os.environ["DEV_MODE"] = "true"
 os.environ["BIND_HOST"] = "127.0.0.1"
+# Social Manager: never touch the network or real media dirs in tests.
+os.environ["SOCIAL_RESEARCH_MODE"] = "mock"
+os.environ["SOCIAL_INSTAGRAM_MODE"] = "mock"
+os.environ["SOCIAL_MEDIA_DIR"] = tempfile.mkdtemp()
+os.environ["SOCIAL_SEED_DEMO"] = "false"
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 

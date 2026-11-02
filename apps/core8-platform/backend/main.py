@@ -44,6 +44,9 @@ from business_brain.routes import router as business_brain_router
 from business_brain.access import resolve_access
 from business_brain.context import get_agent_context, render_context_block
 from token_refresher import start_token_refresher
+from social.schema import init_social_schema
+from social.routes import router as social_router, public_router as social_public_router
+from social.config import scfg as social_cfg
 
 # In-memory kill switch — starts from env var but can be toggled at runtime
 _kill_switch_active: bool = cfg.kill_switch
@@ -86,6 +89,13 @@ async def lifespan(app: FastAPI):
     register_media_tools()
     await init_db()
     await init_brain_schema()
+    await init_social_schema()
+    from social.jobs import ensure_schedules, worker_loop
+    from social.settings import get_setting as _sm_get
+    from social.demo_data import seed_demo as _sm_seed
+    await ensure_schedules()
+    if (await _sm_get("publishing")).get("demo_mode", True) and os.getenv("SOCIAL_SEED_DEMO", "true").lower() in ("1", "true", "yes"):
+        await _sm_seed()
     async with get_db() as db:
         db.row_factory = aiosqlite.Row
         async with db.execute("SELECT * FROM agents") as cursor:
@@ -96,10 +106,16 @@ async def lifespan(app: FastAPI):
     _is_killed = lambda: _kill_switch_active
     scheduler_task = start_scheduler(_is_killed)
     refresher_task = start_token_refresher(_is_killed)
+    social_worker_task = None
+    if social_cfg.worker_inprocess:
+        logger.warning("Social worker running IN-PROCESS (dev convenience). Use `python -m social.worker` in production.")
+        social_worker_task = asyncio.create_task(worker_loop(_is_killed, worker_id="api-inprocess"))
     yield
     scheduler_task.cancel()
     refresher_task.cancel()
-    for t in (scheduler_task, refresher_task):
+    if social_worker_task:
+        social_worker_task.cancel()
+    for t in (scheduler_task, refresher_task, *( [social_worker_task] if social_worker_task else [])):
         try:
             await t
         except asyncio.CancelledError:
@@ -121,6 +137,8 @@ app.include_router(instagram_oauth_router)
 app.include_router(instagram_api_router)
 app.include_router(media_router)
 app.include_router(business_brain_router)
+app.include_router(social_router)
+app.include_router(social_public_router)
 app.mount("/media", StaticFiles(directory=MEDIA_DIR), name="media")
 
 

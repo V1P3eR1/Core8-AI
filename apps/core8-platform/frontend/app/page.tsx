@@ -188,6 +188,12 @@ export default function Home() {
             )}
           </div>
           <div className="flex items-center gap-2">
+            <a
+              href="/social"
+              className="font-mono text-xs px-3 py-1.5 rounded-lg border border-[#00d4ff]/15 text-muted-foreground hover:text-[#00d4ff] hover:border-[#00d4ff]/30 transition-all"
+            >
+              ◎ SOCIAL
+            </a>
             <motion.button
               whileHover={{ scale: 1.03 }} whileTap={{ scale: 0.97 }}
               onClick={() => setRightPanel((p) => p === "instagram" ? null : "instagram")}
