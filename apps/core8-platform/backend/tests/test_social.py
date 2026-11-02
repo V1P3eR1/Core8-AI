@@ -566,3 +566,16 @@ def test_lead_webhook_requires_token_and_creates_lead(s, monkeypatch):
     assert r.status_code == 201
     lead = [x for x in s.req("get", "/api/social/leads", 200).json()["items"] if x["id"] == r.json()["id"]][0]
     assert lead["source"] == "website_form" and lead["status"] == "new" and "חשוד" in (lead["notes"] or "")
+
+
+def test_carousel_renders_identically_without_raqm(monkeypatch):
+    """Windows Pillow wheels usually lack libraqm; the python-bidi fallback must give the same picture."""
+    from PIL import ImageChops, ImageStat
+    from social import carousel_render as cr
+    slide = {"kicker": "דוגמה", "title": "חמש משימות שאוכלות לכם שעה ביום", "body": "הלוך-חזור של הודעות → טופס + יומן."}
+    tpl = cr.DEFAULT_TEMPLATES["templates"]["core8_dark"]
+    with_raqm = cr.render_slide(slide, tpl, 0, 3)
+    monkeypatch.setattr(cr, "raqm_available", lambda: False)
+    without = cr.render_slide(slide, tpl, 0, 3)
+    diff = ImageStat.Stat(ImageChops.difference(with_raqm.convert("L"), without.convert("L"))).mean[0]
+    assert diff < 1.5, f"fallback rendering differs from raqm rendering (mean diff {diff:.2f})"

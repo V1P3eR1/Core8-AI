@@ -48,8 +48,21 @@ def raqm_available() -> bool:
     return bool(features.check("raqm"))
 
 
+def _visual(line: str) -> str:
+    """Without libraqm (typical on Windows wheels) Pillow draws glyphs in logical order, which
+    reverses Hebrew. Reorder to visual order with python-bidi so the output is identical."""
+    if raqm_available() or not line:
+        return line
+    try:
+        from bidi.algorithm import get_display
+        return get_display(line)
+    except Exception:  # bidi missing — draw as-is rather than crash
+        return line
+
+
 def _font(size: int, weight: int = 600) -> ImageFont.FreeTypeFont:
-    f = ImageFont.truetype(FONT_PATH, size)
+    engine = ImageFont.Layout.RAQM if raqm_available() else ImageFont.Layout.BASIC
+    f = ImageFont.truetype(FONT_PATH, size, layout_engine=engine)
     try:
         f.set_variation_by_axes([weight])
     except Exception:
@@ -93,7 +106,7 @@ def _draw_rtl_block(draw: ImageDraw.ImageDraw, text: str, font: ImageFont.FreeTy
     line_h = int(font.size * line_gap)
     for line in _wrap(text, font, max_width):
         if line:
-            draw.text((x_right, y), line, font=font, fill=fill, anchor="ra", **kw)
+            draw.text((x_right, y), _visual(line), font=font, fill=fill, anchor="ra", **kw)
         y += line_h
     return y
 
@@ -125,7 +138,7 @@ def render_slide(slide: dict, template: dict, index: int, total: int, is_demo: b
 
     # Footer
     kw = {"direction": "rtl"} if raqm_available() else {}
-    draw.text((W - margin, H - margin - 20), _safe_text(t["footer"]), font=footer_font, fill=t["muted"], anchor="rs", **kw)
+    draw.text((W - margin, H - margin - 20), _visual(_safe_text(t["footer"])), font=footer_font, fill=t["muted"], anchor="rs", **kw)
     if t.get("show_counter"):
         draw.text((margin, H - margin - 20), f"{index + 1}/{total}", font=footer_font, fill=t["muted"], anchor="ls")
     if index + 1 < total:
