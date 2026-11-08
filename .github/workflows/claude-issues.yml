@@ -1,0 +1,41 @@
+name: Claude Code — approved issue execution
+
+on:
+  issue_comment:
+    types: [created]
+  issues:
+    types: [labeled]
+
+jobs:
+  claude:
+    # Manual @claude from an authorized collaborator OR approved claude-ready label.
+    if: >-
+      (github.event_name == 'issue_comment' &&
+       contains(github.event.comment.body, '@claude') &&
+       (github.event.comment.author_association == 'OWNER' ||
+        github.event.comment.author_association == 'MEMBER' ||
+        github.event.comment.author_association == 'COLLABORATOR')) ||
+      (github.event_name == 'issues' &&
+       github.event.label.name == 'claude-ready' &&
+       github.event.issue.state == 'open')
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    concurrency:
+      group: claude-issue-${{ github.event.issue.number }}
+      cancel-in-progress: false
+    permissions:
+      contents: write
+      issues: write
+      pull-requests: write
+      id-token: write
+      actions: read
+    steps:
+      - uses: actions/checkout@v6
+      - name: Run Claude Code on approved GitHub issue
+        uses: anthropics/claude-code-action@v1
+        with:
+          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+          label_trigger: claude-ready
+          claude_args: |
+            --max-turns 10
+            --append-system-prompt "Work only on scoped issue tasks. Follow CLAUDE.md. No production deployment, DNS, secrets rotation, external customer outreach, or merging PRs. Make a branch and report a reviewable diff. Never disclose secrets or personal data."
