@@ -41,6 +41,7 @@ from media_routes import router as media_router
 from scheduler import start_scheduler
 from business_brain.schema import init_brain_schema
 from business_brain.routes import router as business_brain_router
+from lead_capture import init_lead_capture_schema, router as lead_capture_router
 from business_brain.access import TenantAccess, query_tenant, resolve_access
 from tenancy import INTERNAL_TENANT_ID, use_tenant
 from business_brain.context import get_agent_context, render_context_block
@@ -87,6 +88,7 @@ async def lifespan(app: FastAPI):
     register_media_tools()
     await init_db()
     await init_brain_schema()
+    await init_lead_capture_schema()
     async with get_db() as db:
         db.row_factory = aiosqlite.Row
         async with db.execute("SELECT * FROM agents") as cursor:
@@ -112,7 +114,7 @@ app = FastAPI(title="Core8-AI", version="0.1.0", lifespan=lifespan)
 app.add_middleware(SecurityHeadersMiddleware)
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000"],
+    allow_origins=["http://localhost:3000", *cfg.cors_extra_origins],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -122,6 +124,7 @@ app.include_router(instagram_oauth_router)
 app.include_router(instagram_api_router)
 app.include_router(media_router)
 app.include_router(business_brain_router)
+app.include_router(lead_capture_router)
 app.mount("/media", StaticFiles(directory=MEDIA_DIR), name="media")
 
 

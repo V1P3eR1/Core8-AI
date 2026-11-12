@@ -39,5 +39,14 @@ class Config:
     # Gemini API key (Google AI Studio) — post-media image generation
     gemini_api_key: str = os.getenv("GEMINI_API_KEY", "")
 
+    # Public lead capture (issue #10)
+    # Only trust CF-Connecting-IP / X-Forwarded-For when a reverse proxy you control sets them.
+    trust_proxy_headers: bool = os.getenv("TRUST_PROXY_HEADERS", "false").lower() in ("true", "1", "yes")
+    # Extra CORS origins allowed to call the API from a browser, e.g. the marketing site that
+    # hosts a lead form: "https://core8-ai.com,https://www.core8-ai.com"
+    cors_extra_origins: list[str] = [
+        o.strip() for o in os.getenv("CORS_EXTRA_ORIGINS", "").split(",") if o.strip()
+    ]
+
 
 cfg = Config()
