@@ -72,7 +72,9 @@ jobs:
             Write docs/handoff-result.md with changes, untested assumptions and remaining work.
             Tests cannot run in this restricted pilot; never claim they passed.
           claude_args: >-
-            --max-turns 10
+            --max-turns 4
+            --max-budget-usd 0.25
+            --model haiku
             --tools Read,Edit,Write,Glob,Grep
             --allowedTools Read,Edit,Write,Glob,Grep
       - name: Package changes without executing generated code
