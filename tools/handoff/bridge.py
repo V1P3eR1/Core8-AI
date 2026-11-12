@@ -186,6 +186,7 @@ class Bridge:
         comment = event.get('comment', {})
         user = comment.get('user', {})
         if (not approver.isdigit() or str(user.get('id')) != approver or user.get('type') != 'User'
+                or comment.get('performed_via_github_app')
                 or event.get('action') != 'created' or event.get('issue', {}).get('pull_request')):
             raise Stop('unauthorized_approval')
         match = re.fullmatch(r'/core8-implement ([a-f0-9]{64})', comment.get('body', '').strip())
@@ -194,7 +195,7 @@ class Bridge:
         number = int(event['issue']['number'])
         # Confirm still present and unedited; do not rely on a stale webhook payload.
         current = self.gh.call('GET', PREFIX + f'/issues/comments/{int(comment["id"])}')
-        if any(current.get(k) != comment.get(k) for k in ('body', 'updated_at', 'created_at')) or current.get('user', {}).get('id') != user['id']:
+        if current.get('performed_via_github_app') or any(current.get(k) != comment.get(k) for k in ('body', 'updated_at', 'created_at')) or current.get('user', {}).get('id') != user['id']:
             raise Stop('approval_changed')
         issue = self.gh.call('GET', PREFIX + f'/issues/{number}')
         markers = re.findall(r'<!-- core8-task:([a-f0-9-]{36}) -->', issue.get('body', ''))
