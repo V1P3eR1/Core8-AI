@@ -319,8 +319,8 @@ async def websocket_endpoint(websocket: WebSocket, agent_id: str):
         from security.jwt_auth import decode_access_token
         ws_user = decode_access_token(token)
     except Exception:
-        # Fall back to legacy bearer token for local dev convenience
-        if not _verify_token(token):
+        # Legacy shared bearer token: local development only (DEV_MODE), never in production.
+        if not cfg.dev_mode or not _verify_token(token):
             await websocket.close(code=4001)
             return
 
@@ -445,7 +445,8 @@ async def websocket_endpoint(websocket: WebSocket, agent_id: str):
                     full_response += event["text"]
                 await websocket.send_json(event)
 
-            gate = approval_gate if cfg.approval_mode != "off" else None
+            # Always connect the approver: even with APPROVAL_MODE=off, external actions need approval.
+            gate = approval_gate
             system_context = None
             if tenant_access is not None:
                 # Re-read each turn so Brain updates and scope changes apply immediately.

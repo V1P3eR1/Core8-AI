@@ -12,44 +12,21 @@ In 'off' mode: nothing is gated (blocklist still enforced).
 
 from config import cfg
 
-# Tools classified as HIGH risk — writes, external calls, code execution
-_HIGH_RISK = {
-    "write_file",
-    "edit_file",
-    "delete_file",
-    "run_command",
-    "execute_code",
-    "shell",
-    "send_email",
-    "send_message",
-    "http_request",
-    "post_request",
-    "create_record",
-    "update_record",
-    "delete_record",
-    "deploy",
-    "git_push",
-    "git_commit",
-    "queue_post",   # schedules a real publish to a live Instagram account
-}
+from security import tool_policy
 
 
 def is_blocklisted(tool_name: str) -> bool:
     return tool_name in cfg.tool_blocklist
 
 
-def needs_approval(tool_name: str) -> bool:
-    """Return True if this tool call must be approved before execution."""
+def needs_approval(tool_name: str, tainted: bool = False) -> bool:
+    """Return True if this tool call must be approved before execution (see tool_policy)."""
     if is_blocklisted(tool_name):
         return False  # blocklisted = never runs, not gated
-    mode = cfg.approval_mode
-    if mode == "off":
-        return False
-    if mode == "manual":
-        return True
-    # smart: gate only HIGH risk tools
-    return tool_name in _HIGH_RISK
+    return tool_policy.needs_approval(tool_name, cfg.approval_mode, tainted)
 
 
 def risk_level(tool_name: str) -> str:
-    return "HIGH" if tool_name in _HIGH_RISK else "LOW"
+    """Label shown in the approval prompt."""
+    risk = tool_policy.risk_of(tool_name)
+    return {"read": "LOW", "write": "MEDIUM"}.get(risk, "HIGH")
