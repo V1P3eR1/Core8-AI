@@ -166,6 +166,18 @@ class ContractTests(unittest.TestCase):
         with self.assertRaisesRegex(Stop, 'unauthorized'):
             self.b.gate(event, '123')
 
+    def test_app_acting_as_owner_cannot_approve(self):
+        event = self.event()
+        event['comment']['performed_via_github_app'] = {'slug': 'connector'}
+        with self.assertRaisesRegex(Stop, 'unauthorized'):
+            self.b.gate(event, '123')
+
+    def test_live_app_metadata_blocks_approval(self):
+        event = self.event()
+        self.f.approval['performed_via_github_app'] = {'slug': 'connector'}
+        with self.assertRaisesRegex(Stop, 'approval_changed'):
+            self.b.gate(event, '123')
+
     def test_pr_comment_blocked(self):
         event = self.event()
         event['issue']['pull_request'] = {'url': 'x'}
