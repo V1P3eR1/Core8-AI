@@ -14,10 +14,10 @@ items below are closed and PR #8 + this PR are merged.
 | 2 | Rotation checklist for exposed tokens | 🟡 | §3. Not rotated — requires Lev in provider consoles. |
 | 3 | No credentials in the browser bundle | ✅ | `NEXT_PUBLIC_BEARER_TOKEN` removed from frontend code, Dockerfile, compose and example. Legacy shared bearer accepted only with `DEV_MODE=true`. CI job `no-browser-secrets` + test block any secret-shaped `NEXT_PUBLIC_*`. |
 | 4 | Seeded agent tool scopes: deny-by-default, least privilege | ✅ | Every agent has an explicit allow-list; agents/custom agents without one get **no tools**; a tool outside the list is refused at run time even if the model names it. Every tool has a risk class (`security/tool_policy.py`), enforced by test. |
-| 5 | Injection safeguards + human approval for sensitive actions | ✅ (partial by design) | Tool output with outside content is wrapped as untrusted data and scanned; a flagged result makes every later side-effecting call in that run require approval. **External actions (publish, Instagram connect, paid generation) always need human approval — even with `APPROVAL_MODE=off`**; with no approver connected they are refused. Regex detection is a tripwire, not a defence on its own (§5). |
+| 5 | Injection safeguards + human approval for sensitive actions | ✅ (partial by design) | Tool output with outside content is wrapped as untrusted data and scanned; a flagged result makes every later side-effecting call in that run require approval. **External actions (publish, Instagram connect, paid generation) always need human approval — even with `APPROVAL_MODE=off`**; with no approver connected they are refused. Regex detection is a tripwire, not a defence on its own (§5). End-to-end WebSocket tests show an external call (`queue_post`) never runs when the operator denies it, when the approval goes unanswered (fail-closed timeout), or when the answer is not a literal `true`, in every approval mode; it runs only after an explicit approval. These tests found and fixed a bug: approval answers were queued behind the waiting agent and never delivered, so every approval timed out (fail-closed, but approvals could not work). |
 | 6 | My Goddess localhost-only | ✅ | `server.py` binds `127.0.0.1:8420`, no `0.0.0.0`; regression test. No auth, so it must never be exposed. |
 | 7 | Tenant isolation of leads, messages, conversations, tools | 🟡 / 🔴 | ✅ Core platform: PR #8 (CORE8-005) — awaiting review. 🔴 **PR #9 Social Manager** adds 17 `sm_*` tables with **no tenant scoping** (§4). |
-| 8 | Checks re-run, risks documented | ✅ | This document. 92 backend tests pass on PR #13 (110 with the lead-capture tests in §9); gitleaks / detect-secrets clean. |
+| 8 | Checks re-run, risks documented | ✅ | This document. 98 backend tests pass on PR #13 (116 with the lead-capture tests in §9); gitleaks / detect-secrets clean. |
 
 ## 2. Secrets & customer data in cloud-synced storage (names and locations only)
 
@@ -72,7 +72,7 @@ Order matters: create new → deploy new → verify → revoke old → delete Dr
 ```bash
 cd apps/core8-platform/backend
 pip install -r requirements-dev.txt
-python -m pytest -q                      # 110 tests, incl. test_security_gate, test_tenancy, test_lead_capture
+python -m pytest -q                      # 116 tests, incl. test_security_gate, test_tenancy, test_lead_capture
 gitleaks detect --source . --log-opts="--all" --redact
 git grep -nIiE 'NEXT_PUBLIC_[A-Z0-9_]*(TOKEN|SECRET|KEY|PASSWORD|PRIVATE|CREDENTIAL)' -- ':!*.md'   # must be empty
 ```
@@ -100,7 +100,7 @@ frontend CI build, in-process rate limits (one backend instance only), no error 
 |---|---|
 | Backend routes | 56 (incl. `/docs`, `/redoc`, `/openapi.json`): tenants & Business Brain 27, Instagram 7, auth 6, admin 3, agents 3, discovery 1, conversations 1, media 1, health 1, **public lead form 1**, WebSocket 1 |
 | Public (unauthenticated) routes | `GET /api/health`, `POST /api/auth/setup` (first admin only), `/login`, `/refresh`, Instagram OAuth callback (state-bound), `POST /api/public/lead-forms/{key}/submit`, `/media/*` (unguessable names), FastAPI docs |
-| Backend tests | 110 (pytest): business brain API, questionnaire, tenancy, security gate, lead capture, WS context |
+| Backend tests | 116 (pytest): business brain API, questionnaire, tenancy, security gate, lead capture, WS context |
 | Migrations | No migration tool: `database.init_db()` + `business_brain/schema.py` + `lead_capture.py` create tables idempotently at startup; `tenant_id` columns are added to legacy tables in place (PR #8). Alembic or similar is needed before Postgres (TECH_DEBT C5) |
 | Env templates | `backend/.env.example` (no real values), `frontend/.env.local.example` (only `NEXT_PUBLIC_API_URL`) |
 | Deploy config | `docker-compose.yml` (backend, frontend, nginx; backend only on the internal network), `backend/Dockerfile`, `frontend/Dockerfile`, `nginx/nginx.conf` (placeholder domain, Let's Encrypt path) |
@@ -142,7 +142,7 @@ customer data needs Lev's separate approval.
 
 | Command (from `apps/core8-platform`) | Result |
 |---|---|
-| `cd backend && pip install -r requirements-dev.txt && python -m pytest -q` | ✅ 110 passed |
+| `cd backend && pip install -r requirements-dev.txt && python -m pytest -q` | ✅ 116 passed |
 | `cd frontend && npm ci` | ✅ (uses the `package-lock.json` added in this PR, identical to PR #9's) |
 | `cd frontend && npx next build` | ✅ after adding the missing `components/ui/*` (shadcn) and `types/speech-recognition.d.ts`, the same files as PR #9. Before: build failed on missing imports |
 | `cd frontend && npx eslint .` | ❌ 8 errors, 2 warnings, all existing code: `react-hooks/set-state-in-effect` (data loading in `useEffect` in `SecurityDashboard`, `InstagramCalendar` and others), `prefer-const` (`ParticleBackground`), `react-hooks/refs`, 2× `exhaustive-deps`. Not runtime bugs; fix when the frontend is reworked, then add frontend lint/build to CI |

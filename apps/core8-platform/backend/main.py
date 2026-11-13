@@ -109,6 +109,9 @@ async def lifespan(app: FastAPI):
             pass
 
 
+# A pending approval that gets no answer is denied after this long (fail closed).
+APPROVAL_TIMEOUT_SECONDS = 120.0
+
 app = FastAPI(title="Core8-AI", version="0.1.0", lifespan=lifespan)
 
 app.add_middleware(SecurityHeadersMiddleware)
@@ -378,10 +381,17 @@ async def websocket_endpoint(websocket: WebSocket, agent_id: str):
     approval_futures: dict[str, asyncio.Future] = {}
 
     async def receiver():
-        """Pump all incoming WS frames into the queue; None signals disconnect."""
+        """Pump incoming WS frames; None signals disconnect. Approval responses are resolved
+        here, not in the main loop: the main loop is blocked inside agent.run() while a tool
+        waits for approval, so routing them through the queue would never deliver them."""
         try:
             while True:
                 data = await websocket.receive_json()
+                if isinstance(data, dict) and data.get("type") == "tool_approval_response":
+                    fut = approval_futures.get(data.get("request_id", ""))
+                    if fut and not fut.done():
+                        fut.set_result(data.get("approved") is True)
+                    continue
                 await incoming.put(data)
         except WebSocketDisconnect:
             await incoming.put(None)
@@ -401,7 +411,7 @@ async def websocket_endpoint(websocket: WebSocket, agent_id: str):
         fut: asyncio.Future = loop.create_future()
         approval_futures[request_id] = fut
         try:
-            return await asyncio.wait_for(asyncio.shield(fut), timeout=120.0)
+            return await asyncio.wait_for(asyncio.shield(fut), timeout=APPROVAL_TIMEOUT_SECONDS)
         except asyncio.TimeoutError:
             logger.warning("Approval timeout for tool %s — denying", tool_name)
             return False
@@ -415,14 +425,6 @@ async def websocket_endpoint(websocket: WebSocket, agent_id: str):
             data = await incoming.get()
             if data is None:
                 break  # client disconnected
-
-            # Route approval responses to waiting futures
-            if data.get("type") == "tool_approval_response":
-                req_id = data.get("request_id", "")
-                fut = approval_futures.get(req_id)
-                if fut and not fut.done():
-                    fut.set_result(data.get("approved", False))
-                continue
 
             user_message = data.get("message", "").strip()
             if not user_message:
