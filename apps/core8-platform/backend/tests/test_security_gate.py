@@ -268,3 +268,83 @@ def test_my_goddess_binds_to_localhost_only():
     runs = re.findall(r"uvicorn\.run\([^)]*\)", src)
     assert runs and all('host="127.0.0.1"' in r for r in runs)
     assert "0.0.0.0" not in src
+
+
+# ── End to end over the WebSocket (PR #13 review gate 4) ─────────────────────
+
+def _ws_agent(monkeypatch, tool):
+    """The real seeded Instagram agent, with only the model's replies scripted."""
+    from agents.orchestrator import get_agent
+    agent = get_agent("instagram")
+    responses = iter([
+        SimpleNamespace(content=[_tool_use(tool, "u1", {"plan_id": "p"})], stop_reason="tool_use"),
+        SimpleNamespace(content=[], stop_reason="end_turn"),
+    ])
+    seen = []
+
+    def stream(**params):
+        seen.append(params)
+        return _Stream(next(responses))
+
+    monkeypatch.setattr(agent._client.messages, "stream", stream)
+    return seen
+
+
+def _ws_turn(api, answer=None):
+    """Send one message; answer the approval request (None = never answer). Returns events."""
+    token = api.admin["Authorization"].split(" ", 1)[1]
+    events = []
+    with api.c.websocket_connect(f"/ws/instagram?token={token}") as ws:
+        ws.receive_json()  # hello
+        ws.send_json({"message": "publish the post"})
+        while True:
+            e = ws.receive_json()
+            events.append(e)
+            if e["type"] == "tool_approval_request" and answer is not None:
+                ws.send_json({"type": "tool_approval_response", "request_id": e["request_id"],
+                              "approved": answer})
+            if e["type"] in ("done", "error"):
+                return events
+
+
+@pytest.mark.parametrize("mode", ["off", "smart", "manual"])
+def test_ws_external_tool_denied_by_operator_never_runs(api, monkeypatch, mode):
+    from config import cfg
+    monkeypatch.setattr(cfg, "approval_mode", mode)
+    calls = _fake_tools(monkeypatch, {})
+    seen = _ws_agent(monkeypatch, "queue_post")
+    events = _ws_turn(api, answer=False)
+    assert [e for e in events if e["type"] == "tool_approval_request"][0]["tool_name"] == "queue_post"
+    assert any(e["type"] == "tool_denied" for e in events)
+    assert calls == []
+    assert "denied by the operator" in _results(seen)["u1"]["content"]
+
+
+def test_ws_external_tool_unanswered_approval_times_out_and_never_runs(api, monkeypatch):
+    import main
+    from config import cfg
+    monkeypatch.setattr(cfg, "approval_mode", "off")
+    monkeypatch.setattr(main, "APPROVAL_TIMEOUT_SECONDS", 0.2)
+    calls = _fake_tools(monkeypatch, {})
+    _ws_agent(monkeypatch, "queue_post")
+    events = _ws_turn(api, answer=None)
+    assert any(e["type"] == "tool_approval_request" for e in events)
+    assert any(e["type"] == "tool_denied" for e in events)
+    assert calls == []
+
+
+def test_ws_external_tool_runs_only_after_operator_approves(api, monkeypatch):
+    from config import cfg
+    monkeypatch.setattr(cfg, "approval_mode", "off")
+    calls = _fake_tools(monkeypatch, {})
+    _ws_agent(monkeypatch, "queue_post")
+    events = _ws_turn(api, answer=True)
+    assert any(e["type"] == "tool_approval_request" for e in events)
+    assert calls == ["queue_post"]
+
+
+def test_ws_non_boolean_approval_is_treated_as_denial(api, monkeypatch):
+    calls = _fake_tools(monkeypatch, {})
+    _ws_agent(monkeypatch, "queue_post")
+    _ws_turn(api, answer="yes")
+    assert calls == []
