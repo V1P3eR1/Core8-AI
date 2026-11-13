@@ -5,6 +5,8 @@ from config import cfg
 from tools.registry import registry
 from security.log_redact import redact
 from security.approval import is_blocklisted, needs_approval
+from security.injection_gate import gate as injection_gate
+from security.tool_policy import UNTRUSTED_OUTPUT_TOOLS
 import json
 import logging
 
@@ -18,7 +20,8 @@ class AgentConfig:
     description: str
     model: str
     system_prompt: str
-    allowed_tools: list[str] | None = None  # None = all tools; list = scoped subset
+    # Deny by default: None or [] = no tools. Only listed tools are offered AND executable.
+    allowed_tools: list[str] | None = None
 
 
 class BaseAgent:
@@ -37,7 +40,9 @@ class BaseAgent:
         system = self.config.system_prompt
         if system_context:
             system = f"{system}\n\n{system_context}"
-        tools = registry.get_schemas(self.config.allowed_tools)
+        allowed = set(self.config.allowed_tools or [])
+        tools = registry.get_schemas(sorted(allowed)) if allowed else []
+        tainted = False  # set once untrusted content in this run is flagged
 
         while True:
             params = {
@@ -110,8 +115,34 @@ class BaseAgent:
                     })
                     continue
 
-                # Approval gate
-                if needs_approval(tu.name) and approval_gate is not None:
+                # Least privilege: a tool outside this agent's allow-list never runs, even if the
+                # model names it.
+                if tu.name not in allowed:
+                    logger.warning("Agent %s requested tool %s outside its scope — refusing",
+                                   self.config.id, tu.name)
+                    if on_event:
+                        await on_event({"type": "tool_blocked", "name": tu.name})
+                    tool_results.append({
+                        "type": "tool_result",
+                        "tool_use_id": tu.id,
+                        "content": f"Tool '{tu.name}' is not permitted for this agent.",
+                        "is_error": True,
+                    })
+                    continue
+
+                # Approval gate. A call that needs approval never runs unattended.
+                if needs_approval(tu.name, tainted) and approval_gate is None:
+                    logger.warning("Tool %s needs approval but no approver is connected — refusing", tu.name)
+                    if on_event:
+                        await on_event({"type": "tool_denied", "name": tu.name})
+                    tool_results.append({
+                        "type": "tool_result",
+                        "tool_use_id": tu.id,
+                        "content": f"Tool '{tu.name}' requires human approval and no approver is available.",
+                        "is_error": True,
+                    })
+                    continue
+                if needs_approval(tu.name, tainted):
                     if on_event:
                         await on_event({"type": "tool_call", "name": tu.name, "input": tu.input})
                     approved = await approval_gate(tu.name, tu.input)
@@ -135,10 +166,23 @@ class BaseAgent:
                 logger.info("Tool %s result: %s", tu.name, redacted)
                 if on_event:
                     await on_event({"type": "tool_result", "name": tu.name, "result": result})
+                content = json.dumps(result) if not isinstance(result, str) else result
+                if tu.name in UNTRUSTED_OUTPUT_TOOLS:
+                    # Content written by outsiders is framed as data; a flagged result raises the
+                    # bar for the rest of this run (every side-effecting call needs approval).
+                    checked = injection_gate(content, tu.name)
+                    content = checked.to_prompt()
+                    if checked.flagged and not tainted:
+                        tainted = True
+                        logger.warning("Possible prompt injection in %s output (%s) — approvals escalated",
+                                       tu.name, ",".join(checked.flag_reasons))
+                        if on_event:
+                            await on_event({"type": "security_warning", "name": tu.name,
+                                            "reasons": checked.flag_reasons})
                 tool_results.append({
                     "type": "tool_result",
                     "tool_use_id": tu.id,
-                    "content": json.dumps(result) if not isinstance(result, str) else result,
+                    "content": content,
                 })
 
             history.append({"role": "user", "content": tool_results})

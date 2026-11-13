@@ -21,7 +21,6 @@ services:
       context: ./frontend
       args:
         NEXT_PUBLIC_API_URL: https://${DOMAIN:-localhost}
-        NEXT_PUBLIC_BEARER_TOKEN: ""
     restart: unless-stopped
     expose:
       - "3000"

@@ -170,8 +170,19 @@ RULES
 
 
 # Tool scoping for seeded agents — agent_id -> allowed tool names.
-# Agents not listed here see every registered tool (allowed_tools = NULL).
+# Deny by default (issue #11): an agent not listed here gets NO tools (allowed_tools = NULL).
+# Each seeded agent gets only the tools its job needs; risk classes live in security/tool_policy.py.
 _AGENT_TOOL_SCOPES: dict[str, list[str]] = {
+    "general": [
+        "list_leads", "search_leads", "get_lead", "list_events", "find_free_slot",
+        "list_design_projects", "list_design_docs", "read_design_doc",
+    ],
+    "leads": ["create_lead", "get_lead", "list_leads", "search_leads", "update_lead", "add_note"],
+    "calendar": ["create_event", "list_events", "update_event", "delete_event", "find_free_slot"],
+    "design": [
+        "write_design_doc", "read_design_doc", "list_design_docs", "list_design_projects",
+        "delete_design_doc", "create_feature_spec",
+    ],
     "instagram": [
         "connect_instagram", "list_ig_accounts",
         "create_content_plan", "list_content_plans", "get_content_plan",
@@ -195,7 +206,7 @@ async def init_db():
                 description TEXT,
                 model       TEXT NOT NULL DEFAULT 'claude-sonnet-4-6',
                 system_prompt TEXT,
-                allowed_tools TEXT,   -- JSON array of tool names; NULL = all tools
+                allowed_tools TEXT,   -- JSON array of tool names; NULL = no tools (deny by default)
                 created_at  TEXT NOT NULL DEFAULT (datetime('now'))
             );
 
