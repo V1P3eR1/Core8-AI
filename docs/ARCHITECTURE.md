@@ -67,6 +67,8 @@ Core8-AI/
 | GET | `/api/instagram/oauth/callback` | OAuth state |
 | GET | `/api/instagram/{account,plans,plans/{id},scheduled-posts,insights}` | JWT |
 | POST | `/api/instagram/media` | JWT |
+| GET/POST/DELETE | `/api/tenants/{id}/lead-forms[/{key}]` | JWT, tenant owner (list: viewer) |
+| POST | `/api/public/lead-forms/{key}/submit` | none — consent, honeypot, rate limit, origin check (see LAUNCH_READINESS §9) |
 
 ### Business Brain (CORE8-001)
 Tenant-scoped business-intelligence layer in `backend/business_brain/`: discovery
