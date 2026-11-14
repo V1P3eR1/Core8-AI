@@ -8,7 +8,9 @@ import logging
 
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
 
+from business_brain.access import TenantAccess, query_tenant
 from security.jwt_auth import require_jwt
+from tenancy import use_tenant
 from tools.media_gen import save_media_asset
 
 logger = logging.getLogger("core8.media")
@@ -24,7 +26,7 @@ _MAX_BYTES = 50 * 1024 * 1024  # 50 MB
 
 
 @router.post("/api/instagram/media", dependencies=[Depends(require_jwt)])
-async def upload_media(file: UploadFile = File(...)):
+async def upload_media(file: UploadFile = File(...), access: TenantAccess = Depends(query_tenant("editor"))):
     ext = (file.filename or "").rsplit(".", 1)[-1].lower()
     if ext not in _EXT_TYPE:
         raise HTTPException(
@@ -36,6 +38,7 @@ async def upload_media(file: UploadFile = File(...)):
         raise HTTPException(status_code=400, detail="Empty file.")
     if len(data) > _MAX_BYTES:
         raise HTTPException(status_code=400, detail="File too large (max 50 MB).")
-    asset = await save_media_asset(data, ext, "upload", _EXT_TYPE[ext])
-    logger.info("Media uploaded: %s (%d bytes)", asset["filename"], len(data))
+    with use_tenant(access.tenant_id):
+        asset = await save_media_asset(data, ext, "upload", _EXT_TYPE[ext])
+    logger.info("Media uploaded tenant=%s: %s (%d bytes)", access.tenant_id, asset["filename"], len(data))
     return asset
