@@ -17,7 +17,7 @@ items below are closed and PR #8 + this PR are merged.
 | 5 | Injection safeguards + human approval for sensitive actions | ✅ (partial by design) | Tool output with outside content is wrapped as untrusted data and scanned; a flagged result makes every later side-effecting call in that run require approval. **External actions (publish, Instagram connect, paid generation) always need human approval — even with `APPROVAL_MODE=off`**; with no approver connected they are refused. Regex detection is a tripwire, not a defence on its own (§5). End-to-end WebSocket tests show an external call (`queue_post`) never runs when the operator denies it, when the approval goes unanswered (fail-closed timeout), or when the answer is not a literal `true`, in every approval mode; it runs only after an explicit approval. These tests found and fixed a bug: approval answers were queued behind the waiting agent and never delivered, so every approval timed out (fail-closed, but approvals could not work). |
 | 6 | My Goddess localhost-only | ✅ | `server.py` binds `127.0.0.1:8420`, no `0.0.0.0`; regression test. No auth, so it must never be exposed. |
 | 7 | Tenant isolation of leads, messages, conversations, tools | 🟡 / 🔴 | ✅ Core platform: PR #8 (CORE8-005) — awaiting review. 🔴 **PR #9 Social Manager** adds 17 `sm_*` tables with **no tenant scoping** (§4). |
-| 8 | Checks re-run, risks documented | ✅ | This document. 98 backend tests pass on PR #13 (116 with the lead-capture tests in §9); gitleaks / detect-secrets clean. |
+| 8 | Checks re-run, risks documented | ✅ | This document. 98 backend tests pass on PR #13 (121 with the lead-capture tests in §9); gitleaks / detect-secrets clean. |
 
 ## 2. Secrets & customer data in cloud-synced storage (names and locations only)
 
@@ -72,7 +72,7 @@ Order matters: create new → deploy new → verify → revoke old → delete Dr
 ```bash
 cd apps/core8-platform/backend
 pip install -r requirements-dev.txt
-python -m pytest -q                      # 116 tests, incl. test_security_gate, test_tenancy, test_lead_capture
+python -m pytest -q                      # 121 tests, incl. test_security_gate, test_tenancy, test_lead_capture
 gitleaks detect --source . --log-opts="--all" --redact
 git grep -nIiE 'NEXT_PUBLIC_[A-Z0-9_]*(TOKEN|SECRET|KEY|PASSWORD|PRIVATE|CREDENTIAL)' -- ':!*.md'   # must be empty
 ```
@@ -100,7 +100,7 @@ frontend CI build, in-process rate limits (one backend instance only), no error 
 |---|---|
 | Backend routes | 56 (incl. `/docs`, `/redoc`, `/openapi.json`): tenants & Business Brain 27, Instagram 7, auth 6, admin 3, agents 3, discovery 1, conversations 1, media 1, health 1, **public lead form 1**, WebSocket 1 |
 | Public (unauthenticated) routes | `GET /api/health`, `POST /api/auth/setup` (first admin only), `/login`, `/refresh`, Instagram OAuth callback (state-bound), `POST /api/public/lead-forms/{key}/submit`, `/media/*` (unguessable names), FastAPI docs |
-| Backend tests | 116 (pytest): business brain API, questionnaire, tenancy, security gate, lead capture, WS context |
+| Backend tests | 121 (pytest): business brain API, questionnaire, tenancy, security gate, lead capture, WS context |
 | Migrations | No migration tool: `database.init_db()` + `business_brain/schema.py` + `lead_capture.py` create tables idempotently at startup; `tenant_id` columns are added to legacy tables in place (PR #8). Alembic or similar is needed before Postgres (TECH_DEBT C5) |
 | Env templates | `backend/.env.example` (no real values), `frontend/.env.local.example` (only `NEXT_PUBLIC_API_URL`) |
 | Deploy config | `docker-compose.yml` (backend, frontend, nginx; backend only on the internal network), `backend/Dockerfile`, `frontend/Dockerfile`, `nginx/nginx.conf` (placeholder domain, Let's Encrypt path) |
@@ -127,11 +127,21 @@ landing page form ──POST /api/public/lead-forms/{form_key}/submit──▶ b
 | Validation | Name 1–120, email format, phone format, company ≤120, message ≤2000, control characters stripped; email **or** phone required |
 | Anti-spam | Honeypot field `website` (silently dropped, same 202), 5 submissions per IP per form per 10 min, 200 per form per hour, optional allowed-origins list per form |
 | Spoofing | Client IP comes from the socket; proxy headers only with `TRUST_PROXY_HEADERS=true` and then only the proxy-written value (`X-Real-IP` / last `X-Forwarded-For` hop). The login rate limiter used to trust the forgeable first hop — fixed in this PR |
-| Secure storage | Same tenant-scoped `leads` table as the CRM; no new copy in Sheets/Drive |
+| Secure storage | Same tenant-scoped `leads` table as the CRM; no new copy in Sheets/Drive. Lead and consent row are written in **one transaction** — a failure rolls both back (failure-injection test), so no lead exists without its consent record |
 | Logs | Form key and outcome only, never name/email/message (tested) |
 | Prompt injection | Lead text is outside content: lead tools are in `UNTRUSTED_OUTPUT_TOOLS`, so a flagged note forces approval for later side effects (§1 item 5) |
 | Revocation | `DELETE /api/tenants/{id}/lead-forms/{key}` disables a form (404 afterwards) |
 | Browser access | Add the landing-page origin to `CORS_EXTRA_ORIGINS`, or post server-side (e.g. a Netlify function) |
+| Origin check — scope | **Not a bot or authentication control.** Any script can forge or omit `Origin`. It only stops *other websites* from posting through visitors' browsers. With an allow-list set, a missing `Origin` is rejected; for server-to-server posting leave the list empty. Spam control is the rate limits + honeypot, tested with no Origin and no allow-list |
+| Rate-limiter memory | Bounded: at most `MAX_TRACKED_KEYS` (20 000) keys, expired keys pruned and least-recently-used evicted. Keys are only created for existing, enabled forms, after the per-form limit |
+| Proxy trust | `TRUST_PROXY_HEADERS=true` is safe only when (a) the backend is reachable **only** through our nginx and (b) nginx overwrites `X-Real-IP` with `$remote_addr`. Both are true in the repo's `docker-compose.yml` / `nginx.conf` and checked by a test. Any other deployment (managed platform, extra CDN) must re-verify this before enabling it |
+
+**Residual risks (accepted until stated):**
+- Rate limits are per process and reset on restart; a multi-instance deployment needs a shared limiter (e.g. Redis) or limits at the proxy/CDN (`limit_req` in nginx). Required before scaling out.
+- A distributed botnet with many IPs is limited only by the per-form cap (200/h) — enough to keep the CRM usable, not to keep spam out. Add a CAPTCHA/Turnstile if spam appears.
+- Evicting the least-recently-used key under extreme load can reset that key's counter; the per-form cap still applies.
+
+**Merge order and evidence:** #8 → #13 → #14. Test and secret-scan results here are for this branch's head only. After #8 and #13 merge, this branch must be updated onto that `main` and CI re-run on the resulting head before #14 is merged.
 
 **Still needed before switching the website over (not code):** consent wording and privacy
 policy in EN/HE/RU (Lev, with ChatGPT drafting), and the decision on what happens to the existing
@@ -142,7 +152,7 @@ customer data needs Lev's separate approval.
 
 | Command (from `apps/core8-platform`) | Result |
 |---|---|
-| `cd backend && pip install -r requirements-dev.txt && python -m pytest -q` | ✅ 116 passed |
+| `cd backend && pip install -r requirements-dev.txt && python -m pytest -q` | ✅ 121 passed |
 | `cd frontend && npm ci` | ✅ (uses the `package-lock.json` added in this PR, identical to PR #9's) |
 | `cd frontend && npx next build` | ✅ after adding the missing `components/ui/*` (shadcn) and `types/speech-recognition.d.ts`, the same files as PR #9. Before: build failed on missing imports |
 | `cd frontend && npx eslint .` | ❌ 8 errors, 2 warnings, all existing code: `react-hooks/set-state-in-effect` (data loading in `useEffect` in `SecurityDashboard`, `InstagramCalendar` and others), `prefer-const` (`ParticleBackground`), `react-hooks/refs`, 2× `exhaustive-deps`. Not runtime bugs; fix when the frontend is reworked, then add frontend lint/build to CI |

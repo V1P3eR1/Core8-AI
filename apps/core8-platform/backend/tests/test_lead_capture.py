@@ -159,3 +159,55 @@ def test_behind_trusted_proxy_only_proxy_written_ip_counts(api, monkeypatch):
     codes = [_submit(api, key, **{"X-Real-IP": "198.51.100.9"}).status_code
              for _ in range(lead_capture.PER_IP_LIMIT + 1)]
     assert codes[-1] == 429
+
+
+# ── Review on PR #14 (2026-11-14) ─────────────────────────────────────────────
+
+def test_consent_write_failure_leaves_no_orphan_lead(api, monkeypatch):
+    owner = api.user("o@a.test")
+    key = _form(api, api.tenant("A", "o@a.test"), owner)
+    monkeypatch.setattr(lead_capture, "_CONSENT_SQL", "INSERT INTO no_such_table VALUES (?, ?, ?, ?, ?)")
+    with pytest.raises(Exception):
+        _submit(api, key)
+    assert not _rows("SELECT 1 FROM leads")
+    assert not _rows("SELECT 1 FROM lead_consents")
+
+
+def test_every_stored_lead_has_a_consent_record(api):
+    owner = api.user("o@a.test")
+    key = _form(api, api.tenant("A", "o@a.test"), owner)
+    for i in range(3):
+        assert _submit(api, key, {**GOOD, "email": f"p{i}@example.com"}).status_code == 202
+    orphans = _rows("SELECT l.id FROM leads l LEFT JOIN lead_consents c ON c.lead_id = l.id "
+                    "WHERE c.lead_id IS NULL")
+    assert orphans == [] and len(_rows("SELECT 1 FROM leads")) == 3
+
+
+def test_rate_limiter_memory_is_bounded(monkeypatch):
+    monkeypatch.setattr(lead_capture, "MAX_TRACKED_KEYS", 100)
+    for i in range(5000):
+        lead_capture._allow(f"ip:f:{i}", 5, 600.0)
+    assert len(lead_capture._hits) <= 100
+
+
+def test_rate_limits_apply_without_origin_header_and_without_allow_list(api):
+    # Origin is not a bot control: spam limits must hold when it is absent or not configured.
+    owner = api.user("o@a.test")
+    key = _form(api, api.tenant("A", "o@a.test"), owner)  # no allowed_origins
+    codes = [_submit(api, key).status_code for _ in range(lead_capture.PER_IP_LIMIT + 1)]
+    assert codes[-1] == 429
+
+
+def test_nginx_overwrites_the_ip_header_the_backend_trusts():
+    """TRUST_PROXY_HEADERS=true is only safe because nginx sets X-Real-IP to the socket address
+    (overwriting any client value) and the backend is reachable only through nginx."""
+    import os
+    import re
+    app = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+    conf = open(os.path.join(app, "nginx", "nginx.conf"), encoding="utf-8").read()
+    api_block = re.search(r"location /api/ \{(.*?)\}", conf, re.S).group(1)
+    assert re.search(r"proxy_set_header\s+X-Real-IP\s+\$remote_addr;", api_block)
+    compose = open(os.path.join(app, "docker-compose.yml"), encoding="utf-8").read()
+    backend = compose.split("\n  frontend:")[0]
+    assert "TRUST_PROXY_HEADERS=true" in backend
+    assert "ports:" not in backend  # not published to the host; only nginx can reach it

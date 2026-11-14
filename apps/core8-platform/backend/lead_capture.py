@@ -7,7 +7,10 @@ Safety design:
   the tenant configured, the time, and a keyed hash of the IP (no raw IP stored).
 - **Validation:** strict length limits and an email check; unknown fields are rejected.
 - **Anti-spam:** a honeypot field (`website`) — bots that fill it get the same 202 but nothing is
-  stored; a per-IP and a per-form rate limit; optional allowed-origins list per form.
+  stored; a per-IP and a per-form rate limit (bounded memory, see MAX_TRACKED_KEYS).
+- **Origin allow-list is not bot protection.** Browsers send `Origin`; any script can forge it or
+  leave it out. It only stops other websites' pages from posting through visitors' browsers.
+  Spam control rests on the rate limits and the honeypot, which apply with or without it.
 - **No personal data in logs** — only the form key and the outcome.
 - Submitted text is outside content: it reaches agents only through `list_leads` / `get_lead` /
   `search_leads`, whose output is wrapped and scanned as untrusted (security/tool_policy.py).
@@ -21,7 +24,8 @@ import logging
 import re
 import secrets
 import time
-from collections import defaultdict, deque
+import uuid
+from collections import OrderedDict, deque
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel, ConfigDict, Field, field_validator
@@ -30,8 +34,6 @@ import database
 from business_brain.access import TenantAccess, tenant_role
 from config import cfg
 from security.auth import client_ip as _client_ip
-from tenancy import use_tenant
-from tools.leads import create_lead
 
 log = logging.getLogger("core8.lead_capture")
 
@@ -70,12 +72,31 @@ async def init_lead_capture_schema() -> None:
 
 PER_IP_LIMIT, PER_IP_WINDOW = 5, 600.0        # 5 submissions per IP per form per 10 min
 PER_FORM_LIMIT, PER_FORM_WINDOW = 200, 3600.0  # 200 submissions per form per hour
-_hits: dict[str, deque] = defaultdict(deque)
+# Hard cap on tracked keys so the limiter's memory is bounded whatever the traffic. Keys are
+# only created for existing, enabled forms, and the per-form limit is checked first, so a form
+# adds at most PER_FORM_LIMIT per-IP keys per hour; the cap is a backstop on top of that.
+MAX_TRACKED_KEYS = 20_000
+_hits: "OrderedDict[str, deque]" = OrderedDict()
+
+
+def _prune(now: float) -> None:
+    """Drop keys whose newest hit is older than the longest window, then the least recently
+    used keys while still over the cap."""
+    longest = max(PER_IP_WINDOW, PER_FORM_WINDOW)
+    for key in [k for k, dq in _hits.items() if not dq or dq[-1] <= now - longest]:
+        del _hits[key]
+    while len(_hits) >= MAX_TRACKED_KEYS:
+        _hits.popitem(last=False)
 
 
 def _allow(key: str, limit: int, window: float) -> bool:
     now = time.monotonic()
-    dq = _hits[key]
+    dq = _hits.get(key)
+    if dq is None:
+        if len(_hits) >= MAX_TRACKED_KEYS:
+            _prune(now)
+        dq = _hits[key] = deque()
+    _hits.move_to_end(key)
     while dq and dq[0] <= now - window:
         dq.popleft()
     if len(dq) >= limit:
@@ -158,6 +179,9 @@ class LeadFormCreate(BaseModel):
 
 
 # ── Routes ───────────────────────────────────────────────────────────────────────────────────
+
+_CONSENT_SQL = """INSERT INTO lead_consents (tenant_id, lead_id, form_key, consent_text_version, ip_hash)
+                  VALUES (?, ?, ?, ?, ?)"""
 
 router = APIRouter(tags=["lead-capture"])
 _owner = tenant_role("owner")
@@ -243,16 +267,23 @@ async def submit_lead(form_key: str, sub: LeadSubmission, request: Request):
     notes = sub.message
     if sub.phone:
         notes = f"Phone: {sub.phone}\n{notes}".strip()
-    with use_tenant(tenant_id):
-        lead = await create_lead(name=sub.name, email=sub.email, company=sub.company,
-                                 status="new", source=f"web-form:{form_name}", notes=notes)
+    # Lead and consent record are written in ONE transaction: a lead never exists without its
+    # consent audit row (review on PR #14).
+    lead_id = str(uuid.uuid4())
     async with database.get_db() as db:
-        await db.execute(
-            """INSERT INTO lead_consents (tenant_id, lead_id, form_key, consent_text_version, ip_hash)
-               VALUES (?, ?, ?, ?, ?)""",
-            (tenant_id, lead["id"], form_key, consent_version, _ip_hash(ip)),
-        )
-        await db.commit()
+        try:
+            await db.execute(
+                """INSERT INTO leads (tenant_id, id, name, email, company, status, source, notes)
+                   VALUES (?, ?, ?, ?, ?, 'new', ?, ?)""",
+                (tenant_id, lead_id, sub.name, sub.email, sub.company, f"web-form:{form_name}", notes),
+            )
+            await db.execute(_CONSENT_SQL,
+                             (tenant_id, lead_id, form_key, consent_version, _ip_hash(ip)))
+            await db.commit()
+        except Exception:
+            await db.rollback()
+            log.error("lead form %s: store failed, rolled back", form_key)
+            raise
     log.info("lead form %s: lead stored", form_key)
     return _RECEIVED
 
