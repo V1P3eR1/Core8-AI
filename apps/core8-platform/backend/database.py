@@ -1,7 +1,10 @@
 import aiosqlite
 import json
+import logging
 import os
 import re
+import sqlite3
+from datetime import datetime, timezone
 
 DB_PATH = os.getenv("DB_PATH", os.path.join(os.path.dirname(__file__), "core8.db"))
 
@@ -224,7 +227,46 @@ async def _drop_tenant_default(db: aiosqlite.Connection, table: str) -> None:
         raise
 
 
+def _needs_tenancy_migration(path: str) -> bool:
+    """True if an existing database still has a tenant-scoped table without tenant_id, or with
+    the temporary backfill DEFAULT. A fresh or already-migrated database returns False."""
+    if not os.path.exists(path):
+        return False
+    con = sqlite3.connect(path)
+    try:
+        for table in _TENANT_SCOPED_TABLES:
+            row = con.execute(
+                "SELECT sql FROM sqlite_master WHERE type='table' AND name=?", (table,)
+            ).fetchone()
+            if row and ("tenant_id" not in row[0] or _TENANT_DEFAULT in row[0]):
+                return True
+        return False
+    finally:
+        con.close()
+
+
+def backup_before_migration(path: str) -> str | None:
+    """Consistent copy of the database (SQLite online backup) taken before the CORE8-005
+    migration touches it. Rollback = stop the app, restore this file over DB_PATH, deploy the
+    previous build. The copy holds customer data: it is created owner-read/write only, next to
+    the database, and must be deleted once the upgrade is verified."""
+    if not _needs_tenancy_migration(path):
+        return None
+    stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+    dest = f"{path}.pre-core8-005-{stamp}.bak"
+    src, dst = sqlite3.connect(path), sqlite3.connect(dest)
+    try:
+        src.backup(dst)
+    finally:
+        dst.close()
+        src.close()
+    os.chmod(dest, 0o600)
+    logging.getLogger("core8.database").warning("Pre-migration backup written: %s", dest)
+    return dest
+
+
 async def init_db():
+    backup_before_migration(DB_PATH)
     async with aiosqlite.connect(DB_PATH) as db:
         await db.executescript("""
             CREATE TABLE IF NOT EXISTS agents (

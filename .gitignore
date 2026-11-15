@@ -15,6 +15,7 @@ nginx/ssl/
 
 # Data — may contain customer / personal data
 *.db
+*.db.*.bak
 *.sqlite
 *.sqlite3
 data/
