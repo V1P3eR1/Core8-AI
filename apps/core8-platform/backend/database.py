@@ -1,6 +1,7 @@
 import aiosqlite
 import json
 import os
+import re
 
 DB_PATH = os.getenv("DB_PATH", os.path.join(os.path.dirname(__file__), "core8.db"))
 
@@ -184,6 +185,43 @@ _AGENT_TOOL_SCOPES: dict[str, list[str]] = {
         "get_account_insights", "get_post_insights",
     ],
 }
+
+
+_TENANT_DEFAULT = "tenant_id TEXT NOT NULL DEFAULT 'core8-internal'"
+
+
+async def _drop_tenant_default(db: aiosqlite.Connection, table: str) -> None:
+    """Rebuild `table` without the backfill DEFAULT on tenant_id (SQLite cannot drop a column
+    default in place). Same columns, order, constraints, data and indexes. Idempotent."""
+    async with db.execute(
+        "SELECT sql FROM sqlite_master WHERE type='table' AND name=?", (table,)
+    ) as cur:
+        row = await cur.fetchone()
+    if row is None or _TENANT_DEFAULT not in row[0]:
+        return
+    async with db.execute(
+        "SELECT sql FROM sqlite_master WHERE type='index' AND tbl_name=? AND sql IS NOT NULL", (table,)
+    ) as cur:
+        index_sql = [r[0] for r in await cur.fetchall()]
+    tmp = f"_{table}_rebuild"
+    ddl = row[0].replace(_TENANT_DEFAULT, "tenant_id TEXT NOT NULL")
+    ddl, n = re.subn(rf'^CREATE TABLE\s+(?:IF NOT EXISTS\s+)?"?{table}"?', f"CREATE TABLE {tmp}", ddl)
+    if n != 1:
+        raise RuntimeError(f"cannot rebuild {table}: unexpected DDL")
+    await db.execute("PRAGMA foreign_keys=OFF")
+    try:
+        await db.execute("BEGIN")
+        await db.execute(f"DROP TABLE IF EXISTS {tmp}")
+        await db.execute(ddl)
+        await db.execute(f"INSERT INTO {tmp} SELECT * FROM {table}")
+        await db.execute(f"DROP TABLE {table}")
+        await db.execute(f"ALTER TABLE {tmp} RENAME TO {table}")
+        for sql in index_sql:
+            await db.execute(sql)
+        await db.commit()
+    except Exception:
+        await db.rollback()
+        raise
 
 
 async def init_db():
@@ -419,6 +457,11 @@ async def init_db():
             "UPDATE ig_accounts SET id = tenant_id WHERE id = 'primary'"
         )
         await db.commit()
+        # Fail closed on upgraded databases too: SQLite's ADD COLUMN NOT NULL needs a DEFAULT to
+        # backfill existing rows, but a permanent DEFAULT would silently file any future INSERT
+        # that omits tenant_id under the internal tenant. Rebuild those tables without it.
+        for table in _TENANT_SCOPED_TABLES:
+            await _drop_tenant_default(db, table)
 
     # Seed specialist agents. allowed_tools is reconciled on every boot — it is a
     # security boundary and must always match _AGENT_TOOL_SCOPES, even for an
