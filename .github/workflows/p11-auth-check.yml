@@ -15,7 +15,7 @@ jobs:
       - uses: actions/checkout@v4
       - name: Ensure no browser-shipped legacy bearer configuration
         run: |
-          if git grep -n 'NEXT_PUBLIC_BEARER_TOKEN' -- ':!*.md'; then
+          if git grep -n 'NEXT_PUBLIC_BEARER_TOKEN' -- ':!*.md' ':!.github/workflows/p11-auth-check.yml'; then
             echo 'Forbidden public bearer token reference found.' >&2
             exit 1
           fi
