@@ -328,3 +328,79 @@ def test_migration_assigns_existing_rows_to_internal_tenant(tmp_path, monkeypatc
     sqlite3.connect(path).executescript("INSERT INTO tenants (id, name, created_by) VALUES ('t2','T2','x');")
     as_tenant("t2", design.write_design_doc, "site", "a.md", "new")
     assert as_tenant(INTERNAL_TENANT_ID, design.read_design_doc, "site", "a.md")["content"] == "old"
+
+
+# ── Upgraded databases fail closed (review on PR #8, 2026-11-15) ─────────────
+
+def _legacy_db(tmp_path, monkeypatch):
+    """A real pre-multi-tenancy database, created by the old schema code, with one row per table."""
+    import importlib
+    legacy = importlib.import_module("tests.fixtures.legacy_database_v0")
+    path = str(tmp_path / "legacy.db")
+    monkeypatch.setattr(legacy, "DB_PATH", path)
+    run(legacy.init_db())
+    con = sqlite3.connect(path)
+    con.executescript("""
+        INSERT INTO conversations (id, agent_id) VALUES ('c1', 'general');
+        INSERT INTO messages (id, conversation_id, role, content) VALUES ('m1', 'c1', 'user', 'hi');
+        INSERT INTO leads (id, name) VALUES ('l1', 'Legacy Lead');
+        INSERT INTO events (id, title, start_time, end_time) VALUES ('e1', 'Meet', '2026-01-01T10:00', '2026-01-01T11:00');
+        INSERT INTO design_docs (id, project, path, content) VALUES ('d1', 'site', 'a.md', 'old');
+    """)
+    con.commit()
+    con.close()
+    return path
+
+
+def _defaults(con, table):
+    return {r[1]: r[4] for r in con.execute(f"PRAGMA table_info({table})")}
+
+
+def test_upgraded_database_rejects_inserts_without_tenant(tmp_path, monkeypatch):
+    path = _legacy_db(tmp_path, monkeypatch)
+    before = {t: sqlite3.connect(path).execute(f"SELECT COUNT(*) FROM {t}").fetchone()[0]
+              for t in database._TENANT_SCOPED_TABLES}
+    monkeypatch.setattr(database, "DB_PATH", path)
+    run(database.init_db())
+
+    con = sqlite3.connect(path)
+    for table in database._TENANT_SCOPED_TABLES:
+        cols = _defaults(con, table)
+        assert "tenant_id" in cols, table
+        assert cols["tenant_id"] is None, f"{table}.tenant_id still has a DEFAULT"
+        # Legacy data survived and belongs to the internal tenant.
+        assert con.execute(f"SELECT COUNT(*) FROM {table}").fetchone()[0] == before[table], table
+        assert con.execute(f"SELECT COUNT(*) FROM {table} WHERE tenant_id != ?",
+                           (INTERNAL_TENANT_ID,)).fetchone()[0] == 0, table
+        # Tenant index survived the rebuild.
+        idx = [r[1] for r in con.execute(f"PRAGMA index_list({table})")]
+        assert f"ix_{table}_tenant" in idx, table
+    with pytest.raises(sqlite3.IntegrityError):
+        con.execute("INSERT INTO leads (id, name) VALUES ('l2', 'No tenant')")
+    with pytest.raises(sqlite3.IntegrityError):
+        con.execute("INSERT INTO messages (id, conversation_id, role, content) VALUES ('m2','c1','user','x')")
+    assert con.execute("SELECT name FROM leads WHERE id='l1'").fetchone() == ("Legacy Lead",)
+    con.close()
+
+
+def test_repeated_initialisation_of_upgraded_database_is_safe(tmp_path, monkeypatch):
+    path = _legacy_db(tmp_path, monkeypatch)
+    monkeypatch.setattr(database, "DB_PATH", path)
+    run(database.init_db())
+    schema = sqlite3.connect(path).execute("SELECT name, sql FROM sqlite_master ORDER BY name").fetchall()
+    run(database.init_db())
+    run(database.init_db())
+    con = sqlite3.connect(path)
+    assert con.execute("SELECT name, sql FROM sqlite_master ORDER BY name").fetchall() == schema
+    assert con.execute("SELECT COUNT(*) FROM leads").fetchone()[0] == 1
+    assert con.execute("PRAGMA integrity_check").fetchone() == ("ok",)
+    assert con.execute("PRAGMA foreign_key_check").fetchall() == []
+
+
+def test_fresh_database_has_no_tenant_default(tmp_path, monkeypatch):
+    path = str(tmp_path / "fresh.db")
+    monkeypatch.setattr(database, "DB_PATH", path)
+    run(database.init_db())
+    con = sqlite3.connect(path)
+    for table in database._TENANT_SCOPED_TABLES:
+        assert _defaults(con, table)["tenant_id"] is None, table
