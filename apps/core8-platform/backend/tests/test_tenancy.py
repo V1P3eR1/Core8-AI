@@ -404,3 +404,53 @@ def test_fresh_database_has_no_tenant_default(tmp_path, monkeypatch):
     con = sqlite3.connect(path)
     for table in database._TENANT_SCOPED_TABLES:
         assert _defaults(con, table)["tenant_id"] is None, table
+
+
+# ── Backup and rollback (review on PR #8, 2026-11-15) ───────────────────────
+
+def _dump(path):
+    con = sqlite3.connect(path)
+    try:
+        return list(con.iterdump())
+    finally:
+        con.close()
+
+
+def test_backup_is_taken_once_before_migration_and_restores_legacy_db(tmp_path, monkeypatch):
+    import glob
+    import importlib
+    import shutil
+    path = _legacy_db(tmp_path, monkeypatch)
+    original = _dump(path)
+    monkeypatch.setattr(database, "DB_PATH", path)
+    run(database.init_db())
+
+    backups = glob.glob(path + ".pre-core8-005-*.bak")
+    assert len(backups) == 1
+    assert _dump(backups[0]) == original          # exact pre-migration content
+    assert oct(os.stat(backups[0]).st_mode & 0o777) == "0o600"
+    run(database.init_db())                        # already migrated → no second backup
+    assert len(glob.glob(path + ".pre-core8-005-*.bak")) == 1
+
+    # Rollback: restore the backup; the previous build's schema code runs on it unchanged.
+    shutil.copy(backups[0], path)
+    assert _dump(path) == original
+    legacy = importlib.import_module("tests.fixtures.legacy_database_v0")
+    monkeypatch.setattr(legacy, "DB_PATH", path)
+    run(legacy.init_db())
+    con = sqlite3.connect(path)
+    assert con.execute("SELECT name FROM leads").fetchall() == [("Legacy Lead",)]
+    assert "tenant_id" not in [r[1] for r in con.execute("PRAGMA table_info(leads)")]
+    con.close()
+    # And the upgrade can be re-run after a rollback.
+    run(database.init_db())
+    assert sqlite3.connect(path).execute("SELECT tenant_id FROM leads").fetchall() == [(INTERNAL_TENANT_ID,)]
+
+
+def test_no_backup_for_fresh_database(tmp_path, monkeypatch):
+    import glob
+    path = str(tmp_path / "fresh.db")
+    monkeypatch.setattr(database, "DB_PATH", path)
+    run(database.init_db())
+    run(database.init_db())
+    assert glob.glob(path + ".pre-core8-005-*.bak") == []
