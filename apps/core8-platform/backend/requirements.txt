@@ -13,3 +13,4 @@ cryptography==48.0.0
 google-genai==2.4.0
 tzdata>=2025.2
 python-bidi==0.6.6
+Pillow==11.3.0
