@@ -330,14 +330,14 @@ async def get_messages(conversation_id: str):
 @app.websocket("/ws/{agent_id}")
 async def websocket_endpoint(websocket: WebSocket, agent_id: str):
     token = websocket.query_params.get("token", "")
-    # Accept either a valid JWT access token or the legacy bearer token (dev fallback)
+    # JWT is required outside local dev; the legacy static token is dev-only.
     ws_user = None
     try:
         from security.jwt_auth import decode_access_token
         ws_user = decode_access_token(token)
     except Exception:
-        # Fall back to legacy bearer token for local dev convenience
-        if not _verify_token(token):
+        # Static bearer fallback must never authenticate production WebSockets.
+        if not (cfg.dev_mode and _verify_token(token)):
             await websocket.close(code=4001)
             return
 
