@@ -17,7 +17,7 @@ items below are closed and PR #8 + this PR are merged.
 | 5 | Injection safeguards + human approval for sensitive actions | ✅ (partial by design) | Tool output with outside content is wrapped as untrusted data and scanned; a flagged result makes every later side-effecting call in that run require approval. **External actions (publish, Instagram connect, paid generation) always need human approval — even with `APPROVAL_MODE=off`**; with no approver connected they are refused. Regex detection is a tripwire, not a defence on its own (§5). End-to-end WebSocket tests show an external call (`queue_post`) never runs when the operator denies it, when the approval goes unanswered (fail-closed timeout), or when the answer is not a literal `true`, in every approval mode; it runs only after an explicit approval. These tests found and fixed a bug: approval answers were queued behind the waiting agent and never delivered, so every approval timed out (fail-closed, but approvals could not work). |
 | 6 | My Goddess localhost-only | ✅ | `server.py` binds `127.0.0.1:8420`, no `0.0.0.0`; regression test. No auth, so it must never be exposed. |
 | 7 | Tenant isolation of leads, messages, conversations, tools | 🟡 / 🔴 | ✅ Core platform: PR #8 (CORE8-005) — awaiting review. 🔴 **PR #9 Social Manager** adds 17 `sm_*` tables with **no tenant scoping** (§4). |
-| 8 | Checks re-run, risks documented | ✅ | This document. 98 backend tests pass; gitleaks / detect-secrets clean. |
+| 8 | Checks re-run, risks documented | ✅ | This document. 101 backend tests pass (incl. upgraded-database fail-closed tests from PR #8); gitleaks / detect-secrets clean. |
 
 ## 2. Secrets & customer data in cloud-synced storage (names and locations only)
 
@@ -72,7 +72,7 @@ Order matters: create new → deploy new → verify → revoke old → delete Dr
 ```bash
 cd apps/core8-platform/backend
 pip install -r requirements-dev.txt
-python -m pytest -q                      # 98 tests, incl. tests/test_security_gate.py, tests/test_tenancy.py
+python -m pytest -q                      # 101 tests, incl. tests/test_security_gate.py, tests/test_tenancy.py
 gitleaks detect --source . --log-opts="--all" --redact
 git grep -nIiE 'NEXT_PUBLIC_[A-Z0-9_]*(TOKEN|SECRET|KEY|PASSWORD|PRIVATE|CREDENTIAL)' -- ':!*.md'   # must be empty
 ```
