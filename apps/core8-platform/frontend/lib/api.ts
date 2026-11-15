@@ -58,7 +58,8 @@ export async function fetchMessages(conversationId: string): Promise<Message[]> 
 
 export function createWebSocket(agentId: string): WebSocket {
   const wsBase = API_BASE.replace(/^http/, "ws");
-  const token = getAccessToken() || process.env.NEXT_PUBLIC_BEARER_TOKEN || "";
+  // JWT only: never ship a static authentication token to the browser.
+  const token = getAccessToken() || "";
   return new WebSocket(`${wsBase}/ws/${agentId}?token=${encodeURIComponent(token)}`);
 }
 
