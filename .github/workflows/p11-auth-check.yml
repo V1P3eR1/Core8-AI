@@ -1,0 +1,35 @@
+name: P11 browser auth regression
+on:
+  pull_request:
+    paths:
+      - "apps/core8-platform/frontend/**"
+      - "apps/core8-platform/backend/**"
+      - "apps/core8-platform/docker-compose.yml"
+      - ".github/workflows/p11-auth-check.yml"
+permissions:
+  contents: read
+jobs:
+  no-public-bearer:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Ensure no browser-shipped legacy bearer configuration
+        run: |
+          if git grep -n 'NEXT_PUBLIC_BEARER_TOKEN' -- ':!*.md'; then
+            echo 'Forbidden public bearer token reference found.' >&2
+            exit 1
+          fi
+  frontend-build:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: apps/core8-platform/frontend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: apps/core8-platform/frontend/package-lock.json
+      - run: npm ci
+      - run: npm run build
