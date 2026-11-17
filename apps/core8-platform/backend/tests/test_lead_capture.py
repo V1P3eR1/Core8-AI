@@ -18,11 +18,19 @@ def _fresh_limits():
     lead_capture.reset_rate_limits()
 
 
-def _form(api, tid, h, **kw):
-    body = {"name": "Website", "consent_text_version": "2026-11-v1", **kw}
+CONSENT = "I agree that Core8 may contact me about my enquiry and store my details for that purpose."
+
+
+def _form(api, tid, h, approve=True, **kw):
+    body = {"name": "Website", "consent_text": CONSENT, "locale": "en", **kw}
     r = api.c.post(f"/api/tenants/{tid}/lead-forms", json=body, headers=h)
     assert r.status_code == 201, r.text
-    return r.json()["form_key"]
+    form = r.json()
+    assert form["active"] is False  # never live before the text is approved
+    if approve:
+        ct = form["consent_text"]["id"]
+        assert api.c.post(f"/api/tenants/{tid}/consent-texts/{ct}/approve", headers=h).status_code == 200
+    return form["form_key"]
 
 
 def _rows(sql, args=()):
@@ -30,8 +38,16 @@ def _rows(sql, args=()):
         return db.execute(sql, args).fetchall()
 
 
+def _shown(api, key):
+    """What the website renders before the visitor submits."""
+    r = api.c.get(f"/api/public/lead-forms/{key}")
+    return r.json()["consent_text_id"] if r.status_code == 200 else "ct_unknown"
+
+
 def _submit(api, key, body=None, **headers):
-    return api.c.post(f"/api/public/lead-forms/{key}/submit", json=body or GOOD, headers=headers)
+    body = dict(body or GOOD)
+    body.setdefault("consent_text_id", _shown(api, key))
+    return api.c.post(f"/api/public/lead-forms/{key}/submit", json=body, headers=headers)
 
 
 def test_submission_lands_in_the_forms_tenant_only_with_consent_record(api):
@@ -46,9 +62,12 @@ def test_submission_lands_in_the_forms_tenant_only_with_consent_record(api):
     leads = _rows("SELECT tenant_id, name, email, source FROM leads")
     assert leads == [(a, "Dana Levi", "dana@example.com", "web-form:Website")]
     assert not _rows("SELECT 1 FROM leads WHERE tenant_id=?", (b,))
-    consents = _rows("SELECT tenant_id, consent_text_version, ip_hash FROM lead_consents")
-    assert len(consents) == 1 and consents[0][:2] == (a, "2026-11-v1")
-    assert "testclient" not in consents[0][2]  # IP is hashed, not stored raw
+    consents = _rows("SELECT c.tenant_id, t.text, c.consent_sha256, c.ip_hash FROM lead_consents c "
+                     "JOIN consent_texts t ON t.id = c.consent_text_id")
+    assert len(consents) == 1 and consents[0][:2] == (a, CONSENT)
+    import hashlib
+    assert consents[0][2] == hashlib.sha256(CONSENT.encode()).hexdigest()
+    assert "testclient" not in consents[0][3]  # IP is hashed, not stored raw
 
 
 def test_request_cannot_choose_the_tenant(api):
@@ -124,7 +143,7 @@ def test_only_tenant_owner_manages_forms(api):
     owner = api.user("o@a.test")
     outsider = api.user("x@b.test")
     tid = api.tenant("A", "o@a.test")
-    body = {"name": "W", "consent_text_version": "v1"}
+    body = {"name": "W", "consent_text": CONSENT}
     assert api.c.post(f"/api/tenants/{tid}/lead-forms", json=body, headers=outsider).status_code == 404
     key = _form(api, tid, owner)
     assert api.c.get(f"/api/tenants/{tid}/lead-forms", headers=outsider).status_code == 404
@@ -134,7 +153,7 @@ def test_only_tenant_owner_manages_forms(api):
 
 
 def test_form_admin_requires_login(api):
-    assert api.c.post("/api/tenants/x/lead-forms", json={"name": "W", "consent_text_version": "v"}).status_code in (401, 403)
+    assert api.c.post("/api/tenants/x/lead-forms", json={"name": "W", "consent_text": CONSENT}).status_code in (401, 403)
 
 
 def test_no_personal_data_in_logs(api, caplog):
@@ -211,3 +230,81 @@ def test_nginx_overwrites_the_ip_header_the_backend_trusts():
     backend = compose.split("\n  frontend:")[0]
     assert "TRUST_PROXY_HEADERS=true" in backend
     assert "ports:" not in backend  # not published to the host; only nginx can reach it
+
+
+# ── Consent evidence (review on PR #14, 2026-11-17) ───────────────────────────
+
+NEW = "Updated: I agree that Core8 may contact me and keep my details for up to 24 months."
+
+
+def test_form_is_not_live_until_its_consent_text_is_approved(api):
+    owner = api.user("o@a.test")
+    tid = api.tenant("A", "o@a.test")
+    key = _form(api, tid, owner, approve=False)
+    assert api.c.get(f"/api/public/lead-forms/{key}").status_code == 404
+    assert _submit(api, key, {**GOOD, "consent_text_id": "anything"}).status_code == 404
+    assert not _rows("SELECT 1 FROM leads")
+
+
+def test_public_form_serves_the_exact_approved_text(api):
+    owner = api.user("o@a.test")
+    key = _form(api, api.tenant("A", "o@a.test"), owner)
+    shown = api.c.get(f"/api/public/lead-forms/{key}").json()
+    assert shown["consent_text"] == CONSENT and shown["locale"] == "en"
+    assert "tenant" not in str(shown).lower()
+
+
+def test_changing_the_disclosure_creates_a_new_version_and_old_submissions_are_refused(api):
+    owner = api.user("o@a.test")
+    tid = api.tenant("A", "o@a.test")
+    key = _form(api, tid, owner)
+    old_id = _shown(api, key)
+
+    r = api.c.put(f"/api/tenants/{tid}/lead-forms/{key}/consent-text",
+                  json={"consent_text": NEW, "locale": "en"}, headers=owner)
+    assert r.status_code == 200 and r.json()["active"] is False
+    new_id = r.json()["consent_text"]["id"]
+    assert new_id != old_id
+    # Not live again until the new text is approved.
+    assert _submit(api, key, {**GOOD, "consent_text_id": old_id}).status_code == 404
+    assert api.c.post(f"/api/tenants/{tid}/consent-texts/{new_id}/approve", headers=owner).status_code == 200
+
+    # A visitor who saw the old text cannot be recorded as agreeing to the new one.
+    assert _submit(api, key, {**GOOD, "consent_text_id": old_id}).status_code == 409
+    assert _submit(api, key, {**GOOD, "consent_text_id": "ct_forged"}).status_code == 409
+    assert not _rows("SELECT 1 FROM leads")
+    assert _submit(api, key, {**GOOD, "consent_text_id": new_id}).status_code == 202
+    assert _rows("SELECT t.text FROM lead_consents c JOIN consent_texts t ON t.id=c.consent_text_id") == [(NEW,)]
+
+    history = api.c.get(f"/api/tenants/{tid}/consent-texts", headers=owner).json()
+    assert [h["text"] for h in history] == [CONSENT, NEW]
+    assert all(h["approved_by"] for h in history)
+
+
+def test_consent_text_versions_are_immutable_and_approved_once(api):
+    owner = api.user("o@a.test")
+    tid = api.tenant("A", "o@a.test")
+    key = _form(api, tid, owner)
+    ct = _shown(api, key)
+    with sqlite3.connect(database.DB_PATH) as db:
+        with pytest.raises(sqlite3.IntegrityError):
+            db.execute("UPDATE consent_texts SET text='something else' WHERE id=?", (ct,))
+        with pytest.raises(sqlite3.IntegrityError):
+            db.execute("UPDATE consent_texts SET approved_by='someone' WHERE id=?", (ct,))
+    assert api.c.post(f"/api/tenants/{tid}/consent-texts/{ct}/approve", headers=owner).status_code == 409
+
+
+def test_only_the_tenant_owner_approves_and_other_tenants_cannot_see_texts(api):
+    owner = api.user("o@a.test")
+    editor = api.user("e@a.test")
+    outsider = api.user("x@b.test")
+    tid = api.tenant("A", "o@a.test")
+    api.c.post(f"/api/tenants/{tid}/members", json={"email": "e@a.test", "role": "editor"}, headers=owner)
+    key = _form(api, tid, owner, approve=False)
+    ct = api.c.get(f"/api/tenants/{tid}/lead-forms", headers=owner).json()[0]["consent_text"]["id"]
+    assert api.c.post(f"/api/tenants/{tid}/consent-texts/{ct}/approve", headers=editor).status_code == 403
+    assert api.c.post(f"/api/tenants/{tid}/consent-texts/{ct}/approve", headers=outsider).status_code == 404
+    assert api.c.get(f"/api/tenants/{tid}/consent-texts", headers=outsider).status_code == 404
+    other = api.tenant("B", "x@b.test")
+    assert api.c.post(f"/api/tenants/{other}/consent-texts/{ct}/approve", headers=outsider).status_code == 404
+    assert api.c.get(f"/api/public/lead-forms/{key}").status_code == 404
