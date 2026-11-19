@@ -21,6 +21,9 @@
     Array.prototype.forEach.call(document.querySelectorAll('[data-lang]'), function (b) { b.setAttribute('aria-pressed', String(b.getAttribute('data-lang') === lang)); });
     var status = document.getElementById('form-status');
     status.textContent = statusKey ? t(statusKey) : '';
+    var mail = document.getElementById('contact-email');
+    mail.textContent = C.config.email;
+    mail.setAttribute('href', 'mailto:' + C.config.email);
   }
 
   function setStatus(key, kind) {

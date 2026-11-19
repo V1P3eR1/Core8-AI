@@ -25,11 +25,21 @@ test('copy follows the content rules: no figures, prices, 24/7, guarantees or re
   for (const l of ['he', 'en']) {
     for (const [k, v] of Object.entries(C.strings[l])) {
       const text = v.replace(/Core8-AI/g, '');
+      if (k === 'hero.title') continue; // approved wording, checked separately below
       assert.ok(!/\d/.test(text), `${l}.${k} contains a figure: ${v}`);
       assert.ok(!/[%₪$€]/.test(text), `${l}.${k} contains a price or percentage sign`);
       assert.ok(!/guarantee|never miss|autopilot|fully autonomous|around the clock|מובטח|מבטיחים לך|ללא הפסקה|אוטונומי לחלוטין|מסביב לשעון/i.test(text), `${l}.${k} makes a banned claim`);
     }
   }
+});
+
+test('headline, supporting copy and CTA are verbatim from the brand brief', () => {
+  assert.equal(C.strings.he['hero.title'], 'פחות עבודה חוזרת. יותר זמן לעסק שלך.');
+  assert.equal(C.strings.he['hero.lead'], 'אנחנו ממפים תהליכים שחוזרים על עצמם, בוחנים היכן AI ואוטומציה יכולים לעזור, ובונים הדגמה ממוקדת לפני החלטה על הטמעה. היקף היכולות, המחיר והאינטגרציות נקבעים לאחר אפיון.');
+  assert.equal(C.strings.he['hero.cta'], 'קביעת שיחת אפיון');
+  assert.equal(C.strings.en['hero.title'], 'Less repetitive work. More time for your business.');
+  assert.equal(C.strings.en['hero.lead'], 'We map repetitive workflows, identify where AI and automation may help, and propose a scoped demonstration before implementation. Capabilities, integrations, and pricing are confirmed during discovery.');
+  assert.equal(C.strings.en['hero.cta'], 'Book a discovery conversation');
 });
 
 test('page is static: no remote URLs, no network or storage APIs, strict CSP, not indexed', () => {
@@ -52,7 +62,10 @@ test('page is static: no remote URLs, no network or storage APIs, strict CSP, no
 
 test('no contact details or credentials are committed; form endpoint is unset', () => {
   const all = FILES.map(read).join('\n');
-  assert.ok(!/[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}/.test(all), 'no email address');
+  // Exactly one contact address, the business mailbox Lev supplied; no phone yet.
+  const emails = [...new Set(all.match(/[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}/g) || [])];
+  assert.deepEqual(emails, ['office.core8ai@gmail.com']);
+  assert.equal(C.config.email, 'office.core8ai@gmail.com');
   assert.ok(!/\+?\d[\d\s().-]{7,}\d/.test(read('content.js') + read('index.html').replace(/content="[^"]*"/g, '')), 'no phone number');
   assert.ok(!/sk-ant-|AKIA[0-9A-Z]{16}|api[_-]?key\s*[:=]/i.test(all));
   assert.equal(C.config.formEndpoint, '');

@@ -31,17 +31,20 @@ async function check(name, fn) { try { await fn(); results.push('PASS  ' + name)
     assert.equal(await page.getAttribute('html', 'lang'), 'he');
     assert.match(await page.locator('[data-testid="draft-banner"]').innerText(), /טיוטת אב-טיפוס לאישור/);
     assert.equal(await page.locator('h1').count(), 1);
-    assert.equal(await page.locator('h1').innerText(), 'סוכני AI שעובדים בשבילך. אתה מאשר כל החלטה.');
+    assert.equal(await page.locator('h1').innerText(), 'פחות עבודה חוזרת. יותר זמן לעסק שלך.');
     assert.match(await page.title(), /Core8-AI/);
     assert.match(await page.locator('[data-testid="mock"]').innerText(), /המחשה בלבד/);
     assert.equal(await page.locator('[data-i18n]:empty').count(), 0, 'no untranslated element');
+    assert.equal(await page.locator('[data-testid="contact-email"]').innerText(), 'office.core8ai@gmail.com');
+    assert.equal(await page.getAttribute('[data-testid="contact-email"]', 'href'), 'mailto:office.core8ai@gmail.com');
+    assert.equal(await page.locator('a[href^="tel:"], a[href*="wa.me"]').count(), 0, 'no phone or WhatsApp link yet');
     await shot('01-desktop-he');
   });
 
   await check('English switch flips direction and every label', async () => {
     await page.click('[data-lang="en"]');
     assert.equal(await page.getAttribute('html', 'dir'), 'ltr');
-    assert.equal(await page.locator('h1').innerText(), 'AI agents that do the work. You approve every decision.');
+    assert.equal(await page.locator('h1').innerText(), 'Less repetitive work. More time for your business.');
     assert.match(await page.locator('[data-testid="price-note"]').innerText(), /no price list/);
     assert.equal(await page.getAttribute('[data-lang="en"]', 'aria-pressed'), 'true');
     assert.equal(await page.locator('[data-i18n]:empty').count(), 0);
