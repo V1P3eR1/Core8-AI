@@ -180,6 +180,11 @@ Reviewed after #8, #13, #14 and #25 were merged. Found and fixed (branch `fix/se
 Also: `require_admin` now fails closed when given no token payload. 10 new tests
 (`tests/test_security_review.py`); 147 backend tests pass.
 
+Follow-up: the per-IP lockout tables are now bounded (at most `MAX_TRACKED_IPS` = 20 000
+addresses; expired entries pruned first, then the least recently failing IPs evicted, active
+lockouts last), so failed logins from many addresses cannot grow memory without limit. 3 more
+tests; 150 backend tests pass.
+
 Still open (not code): lockouts and rate limits are per process (shared store needed before
 running more than one backend instance); tenant membership is checked when a chat connects, not
 re-checked mid-session; credential rotation and Drive cleanup (§2–3) remain with Lev.
