@@ -1,0 +1,32 @@
+# Self-contained variant for Hostinger's Docker manager (hPanel or API): it
+# builds straight from the public repository, so no checkout is needed on the
+# server. It publishes NO port: until a reverse proxy joins the "core8-edge"
+# network, the agent is unreachable from outside.
+#
+# It starts LOCKED. Set the password on the server:
+#   docker exec -it core8-lead-agent node tools/set-password.cjs
+services:
+  lead-agent:
+    container_name: core8-lead-agent
+    build:
+      context: https://github.com/V1P3eR1/Core8-AI.git#pilot/lead-triage-standalone:apps/lead-triage-pilot
+      dockerfile: deploy/Dockerfile
+    restart: unless-stopped
+    environment:
+      CORE8_PILOT_PUBLIC_HOST: agent.core8-ai.io
+    read_only: true
+    tmpfs: [/tmp]
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    mem_limit: 256m
+    pids_limit: 100
+    volumes:
+      - lead-agent-data:/data
+    networks: [core8-edge]
+
+volumes:
+  lead-agent-data:
+
+networks:
+  core8-edge:
+    name: core8-edge

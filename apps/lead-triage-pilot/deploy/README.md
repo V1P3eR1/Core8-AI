@@ -21,32 +21,33 @@ which only he can create.
 
 ## Steps
 
-1. DNS: add an `A` record `agent` → the VPS IPv4 address.
-2. On the server, get the code and create the env file:
+The container starts **locked**: it serves the sign-in page and refuses every
+login until the owner sets a password on the server. The password never
+travels through a config file, a chat or the Hostinger API.
+
+1. DNS: an `A` record `agent` → the VPS IPv4 address.
+2. Start the container. Either through Hostinger's Docker manager with
+   `deploy/docker-compose.hostinger.yml` (builds from the repository), or from a
+   checkout: `docker network create core8-edge && docker compose -f deploy/docker-compose.yml up -d --build`
+   (that variant reads `/etc/core8/lead-agent.env`; see `lead-agent.env.example`).
+3. Set the password (hidden prompt, typed twice):
    ```
-   sudo mkdir -p /etc/core8 && sudo cp deploy/lead-agent.env.example /etc/core8/lead-agent.env
-   sudo chmod 600 /etc/core8/lead-agent.env      # then fill it in
+   docker exec -it core8-lead-agent node tools/set-password.cjs
    ```
-3. Make the password hash (prompts without echo) and paste it into the env file:
-   ```
-   docker compose -f deploy/docker-compose.yml build
-   docker compose -f deploy/docker-compose.yml run --rm --no-deps lead-agent node tools/hash-password.cjs
-   ```
-4. Start it:
-   ```
-   docker network create core8-edge
-   docker compose -f deploy/docker-compose.yml up -d
-   ```
-5. Reverse proxy: add `deploy/Caddyfile.snippet` to the Caddy that owns ports
-   80/443, attach that Caddy container to the `core8-edge` network, reload Caddy.
-   This touches the platform's deploy files, so it is a separate reviewed change.
+   Run it again at any time to change the password; no restart is needed.
+4. Reverse proxy: add `deploy/Caddyfile.snippet` to the Caddy that owns ports
+   80/443 and attach that Caddy container to the `core8-edge` network. This
+   touches the platform's deploy files, so it is a separate reviewed change.
+5. Later, in the container's environment: `CORE8_LEAD_SECRET` (same value as in
+   the website's `server/lead-config.php`) and the two `CORE8_PILOT_IMAP_*`
+   values, then restart the container.
 6. Check: `https://agent.core8-ai.io` shows the sign-in page; after signing in,
    the mailbox line reads "Mailbox checked … (read-only)".
 
 ## Hardening already in place
 
 - No port is published on the host; only Caddy can reach the container.
-- The process refuses to start on a public address without a password, and
+- It starts locked until a password is set on the server, never open, and
   refuses to listen beyond loopback without a public host name.
 - Container: non-root user, read-only filesystem, all capabilities dropped,
   memory and process limits.

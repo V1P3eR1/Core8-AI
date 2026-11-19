@@ -1,6 +1,9 @@
 'use strict';
 const test = require('node:test');
 const assert = require('node:assert/strict');
+const fs = require('node:fs');
+const path = require('node:path');
+const { execFileSync } = require('node:child_process');
 const { createApp } = require('../server.cjs');
 const A = require('../lib/auth.cjs');
 const { tmpDir, raw } = require('./helpers.cjs');
@@ -111,5 +114,37 @@ test('local mode without a password stays open and says so', async () => {
   assert.equal(s.status, 200);
   assert.equal(s.json.config.loginRequired, false);
   assert.equal(s.headers['strict-transport-security'], undefined);
+  await app.close();
+});
+
+test('hash-file mode: starts locked, opens once the owner sets a password, follows a change without restart', async () => {
+  const dir = tmpDir();
+  const file = path.join(dir, 'password.hash');
+  const app = createApp({ dataDir: tmpDir(), quiet: true, auth: { publicHost: 'agent.example.com', passwordHashFile: file } });
+  const port = await app.listen(0);
+  const H = { Host: 'agent.example.com' };
+  const login = (password) => raw(port, { method: 'POST', path: '/api/login', body: { password }, headers: H });
+  const setPw = (pw) => execFileSync(process.execPath, [path.join(__dirname, '..', 'tools', 'set-password.cjs')],
+    { input: pw + '\n', env: Object.assign({}, process.env, { CORE8_PILOT_PASSWORD_HASH_FILE: file }), encoding: 'utf8' });
+
+  assert.equal(app.auth.passwordSet(), false);
+  assert.equal((await raw(port, { path: '/api/state', headers: H })).status, 401, 'locked, not open');
+  assert.equal((await raw(port, { path: '/login.html', headers: H })).status, 200);
+  for (let i = 0; i < 7; i += 1) assert.equal((await login(PASSWORD)).status, 503, 'no password works before one is set, and it does not trip the lockout');
+
+  fs.writeFileSync(file, 'not a hash\n');
+  assert.equal((await login(PASSWORD)).status, 503, 'a damaged file keeps it locked');
+
+  assert.throws(() => setPw('short'), /12 characters/);
+  assert.match(setPw(PASSWORD), /Password set/);
+  assert.equal(fs.statSync(file).mode & 0o777, 0o600);
+  assert.ok(!fs.readFileSync(file, 'utf8').includes(PASSWORD));
+  assert.equal((await login('wrong password!')).status, 401);
+  const ok = await login(PASSWORD);
+  assert.equal(ok.status, 200);
+
+  setPw('a different password');
+  assert.equal((await login(PASSWORD)).status, 401, 'the old password stops working at once');
+  assert.equal((await login('a different password')).status, 200);
   await app.close();
 });

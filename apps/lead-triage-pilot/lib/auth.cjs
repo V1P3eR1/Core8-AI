@@ -12,6 +12,7 @@
  *   keep the owner locked out; the benefit is that guessing stays slow.
  */
 const crypto = require('node:crypto');
+const fs = require('node:fs');
 
 const N = 16384, R = 8, P = 1, KEYLEN = 64;
 
@@ -39,8 +40,17 @@ function validHash(stored) { return /^scrypt\$\d+\$\d+\$\d+\$[A-Za-z0-9_-]{16,}\
 function createAuth(opts) {
   opts = opts || {};
   const clock = opts.clock || (() => new Date());
-  const hash = opts.passwordHash || '';
-  if (hash && !validHash(hash)) throw new Error('CORE8_PILOT_PASSWORD_HASH is not a valid hash. Create one with: node tools/hash-password.cjs');
+  const fixed = opts.passwordHash || '';
+  if (fixed && !validHash(fixed)) throw new Error('CORE8_PILOT_PASSWORD_HASH is not a valid hash. Create one with: node tools/hash-password.cjs');
+  // With a hash file, the tool starts locked: nobody can sign in until the owner
+  // sets a password on the server itself (node tools/set-password.cjs). The file
+  // is read at each sign-in, so setting or changing it needs no restart.
+  const hashFile = opts.passwordHashFile || '';
+  const currentHash = () => {
+    if (fixed) return fixed;
+    if (!hashFile) return '';
+    try { const h = fs.readFileSync(hashFile, 'utf8').trim(); return validHash(h) ? h : ''; } catch (e) { return ''; }
+  };
   const maxFailures = opts.maxFailures || 5;
   const lockMs = (opts.lockMinutes || 15) * 60000;
   const sessionMs = (opts.sessionHours || 12) * 3600000;
@@ -49,10 +59,13 @@ function createAuth(opts) {
   let lockedUntil = 0;
 
   return {
-    enabled: !!hash,
+    enabled: !!(fixed || hashFile),
+    passwordSet: () => !!currentHash(),
     login(password) {
       const now = clock().getTime();
       if (now < lockedUntil) return { ok: false, locked: true, retryAfterSeconds: Math.ceil((lockedUntil - now) / 1000) };
+      const hash = currentHash();
+      if (!hash) return { ok: false, locked: false, notSet: true };
       if (!verifyPassword(password, hash)) {
         failures += 1;
         if (failures >= maxFailures) { lockedUntil = now + lockMs; failures = 0; }

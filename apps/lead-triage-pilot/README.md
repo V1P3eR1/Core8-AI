@@ -114,7 +114,9 @@ Local use needs none of this. For a server:
 
 - `CORE8_PILOT_PUBLIC_HOST` + `CORE8_PILOT_PASSWORD_HASH` turn on sign-in
   (`public/login.html`). The process refuses to start on a public address
-  without a password. Make the hash with `node tools/hash-password.cjs`.
+  without a password. Make the hash with `node tools/hash-password.cjs`, or use
+  `CORE8_PILOT_PASSWORD_HASH_FILE` and `node tools/set-password.cjs`: the tool
+  then starts locked until the owner sets a password on the server.
 - `CORE8_PILOT_IMAP_USER` + `CORE8_PILOT_IMAP_PASS` (an app password) turn on a
   read-only mailbox check (`lib/mailbox.cjs`): `EXAMINE`, a server-side search
   for `[CORE8-LEAD]` in the subject, and `BODY.PEEK`. It cannot send, move,
@@ -126,12 +128,12 @@ Local use needs none of this. For a server:
 ## Tests
 
 ```
-npm test               # 46 tests: log integrity, triage engines, metrics, HTTP API, form-e-mail intake, sign-in, mailbox reader
+npm test               # 47 tests: log integrity, triage engines, metrics, HTTP API, form-e-mail intake, sign-in, mailbox reader
 npm run test:browser   # 13 + 5 browser checks; needs Playwright and Chrome
 ```
 
 Last recorded run (2026-11-19, Node 22.23.5, Playwright 1.63.0, Chrome 153,
-Linux): 46 of 46, 13 of 13 and 5 of 5 passed. One test parses a message produced by the
+Linux): 47 of 47, 13 of 13 and 5 of 5 passed. One test parses a message produced by the
 real PHP handler and verifies its signature. The mailbox reader is tested against
 a local fake IMAP server that records every command, to show only read-only
 commands are sent. Screenshots from that run, using made-up

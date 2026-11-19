@@ -23,6 +23,9 @@
  *   CORE8_PILOT_PUBLIC_HOST     public host name, e.g. agent.example.com. Setting it
  *                               makes a password mandatory and cookies HTTPS-only.
  *   CORE8_PILOT_PASSWORD_HASH   from `node tools/hash-password.cjs`
+ *   CORE8_PILOT_PASSWORD_HASH_FILE  alternative: a file holding the hash, written by
+ *                               `node tools/set-password.cjs`. Until it exists the tool
+ *                               runs locked: it serves the sign-in page and refuses every login.
  *   CORE8_PILOT_BIND            127.0.0.1 (default) or 0.0.0.0. The second is only for
  *                               running inside a container with no published port, and
  *                               is refused unless the public host and password are set.
@@ -63,15 +66,15 @@ function createApp(opts) {
   const leadSecret = opts.leadSecret || '';
   const authOpts = opts.auth || {};
   const publicHost = String(authOpts.publicHost || '').toLowerCase();
-  if (publicHost && !authOpts.passwordHash) {
-    throw new Error('CORE8_PILOT_PUBLIC_HOST is set but there is no password. Refusing to run on a public address without a login. Set CORE8_PILOT_PASSWORD_HASH.');
+  if (publicHost && !authOpts.passwordHash && !authOpts.passwordHashFile) {
+    throw new Error('CORE8_PILOT_PUBLIC_HOST is set but there is no password. Refusing to run on a public address without a login. Set CORE8_PILOT_PASSWORD_HASH or CORE8_PILOT_PASSWORD_HASH_FILE.');
   }
   const bindHost = opts.bindHost || '127.0.0.1';
   if (!['127.0.0.1', '0.0.0.0'].includes(bindHost)) throw new Error('CORE8_PILOT_BIND must be 127.0.0.1 or 0.0.0.0');
   if (bindHost !== '127.0.0.1' && !publicHost) {
     throw new Error('Refusing to listen beyond this machine without CORE8_PILOT_PUBLIC_HOST and a password.');
   }
-  const auth = createAuth({ passwordHash: authOpts.passwordHash, clock });
+  const auth = createAuth({ passwordHash: authOpts.passwordHash, passwordHashFile: authOpts.passwordHashFile, clock });
   const mailCfg = opts.mailbox && opts.mailbox.user && opts.mailbox.pass ? opts.mailbox : null;
   const fetchMail = (opts.mailbox && opts.mailbox.fetchImpl) || fetchLeadMessages;
   const mailState = { enabled: !!mailCfg, lastCheckAt: null, lastResult: null, lastError: null, checking: false };
@@ -289,6 +292,7 @@ function createApp(opts) {
         const r = auth.login(typeof body.password === 'string' ? body.password : '');
         if (r.ok) return send(res, 200, { ok: true }, null, { 'Set-Cookie': COOKIE + '=' + r.token + cookieFlags + '; Max-Age=' + r.maxAgeSeconds });
         if (r.locked) return send(res, 429, { error: 'Too many wrong passwords. Try again later.' }, null, { 'Retry-After': String(r.retryAfterSeconds) });
+        if (r.notSet) return send(res, 503, { error: 'No password has been set yet. The owner sets it on the server.' });
         return send(res, 401, { error: 'Wrong password' });
       }
       if (req.method === 'POST' && url.pathname === '/api/logout') {
@@ -337,7 +341,7 @@ if (require.main === module) {
     },
     leadSecret: process.env.CORE8_LEAD_SECRET || '',
     bindHost: process.env.CORE8_PILOT_BIND || '127.0.0.1',
-    auth: { publicHost: process.env.CORE8_PILOT_PUBLIC_HOST || '', passwordHash: process.env.CORE8_PILOT_PASSWORD_HASH || '' },
+    auth: { publicHost: process.env.CORE8_PILOT_PUBLIC_HOST || '', passwordHash: process.env.CORE8_PILOT_PASSWORD_HASH || '', passwordHashFile: process.env.CORE8_PILOT_PASSWORD_HASH_FILE || '' },
     mailbox: {
       user: process.env.CORE8_PILOT_IMAP_USER || '', pass: process.env.CORE8_PILOT_IMAP_PASS || '',
       host: process.env.CORE8_PILOT_IMAP_HOST || 'imap.gmail.com', port: Number(process.env.CORE8_PILOT_IMAP_PORT) || 993
@@ -350,7 +354,7 @@ if (require.main === module) {
       console.log('ANTHROPIC_API_KEY is not set, so the offline rules engine is in use.');
     }
     console.log('Intake: ' + (app.config.signedIntake ? 'signed lead e-mails only' : 'unsigned lead e-mails accepted (set CORE8_LEAD_SECRET to require a signature)'));
-    console.log('Login:  ' + (app.config.loginRequired ? 'password required' : 'OFF (local use only; never expose this port)'));
+    console.log('Login:  ' + (app.config.loginRequired ? (app.auth.passwordSet() ? 'password required' : 'LOCKED - no password set yet (run: node tools/set-password.cjs)') : 'OFF (local use only; never expose this port)'));
     if (app.config.publicHost) console.log('Public: https://' + app.config.publicHost + ' (through a TLS reverse proxy on this machine)');
     if (app.config.mailbox.enabled) {
       const minutes = Math.max(1, Number(process.env.CORE8_PILOT_IMAP_MINUTES) || 5);

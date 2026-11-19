@@ -7,6 +7,8 @@
  */
 const { hashPassword } = require('../lib/auth.cjs');
 
+module.exports = { readHidden };
+
 function readHidden(prompt) {
   return new Promise((resolve) => {
     if (!process.stdin.isTTY) {
@@ -27,7 +29,9 @@ function readHidden(prompt) {
   });
 }
 
-readHidden('New password (12+ characters, not shown): ').then((pw) => {
-  try { console.log(hashPassword(pw)); }
-  catch (e) { console.error(e.message); process.exit(1); }
-});
+if (require.main === module) {
+  readHidden('New password (12+ characters, not shown): ').then((pw) => {
+    try { console.log(hashPassword(pw)); }
+    catch (e) { console.error(e.message); process.exit(1); }
+  });
+}

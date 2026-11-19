@@ -5,6 +5,7 @@
 #   docker compose --env-file /etc/core8/lead-agent.env up -d --build
 services:
   lead-agent:
+    container_name: core8-lead-agent
     build:
       context: ..
       dockerfile: deploy/Dockerfile
