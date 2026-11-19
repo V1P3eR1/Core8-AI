@@ -90,3 +90,10 @@ database and writes a consistent copy next to it **before changing anything**:
 - **After verification:** delete the `.bak` file (or move it to encrypted, access-controlled
   backup storage). Never copy it to Drive or other synced folders.
 - Rehearse this once on a sanitized copy of the production database before the real upgrade.
+
+## First admin account
+
+Set `SETUP_KEY` (long random string) in the backend environment before the first start, then call
+`POST /api/auth/setup` with `email`, `password` and that `setup_key`. Without the key, setup is
+refused when `DEV_MODE=false`. The endpoint disables itself once a user exists; remove `SETUP_KEY`
+afterwards.

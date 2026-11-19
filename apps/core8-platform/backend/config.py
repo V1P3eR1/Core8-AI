@@ -19,6 +19,8 @@ class Config:
     jwt_secret: str = os.getenv("JWT_SECRET", "")
     jwt_access_ttl_minutes: int = int(os.getenv("JWT_ACCESS_TTL_MINUTES", "15"))
     jwt_refresh_ttl_days: int = int(os.getenv("JWT_REFRESH_TTL_DAYS", "7"))
+    # Required by POST /api/auth/setup outside dev mode (first admin account).
+    setup_key: str = os.getenv("SETUP_KEY", "")
 
     # off = run all tools freely; smart = auto-approve low-risk, gate high-risk; manual = gate every tool
     approval_mode: str = os.getenv("APPROVAL_MODE", "smart").lower()
