@@ -17,6 +17,7 @@ from pydantic import BaseModel, Field
 
 from config import cfg as platform_cfg
 from security.jwt_auth import require_jwt
+from tenancy import INTERNAL_TENANT_ID
 from tools.instagram_api import GraphAPIError, OAUTH_SCOPES, build_oauth_url
 
 from . import agents, carousel_render, content, jobs, leads, metrics, publishing, reports
@@ -627,7 +628,9 @@ async def instagram_status():
 @router.post("/instagram/connect-url")
 async def instagram_connect_url(payload: dict = Depends(require_jwt)):
     try:
-        url = build_oauth_url()
+        # Single-account tool: the connection always belongs to Core8's internal tenant, the
+        # same tenant the provider reads the account from.
+        url = build_oauth_url(INTERNAL_TENANT_ID)
     except GraphAPIError as e:
         raise HTTPException(400, str(e))
     await audit(_actor(payload), "instagram_connect_started", "instagram")

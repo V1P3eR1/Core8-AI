@@ -629,3 +629,21 @@ def test_social_manager_is_admin_only(api):
                       headers=member).status_code == 403
     assert api.c.get("/api/social/settings", headers=api.admin).status_code == 200
     assert api.c.get("/api/social/settings").status_code == 401
+
+
+def test_instagram_connect_url_is_bound_to_internal_tenant(s, monkeypatch):
+    """The connect route must build an OAuth URL (it raised TypeError after tenancy landed) and
+    bind the pending OAuth state to the internal tenant."""
+    from config import cfg
+    from tenancy import INTERNAL_TENANT_ID
+    from tools import instagram_api
+
+    monkeypatch.setattr(cfg, "meta_app_id", "")
+    assert s.req("post", "/api/social/instagram/connect-url").status_code == 400
+
+    monkeypatch.setattr(cfg, "meta_app_id", "1234567890")
+    instagram_api._PENDING_STATES.clear()
+    url = s.req("post", "/api/social/instagram/connect-url", 200).json()["connect_url"]
+    assert "client_id=1234567890" in url
+    (state, (_created, tenant_id)), = instagram_api._PENDING_STATES.items()
+    assert state in url and tenant_id == INTERNAL_TENANT_ID
