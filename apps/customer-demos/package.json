@@ -1,0 +1,11 @@
+{
+  "name": "core8-customer-demos",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Offline, mock-data customer demos for Core8-AI. Not a production app; no dependencies are needed to run the demos.",
+  "scripts": {
+    "test": "node --test tests/engine.test.cjs tests/static.test.cjs",
+    "test:browser": "node tests/browser.smoke.cjs",
+    "serve": "node tests/serve.cjs"
+  }
+}
