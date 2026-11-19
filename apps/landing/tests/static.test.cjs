@@ -71,6 +71,26 @@ test('page is static: no remote URLs, no network or storage APIs, strict CSP, no
   assert.ok(!/etx|oia/i.test(html + read('content.js')), 'no third-party platform credit');
 });
 
+test('privacy and accessibility pages are static drafts, bilingual, linked from the form and footer', () => {
+  for (const f of ['privacy.html', 'accessibility.html']) {
+    const html = read(f);
+    assert.ok(!/https?:\/\//i.test(html), f + ' has no remote URL');
+    assert.ok(!/<script/i.test(html), f + ' runs no script');
+    assert.match(html, /default-src 'none'/);
+    assert.match(html, /noindex, nofollow/);
+    assert.match(html, /class="draft"/);
+    assert.match(html, /<article lang="he" dir="rtl">/);
+    assert.match(html, /<article lang="en" dir="ltr">/);
+    assert.equal((html.match(/<h1>/g) || []).length, 2);
+  }
+  const p = read('privacy.html');
+  for (const must of [/אינו משתמש בעוגיות/, /no cookies, trackers or analytics/, /אדם מטעמנו בודק ומאשר/, /A person on our side reviews and approves/, /למחוק/, /delete/]) assert.match(p, must);
+  const index = read('index.html');
+  assert.match(index, /<a href="privacy\.html" data-i18n="form\.privacyLink"/);
+  assert.match(index, /<a href="privacy\.html" data-i18n="footer\.privacy">/);
+  assert.match(index, /<a href="accessibility\.html" data-i18n="footer\.accessibility">/);
+});
+
 test('no contact details or credentials are committed; form endpoint is unset', () => {
   const all = FILES.map(read).join('\n');
   // Exactly one contact address, the business mailbox Lev supplied; no phone yet.

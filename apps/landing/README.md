@@ -41,7 +41,9 @@ counters, and logs nothing personal. It has been tested in dry-run mode only:
 1. **Copy.** Lev chose the `docs/LEV_CORE8_BRAND_BRIEF.md` (PR #21) direction on
    2026-11-19: headline, supporting copy and primary CTA are used verbatim
    (enforced by a test). The other sections are still Claude's draft.
-2. **Consent wording and privacy policy.** The form shows a placeholder.
+2. **Consent wording and privacy policy.** Drafts are in place (`form.consent`,
+   `privacy.html`, `accessibility.html`); they need legal review and the
+   bracketed items filled in.
 3. **Form destination.** Lev chose e-mail to the business mailbox via
    `server/lead.php`. The platform's own endpoint (`docs/LAUNCH_READINESS.md`
    §9) remains the later option; the field names match it.
@@ -52,13 +54,36 @@ counters, and logs nothing personal. It has been tested in dry-run mode only:
 6. **Phone/WhatsApp number** once the new one is active. The page shows the
    business email only.
 
+## Publishing (owner only)
+
+Nothing in this repository publishes the site. The steps, in order:
+
+1. `npm run package` writes a **preview** build to `out/site/`: draft banner
+   on, search engines blocked. Safe to upload to a test address to look at it.
+2. Before launch, complete what `npm run package:launch` lists. It refuses to
+   build while any of these is open:
+   - `formEndpoint` and `consentTextId` set in `content.js`;
+   - every `[to complete]` placeholder in `privacy.html` and
+     `accessibility.html` filled in, after legal review.
+3. `npm run package:launch` writes the launch build: same files with the draft
+   banners and the search-engine block removed.
+4. Upload the **contents** of `out/site/` to the site's public folder on the
+   host, create `server/lead-config.php` there (never in git), then send one
+   test inquiry and confirm it arrives in the mailbox and not in spam.
+5. Point the domain at the host only after step 4 works.
+
+`privacy.html` and `accessibility.html` are drafts written by Claude. They
+describe what the page actually does (no cookies, form data e-mailed to the
+business mailbox, human approval of replies) but **have not been reviewed by a
+lawyer or an accessibility consultant**.
+
 ## Tests
 
 ```
-npm test               # 7 static checks + 6 PHP handler tests (handler tests skip without php)
-npm run test:browser   # 6 offline browser checks + 1 browser-to-PHP check; needs Playwright and Chrome
+npm test               # 8 static checks, 6 PHP handler tests (skipped without php), 3 packaging tests
+npm run test:browser   # 7 offline browser checks + 1 browser-to-PHP check; needs Playwright and Chrome
 ```
 
 Last recorded run (2026-11-19, Node 22.23.5, Playwright 1.63.0, Chrome 153,
-Linux): 13 of 13 and 7 of 7 passed (PHP 8.3.6). Screenshots: `docs/evidence/landing-prototype/`.
+Linux): 17 of 17 and 8 of 8 passed (PHP 8.3.6). Screenshots: `docs/evidence/landing-prototype/`.
 Not tested: Firefox, Safari, real phones, screen readers.

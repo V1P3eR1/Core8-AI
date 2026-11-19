@@ -127,6 +127,7 @@
         <!-- Honeypot: hidden from people, tempting to bots. Matches the platform's lead endpoint. -->
         <div class="hp" aria-hidden="true"><label for="f-website">Website</label><input id="f-website" name="website" type="text" tabindex="-1" autocomplete="off"></div>
         <label class="consent"><input id="f-consent" name="consent" type="checkbox" required><span data-i18n="form.consent"></span></label>
+        <p class="hint"><a href="privacy.html" data-i18n="form.privacyLink" data-testid="privacy-link"></a></p>
         <button type="submit" class="btn btn--primary" data-i18n="form.submit" data-testid="submit"></button>
         <p class="status" id="form-status" role="status" aria-live="polite" data-testid="form-status"></p>
       </form>
@@ -137,6 +138,7 @@
   <footer class="footer">
     <p><span lang="en" dir="ltr">© Core8-AI</span></p>
     <p data-i18n="footer.note"></p>
+    <p class="footer__links"><a href="privacy.html" data-i18n="footer.privacy"></a> · <a href="accessibility.html" data-i18n="footer.accessibility"></a></p>
   </footer>
 
   <script src="content.js"></script>

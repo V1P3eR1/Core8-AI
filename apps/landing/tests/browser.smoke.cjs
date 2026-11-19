@@ -86,6 +86,25 @@ async function check(name, fn) { try { await fn(); results.push('PASS  ' + name)
     assert.equal(await page.getAttribute('.hp', 'aria-hidden'), 'true');
   });
 
+  await check('privacy and accessibility pages open from the form and footer, in both languages, with no overflow', async () => {
+    await page.goto(url);
+    await page.click('[data-testid="privacy-link"]');
+    assert.match(page.url(), /privacy\.html$/);
+    assert.equal(await page.locator('article[lang="he"] h1').innerText(), 'מדיניות פרטיות');
+    assert.equal(await page.locator('article[lang="en"] h1').innerText(), 'Privacy policy');
+    assert.equal(await page.evaluate(() => getComputedStyle(document.querySelector('article[lang="en"]')).direction), 'ltr');
+    await shot('04-privacy-draft');
+    await page.goto(url);
+    await page.click('a[href="accessibility.html"]');
+    assert.equal(await page.locator('article[lang="he"] h1').innerText(), 'הצהרת נגישות');
+    for (const w of [1280, 390]) {
+      await page.setViewportSize({ width: w, height: 800 });
+      assert.ok(await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth) <= 0, 'overflow at ' + w);
+    }
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await page.goto(url);
+  });
+
   await check('390px wide: no horizontal overflow in either language', async () => {
     await page.setViewportSize({ width: 390, height: 844 });
     for (const l of ['he', 'en']) {
