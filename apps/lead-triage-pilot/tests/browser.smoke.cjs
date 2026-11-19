@@ -145,10 +145,50 @@ const waitId = (page, id, pattern) => waitText(page, `[data-testid="${id}"]`, pa
     assert.ok(!/דנה|סוכן|SEO|Sample lead|Vendor spam|demo<|img/.test(text), 'redacted');
   });
 
+  await check('a pasted website-form e-mail becomes a lead with contact, consent, source and meeting suggestions', async () => {
+    const { encodeLeadEmail } = require('../lib/intake.cjs');
+    const mail = encodeLeadEmail({ v: 1, id: 'abcdef0123456789', submitted_at: new Date(Date.now() - 120000).toISOString(), form: 'landing', lang: 'he',
+      name: 'דנה לדוגמה', company: 'חברה לדוגמה', email: 'dana@example.invalid', phone: '', message: 'נשמח לשיחת אפיון על אוטומציה של פניות', consent: true, consent_text_id: 'he-v1' }, '').body;
+    assert.match(await T(page, 'intake-mode').innerText(), /unsigned e-mails are accepted/);
+    await T(page, 'i-raw').fill('not a lead e-mail');
+    await T(page, 'intake').click();
+    await waitId(page, 'intake-error', /No CORE8 LEAD v1 block/);
+    await T(page, 'i-raw').fill(mail);
+    await T(page, 'intake').click();
+    await waitId(page, 'd-id', /L-0004/);
+    assert.equal(await T(page, 'd-name').innerText(), 'דנה לדוגמה');
+    assert.equal(await T(page, 'd-email').innerText(), 'dana@example.invalid');
+    assert.match(await T(page, 'd-consent').innerText(), /Given \(text he-v1\)/);
+    assert.match(await T(page, 'd-source').innerText(), /Website form — unsigned/);
+    assert.equal(await page.locator('[data-testid="d-slots"] li').count(), 3);
+    const before = await T(page, 'd-draft').inputValue();
+    await page.locator('[data-act="slot"]').first().click();
+    const after = await T(page, 'd-draft').inputValue();
+    assert.ok(after.length > before.length && /\d{2}:\d{2}$/.test(after), 'slot text appended to the draft');
+    await T(page, 'i-raw').fill(mail);
+    await T(page, 'intake').click();
+    await waitId(page, 'intake-error', /already imported/);
+    await shot('04-form-lead-with-slots');
+  });
+
+  await check('leads table lists every lead and exports a CSV with contact details', async () => {
+    assert.equal(await page.locator('[data-testid="crm"] tbody tr').count(), 4);
+    assert.match(await page.locator('[data-row="L-0004"]').innerText(), /דנה לדוגמה[\s\S]*חברה לדוגמה[\s\S]*dana@example\.invalid[\s\S]*Website form/);
+    const [dl] = await Promise.all([page.waitForEvent('download'), T(page, 'crm-csv').click()]);
+    const file = path.join(dataDir, 'crm.csv');
+    await dl.saveAs(file);
+    const lines = fs.readFileSync(file, 'utf8').replace(/^\ufeff/, '').trim().split('\r\n');
+    assert.equal(lines.length, 5, 'header + 4 leads');
+    assert.match(lines[0], /^ref,received_at,name,business,email,phone,/);
+    assert.ok(lines.some((l) => l.startsWith('L-0004,') && l.includes('dana@example.invalid') && l.includes('he-v1')));
+    await page.locator('[data-open="L-0001"]').click();
+    assert.equal(await T(page, 'd-id').innerText(), 'L-0001');
+  });
+
   await check('state survives a reload (it lives in the local log, not the browser)', async () => {
     await page.reload();
-    await waitText(page, '[data-metric="leads"] .metric__value', /3/);
-    assert.equal(await page.locator('[data-metric="leads"] .metric__value').innerText(), '3');
+    await waitText(page, '[data-metric="leads"] .metric__value', /4/);
+    assert.equal(await page.locator('[data-metric="leads"] .metric__value').innerText(), '4');
     assert.deepEqual(await context.cookies(), []);
     assert.equal(await page.evaluate(() => window.localStorage.length + window.sessionStorage.length), 0);
   });
@@ -165,9 +205,11 @@ const waitId = (page, id, pattern) => waitText(page, `[data-testid="${id}"]`, pa
   await check('no request left the machine; no console errors or CSP violations', async () => {
     assert.deepEqual(blocked, []);
     // The two deliberate invalid actions above each log one HTTP 400 in the console.
-    const unexpected = problems.filter((p) => !/status of 400/.test(p));
+    const unexpected = problems.filter((p) => !/status of 4(00|22)/.test(p));
     assert.deepEqual(unexpected, []);
-    assert.equal(problems.length, 2, 'exactly the two expected 400s');
+    const unprocessable = problems.filter((p) => /status of 422/.test(p));
+    assert.equal(problems.filter((p) => /status of 400/.test(p)).length, 2, 'exactly the two expected 400s');
+    assert.equal(unprocessable.length, 1, 'exactly the one expected 422');
   });
 
   await browser.close();

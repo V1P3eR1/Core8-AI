@@ -16,6 +16,8 @@
  *   CORE8_PILOT_ENGINE  "rules" (default) or "anthropic"
  *   CORE8_PILOT_MODEL   model id for the anthropic engine (default claude-sonnet-5-5)
  *   ANTHROPIC_API_KEY   read from the environment only; never written to disk or logs
+ *   CORE8_LEAD_SECRET   shared secret with the website form handler; when set, only
+ *                       signed lead e-mails are accepted
  */
 const http = require('node:http');
 const fs = require('node:fs');
@@ -24,6 +26,8 @@ const path = require('node:path');
 const { openStore } = require('./lib/store.cjs');
 const { createTriage, cleanText, MAX_DRAFT } = require('./lib/triage.cjs');
 const { computeMetrics, evidenceReport } = require('./lib/metrics.cjs');
+const { parseLeadEmail } = require('./lib/intake.cjs');
+const { proposeSlots } = require('./lib/slots.cjs');
 
 const PUBLIC = path.join(__dirname, 'public');
 const TYPES = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8' };
@@ -39,7 +43,8 @@ function createApp(opts) {
   const clock = opts.clock || (() => new Date());
   const store = openStore(opts.dataDir, { clock });
   const triage = createTriage(opts.triage || {});
-  const config = { engine: triage.engine, model: triage.model, channels: CHANNELS, dataDir: store.dir };
+  const leadSecret = opts.leadSecret || '';
+  const config = { engine: triage.engine, model: triage.model, channels: CHANNELS, dataDir: store.dir, signedIntake: !!leadSecret };
 
   function send(res, status, body, type) {
     const data = typeof body === 'string' || Buffer.isBuffer(body) ? body : JSON.stringify(body);
@@ -97,6 +102,8 @@ function createApp(opts) {
 
   async function runTriage(leadId, text) {
     const result = await triage.run(text);
+    // Suggest meeting times only where a conversation is the likely next step.
+    result.proposedSlots = ['support', 'not_a_lead'].includes(result.category) ? [] : proposeSlots(clock());
     store.append('triage_completed', leadId, result);
   }
 
@@ -124,6 +131,23 @@ function createApp(opts) {
       }
       const id = store.nextLeadId();
       store.append('lead_added', id, { text, channel, receivedAt, label: cleanText(body.label).slice(0, 80) || null });
+      await runTriage(id, text);
+      return send(res, 201, { lead: store.get(id) });
+    }
+    if (m === 'POST' && url.pathname === '/api/intake/email') {
+      const body = await readJson(req);
+      const parsed = parseLeadEmail(body.raw, { secret: leadSecret });
+      if (!parsed.ok) throw new HttpError(422, parsed.error);
+      const L = parsed.lead;
+      if (store.hasSubmission(L.submissionId)) return send(res, 200, { duplicate: true });
+      if (new Date(L.submittedAt) > new Date(clock().getTime() + 5 * 60 * 1000)) throw new HttpError(422, 'Submission time is in the future');
+      const id = store.nextLeadId();
+      const text = L.message || 'Discovery call request from the website form (no message).';
+      store.append('lead_added', id, {
+        text, channel: 'website_form', receivedAt: L.submittedAt, label: null,
+        contact: L.contact, consent: L.consent, submissionId: L.submissionId,
+        source: 'form_email', verified: parsed.verified, lang: L.lang
+      });
       await runTriage(id, text);
       return send(res, 201, { lead: store.get(id) });
     }
@@ -204,7 +228,8 @@ if (require.main === module) {
       apiKey: process.env.ANTHROPIC_API_KEY || '',
       model: process.env.CORE8_PILOT_MODEL || 'claude-sonnet-5-5',
       fetchImpl: globalThis.fetch
-    }
+    },
+    leadSecret: process.env.CORE8_LEAD_SECRET || ''
   });
   app.listen(Number(process.env.CORE8_PILOT_PORT) || 4180).then((port) => {
     console.log('Core8-AI lead-triage pilot  http://127.0.0.1:' + port + '/');
@@ -212,6 +237,7 @@ if (require.main === module) {
     if ((process.env.CORE8_PILOT_ENGINE || 'rules') === 'anthropic' && app.config.engine !== 'anthropic') {
       console.log('ANTHROPIC_API_KEY is not set, so the offline rules engine is in use.');
     }
+    console.log('Intake: ' + (app.config.signedIntake ? 'signed lead e-mails only' : 'unsigned lead e-mails accepted (set CORE8_LEAD_SECRET to require a signature)'));
     console.log('Data:   ' + app.store.file);
     console.log('This tool drafts replies only. It cannot send anything.');
   }).catch((err) => { console.error(err.message); process.exit(1); });

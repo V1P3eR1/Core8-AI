@@ -126,7 +126,7 @@ test('report endpoint is redacted', async () => {
 
 test('source has no sending capability and only one outbound URL', () => {
   const root = path.resolve(__dirname, '..');
-  const files = ['server.cjs', 'lib/store.cjs', 'lib/triage.cjs', 'lib/metrics.cjs', 'public/app.js', 'public/index.html', 'public/styles.css'];
+  const files = ['server.cjs', 'lib/store.cjs', 'lib/triage.cjs', 'lib/metrics.cjs', 'lib/intake.cjs', 'lib/slots.cjs', 'public/app.js', 'public/index.html', 'public/styles.css'];
   const src = Object.fromEntries(files.map((f) => [f, fs.readFileSync(path.join(root, f), 'utf8')]));
   const urls = [];
   for (const [f, text] of Object.entries(src)) for (const m of text.matchAll(/https?:\/\/[^\s'"<>)]+/g)) urls.push(f + ' ' + m[0]);

@@ -50,6 +50,17 @@
           </form>
         </section>
 
+        <section class="card" aria-labelledby="h-intake">
+          <h2 id="h-intake">Add a website-form e-mail</h2>
+          <form id="intake-form" novalidate>
+            <label for="i-raw">Paste the full text of a <span dir="ltr">[CORE8-LEAD]</span> e-mail</label>
+            <textarea id="i-raw" rows="4" dir="ltr" spellcheck="false" data-testid="i-raw"></textarea>
+            <p class="hint" id="intake-mode" data-testid="intake-mode"></p>
+            <button type="submit" class="btn" data-testid="intake">Import lead</button>
+            <p class="error" id="intake-error" role="alert" data-testid="intake-error"></p>
+          </form>
+        </section>
+
         <section class="card" aria-labelledby="h-queue">
           <h2 id="h-queue">Queue</h2>
           <div class="filters" role="group" aria-label="Filter by status" id="filters"></div>
@@ -62,6 +73,20 @@
         <p class="empty">Select an inquiry from the queue.</p>
       </section>
     </div>
+
+    <section class="card" aria-labelledby="h-crm">
+      <div class="crm__head">
+        <h2 id="h-crm">Leads table</h2>
+        <button type="button" class="btn" id="crm-csv" data-testid="crm-csv">Download table (CSV)</button>
+      </div>
+      <p class="hint">Stays on this computer. The CSV contains names and contact details: treat it as personal data.</p>
+      <div class="crm__wrap" tabindex="0" role="region" aria-labelledby="h-crm">
+        <table class="crm" data-testid="crm"><thead><tr>
+          <th scope="col">Ref</th><th scope="col">Received</th><th scope="col">Name</th><th scope="col">Business</th>
+          <th scope="col">Contact</th><th scope="col">Category</th><th scope="col">Status</th><th scope="col">Source</th>
+        </tr></thead><tbody id="crm-body"></tbody></table>
+      </div>
+    </section>
   </main>
 
   <script src="app.js"></script>

@@ -20,6 +20,9 @@
     has_placeholder_to_fill: 'Draft has a placeholder to fill in'
   };
 
+  var SOURCE = { manual: 'Typed in', form_email: 'Website form' };
+  var VERIFIED = { verified: 'signature verified', unsigned: 'unsigned', 'null': '' };
+
   function $(id) { return document.getElementById(id); }
   function el(tag, attrs, kids) {
     var n = document.createElement(tag);
@@ -69,6 +72,10 @@
       ? 'Audit log intact · ' + state.integrity.events + ' events'
       : 'AUDIT LOG BROKEN at event ' + state.integrity.brokenAt;
     chain.className = 'chain ' + (state.integrity.ok ? 'chain--ok' : 'chain--bad');
+
+    $('intake-mode').textContent = c.signedIntake
+      ? 'Only e-mails signed by the website form handler are accepted.'
+      : 'No shared secret is set, so unsigned e-mails are accepted and marked as such.';
 
     var sel = $('f-channel');
     if (!sel.options.length) {
@@ -131,6 +138,64 @@
     return el('div', { 'class': 'kv' }, [el('dt', { text: label }), el('dd', { 'data-testid': testid || '' }, [el('bdi', { text: value })])]);
   }
 
+  function slotLabel(s) {
+    var p = s.date.split('-').map(Number);
+    var d = new Date(p[0], p[1] - 1, p[2], 12);
+    return new Intl.DateTimeFormat('en-GB', { weekday: 'long', day: 'numeric', month: 'long' }).format(d) + ', ' + s.time;
+  }
+
+  function contactLine(l) {
+    if (!l.contact) return '—';
+    return [l.contact.email, l.contact.phone].filter(Boolean).join(' · ') || '—';
+  }
+
+  function renderCrm() {
+    var body = $('crm-body');
+    clear(body);
+    if (!state.leads.length) {
+      body.appendChild(el('tr', {}, [el('td', { colspan: '8', 'class': 'empty', text: 'No leads yet.' })]));
+      return;
+    }
+    state.leads.forEach(function (l) {
+      var cell = function (text, dirAuto) { return el('td', {}, [el('bdi', { text: text })]); };
+      var row = el('tr', { 'data-row': l.id }, [
+        el('td', {}, [el('button', { type: 'button', 'class': 'link', 'data-open': l.id, text: l.id })]),
+        cell(when(l.receivedAt || l.addedAt)),
+        cell(l.contact ? l.contact.name : (l.label || '—')),
+        cell(l.contact && l.contact.company ? l.contact.company : '—'),
+        cell(contactLine(l)),
+        cell(l.triage ? CATEGORY[l.triage.category] : '—'),
+        cell(STATUS[l.status]),
+        cell(SOURCE[l.source] + (l.verified ? ' (' + VERIFIED[l.verified] + ')' : ''))
+      ]);
+      body.appendChild(row);
+    });
+  }
+
+  function csvCell(v) {
+    var s = v === null || v === undefined ? '' : String(v);
+    if (/^[=+\-@\t\r]/.test(s)) s = "'" + s; // neutralise spreadsheet formulas
+    return /[",\n\r]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s;
+  }
+
+  function crmCsv() {
+    var head = ['ref', 'received_at', 'name', 'business', 'email', 'phone', 'channel', 'category', 'urgency', 'status', 'source', 'signature', 'consent_text_id', 'decision', 'sent_at'];
+    var rows = state.leads.map(function (l) {
+      var c = l.contact || {};
+      return [l.id, l.receivedAt || l.addedAt, c.name || l.label, c.company, c.email, c.phone, l.channel,
+        l.triage ? l.triage.category : '', l.triage ? l.triage.urgency : '', l.status, l.source, l.verified,
+        l.consent ? l.consent.textId : '', l.decision ? l.decision.action : '', l.sentAt];
+    });
+    return '\ufeff' + [head].concat(rows).map(function (r) { return r.map(csvCell).join(','); }).join('\r\n') + '\r\n';
+  }
+
+  function saveFile(name, body, type) {
+    var url = URL.createObjectURL(new Blob([body], { type: type }));
+    var a = el('a', { href: url, download: name });
+    document.body.appendChild(a); a.click(); document.body.removeChild(a);
+    setTimeout(function () { URL.revokeObjectURL(url); }, 1000);
+  }
+
   function renderDetail() {
     var root = $('detail');
     var keepDraft = root.querySelector('#d-draft');
@@ -150,8 +215,20 @@
       field('Category', l.triage ? CATEGORY[l.triage.category] : '—', 'd-category'),
       field('Urgency', l.triage ? l.triage.urgency : '—', 'd-urgency'),
       field('Drafted by', l.triage ? (l.triage.engine === 'anthropic' ? 'Live model (' + l.triage.model + ')' : 'Offline rules') : '—', 'd-engine'),
-      field('Why', l.triage ? l.triage.rationale : '—')
+      field('Why', l.triage ? l.triage.rationale : '—'),
+      field('Source', SOURCE[l.source] + (l.verified ? ' — ' + VERIFIED[l.verified] : ''), 'd-source')
     ]));
+
+    if (l.contact) {
+      root.appendChild(el('h3', { text: 'Contact (from the form)' }));
+      root.appendChild(el('dl', { 'class': 'kvs', 'data-testid': 'd-contact' }, [
+        field('Name', l.contact.name, 'd-name'),
+        field('Business', l.contact.company || '—'),
+        field('E-mail', l.contact.email || '—', 'd-email'),
+        field('Phone', l.contact.phone || '—'),
+        field('Consent', l.consent && l.consent.given ? 'Given' + (l.consent.textId ? ' (text ' + l.consent.textId + ')' : '') : '—', 'd-consent')
+      ]));
+    }
 
     root.appendChild(el('h3', { text: 'Inquiry' }));
     root.appendChild(el('p', { 'class': 'quote', dir: 'auto', 'data-testid': 'd-text', text: l.text }));
@@ -164,7 +241,18 @@
       root.appendChild(el('ul', { 'class': 'flags', 'data-testid': 'd-flags' }, flags.map(function (f) { return el('li', { text: FLAG[f] || f }); })));
     }
 
+    var slots = l.triage ? (l.triage.proposedSlots || []) : [];
     var decided = !!l.decision;
+    if (slots.length && !decided) {
+      root.appendChild(el('h3', { text: 'Suggested meeting times' }));
+      root.appendChild(el('ul', { 'class': 'slotlist', 'data-testid': 'd-slots' }, slots.map(function (s, i) {
+        return el('li', {}, [
+          el('span', { text: slotLabel(s) }),
+          el('button', { type: 'button', 'class': 'btn btn--tiny', 'data-act': 'slot', 'data-slot': String(i), text: 'Add to reply' })
+        ]);
+      })));
+      root.appendChild(el('p', { 'class': 'note', text: 'Built from fixed working hours only. This tool cannot see your calendar: check you are free before offering a time.' }));
+    }
     root.appendChild(el('label', { 'for': 'd-draft', text: decided ? (l.decision.action === 'reject' ? 'Draft (rejected)' : 'Approved reply') : 'Draft reply — edit freely before approving' }));
     var ta = el('textarea', { id: 'd-draft', rows: '10', maxlength: '1500', dir: 'auto', 'data-testid': 'd-draft' });
     ta.value = decided ? (l.decision.finalText || l.triage.draft) : (typed !== null ? typed : (l.triage ? l.triage.draft : ''));
@@ -195,7 +283,7 @@
     root.appendChild(el('p', { 'class': 'error', id: 'd-error', role: 'alert' }));
   }
 
-  function render() { renderChrome(); renderMetrics(); renderQueue(); renderDetail(); }
+  function render() { renderChrome(); renderMetrics(); renderQueue(); renderDetail(); renderCrm(); }
 
   /* ---------- events ---------- */
 
@@ -240,6 +328,14 @@
     else if (act === 'reject') p = call('POST', base + 'decision', { action: 'reject', reason: $('d-reason').value });
     else if (act === 'retriage') { $('d-draft').value = ''; $('detail').setAttribute('data-lead', ''); p = call('POST', base + 'retriage', {}); }
     else if (act === 'sent') p = call('POST', base + 'sent', {});
+    else if (act === 'slot') {
+      var lead = state.leads.filter(function (x) { return x.id === selectedId; })[0];
+      var s = lead.triage.proposedSlots[Number(b.getAttribute('data-slot'))];
+      var box = $('d-draft');
+      box.value = box.value.replace(/\s+$/, '') + '\n' + slotLabel(s);
+      box.focus();
+      return;
+    }
     else if (act === 'copy') {
       var ta = $('d-draft');
       ta.focus(); ta.select();
@@ -255,11 +351,31 @@
 
   $('report').addEventListener('click', function () {
     call('GET', '/api/report').then(function (report) {
-      var url = URL.createObjectURL(new Blob([JSON.stringify(report, null, 2) + '\n'], { type: 'application/json' }));
-      var a = el('a', { href: url, download: 'core8-lead-pilot-evidence-' + report.generatedAt.slice(0, 10) + '.json' });
-      document.body.appendChild(a); a.click(); document.body.removeChild(a);
-      setTimeout(function () { URL.revokeObjectURL(url); }, 1000);
+      saveFile('core8-lead-pilot-evidence-' + report.generatedAt.slice(0, 10) + '.json', JSON.stringify(report, null, 2) + '\n', 'application/json');
     });
+  });
+
+  $('intake-form').addEventListener('submit', function (e) {
+    e.preventDefault();
+    $('intake-error').textContent = '';
+    call('POST', '/api/intake/email', { raw: $('i-raw').value }).then(function (r) {
+      if (r.duplicate) { $('intake-error').textContent = 'This submission was already imported.'; return null; }
+      $('i-raw').value = '';
+      selectedId = r.lead.id; filter = 'needs_review';
+      return refresh();
+    }).catch(function (err) { fail('intake-error', err); });
+  });
+
+  $('crm-csv').addEventListener('click', function () {
+    saveFile('core8-leads-' + new Date().toISOString().slice(0, 10) + '.csv', crmCsv(), 'text/csv;charset=utf-8');
+  });
+
+  $('crm-body').addEventListener('click', function (e) {
+    var b = e.target.closest('[data-open]');
+    if (!b) return;
+    selectedId = b.getAttribute('data-open'); filter = 'all';
+    renderQueue(); renderDetail();
+    $('detail').scrollIntoView({ block: 'start' });
   });
 
   refresh();

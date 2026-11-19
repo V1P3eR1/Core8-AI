@@ -83,3 +83,13 @@ textarea[readonly] { color: var(--muted); }
 .kv dt { color: var(--muted); font-size: 0.82rem; }
 .kv dd { font-weight: 600; overflow-wrap: anywhere; }
 .quote { background: var(--sunken); border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; white-space: pre-wrap; overflow-wrap: anywhere; }
+
+.btn--tiny { min-height: 32px; padding: 3px 12px; font-size: 0.8rem; }
+.slotlist { display: grid; gap: 6px; }
+.slotlist li { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; justify-content: space-between; background: var(--sunken); border: 1px dashed var(--line); border-radius: 10px; padding: 6px 10px; font-size: 0.92rem; }
+.crm__head { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; justify-content: space-between; }
+.crm__wrap { overflow-x: auto; }
+.crm { width: 100%; border-collapse: collapse; font-size: 0.88rem; min-width: 760px; }
+.crm th, .crm td { text-align: start; padding: 8px 10px; border-bottom: 1px solid var(--line); vertical-align: top; }
+.crm th { color: var(--muted); font-weight: 600; font-size: 0.8rem; }
+.link { background: none; border: 0; padding: 0; color: var(--primary); font-weight: 800; cursor: pointer; text-decoration: underline; }

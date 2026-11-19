@@ -87,6 +87,8 @@ function openStore(dataDir, opts) {
         byId.set(e.leadId, {
           id: e.leadId, addedAt: e.at, receivedAt: e.data.receivedAt, channel: e.data.channel,
           label: e.data.label, text: e.data.text, status: 'new', triage: null, triageCount: 0,
+          contact: e.data.contact || null, consent: e.data.consent || null,
+          source: e.data.source || 'manual', verified: e.data.verified || null, submissionId: e.data.submissionId || null,
           decision: null, sentAt: null
         });
         continue;
@@ -112,6 +114,7 @@ function openStore(dataDir, opts) {
     dir, file, append, verify, leads,
     events: () => events.slice(),
     get: (id) => leads().find((l) => l.id === id) || null,
+    hasSubmission: (sid) => events.some((e) => e.type === 'lead_added' && e.data.submissionId === sid),
     nextLeadId: () => 'L-' + String(events.filter((e) => e.type === 'lead_added').length + 1).padStart(4, '0')
   };
 }

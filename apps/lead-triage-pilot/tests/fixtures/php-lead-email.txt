@@ -1,0 +1,13 @@
+New website inquiry (Core8-AI landing page).
+Open the lead-triage tool to review it.
+
+-----BEGIN CORE8 LEAD v1-----
+eyJ2IjoxLCJpZCI6IjY3ODNmZGU2MjQxYzBhZTUiLCJzdWJtaXR0ZWRfYXQi
+OiIyMDI2LTExLTE5VDE4OjI0OjA2WiIsImZvcm0iOiJsYW5kaW5nIiwibGFu
+ZyI6ImhlIiwibmFtZSI6IteT16DXlCDXnNeT15XXktee15QiLCJjb21wYW55
+Ijoi15fXkdeo15Qg15zXk9eV15LXnteUIiwiZW1haWwiOiJkYW5hQGV4YW1w
+bGUuaW52YWxpZCIsInBob25lIjoiIiwibWVzc2FnZSI6Itee16LXldeg15nX
+mdeg15nXnSDXkdep15nXl9eqINeQ16TXmdeV158iLCJjb25zZW50Ijp0cnVl
+LCJjb25zZW50X3RleHRfaWQiOiJoZS12MSJ9
+-----END CORE8 LEAD v1-----
+sig: bb2d6f523a4c0e7b25648a9dd0d92f5eba1088250749c2aa981073376dd40b0e

@@ -55,6 +55,34 @@ the offline rules draft is used and the reason is logged.
 Drafts that mention a price, a percentage, a promise or a link are flagged for
 the reviewer. Flags warn; they do not block.
 
+## Website-form leads
+
+The landing page's form handler (`apps/landing/server/lead.php`, PR #32) e-mails
+each submission to the business mailbox as a `CORE8 LEAD v1` message: a fixed
+subject tag `[CORE8-LEAD]` and one signed, machine-readable block.
+
+Today that e-mail is **pasted** into "Add a website-form e-mail". The tool
+checks the signature, refuses submissions without consent, ignores duplicates,
+and creates the lead with its contact details and consent record.
+
+```
+CORE8_LEAD_SECRET=<same secret as lead-config.php> node server.cjs
+```
+
+With the secret set, unsigned or altered e-mails are refused. Without it they
+are accepted and marked "unsigned".
+
+**Not built yet: reading the mailbox automatically.** That needs a decision on
+how the tool is given access to the mailbox and where it runs; until then a
+person copies the e-mail in.
+
+For leads where a conversation is the likely next step, the tool suggests three
+meeting times from fixed working hours (Sun–Thu). **It cannot see any
+calendar**; the times are unchecked suggestions.
+
+The **Leads table** lists every lead and exports a CSV. That CSV holds names and
+contact details and is personal data.
+
 ## The audit log
 
 Each line of `events.jsonl` is one event (`lead_added`, `triage_completed`,
@@ -83,15 +111,16 @@ took before the pilot, over a comparable period, and keep that record.
 ## Tests
 
 ```
-npm test               # 24 tests: log integrity, triage engines, metrics, HTTP API
-npm run test:browser   # 11 browser checks; needs Playwright and Chrome
+npm test               # 34 tests: log integrity, triage engines, metrics, HTTP API, form-e-mail intake
+npm run test:browser   # 13 browser checks; needs Playwright and Chrome
 ```
 
 Last recorded run (2026-11-19, Node 22.23.5, Playwright 1.63.0, Chrome 153,
-Linux): 24 of 24 and 11 of 11 passed. Screenshots from that run, using made-up
+Linux): 34 of 34 and 13 of 13 passed. One test parses a message produced by the
+real PHP handler and verifies its signature. Screenshots from that run, using made-up
 inquiries, are in `docs/evidence/lead-triage-pilot/`.
 
-Not tested: the real Anthropic API (no key was used; the adapter is exercised
+Not tested: a real mailbox or real e-mail delivery, the real Anthropic API (no key was used; the adapter is exercised
 with a stub), Windows, macOS, Firefox, Safari, screen readers.
 
 ## Before using it on real inquiries
