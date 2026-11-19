@@ -4,7 +4,7 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
-const { build, launchProblems, SITE_FILES } = require('../tools/package.cjs');
+const { build, launchProblems, prerender, SITE_FILES } = require('../tools/package.cjs');
 const ROOT = path.resolve(__dirname, '..');
 const tmp = () => fs.mkdtempSync(path.join(os.tmpdir(), 'core8-pkg-'));
 
@@ -59,4 +59,21 @@ test('once everything is completed, the launch build strips the draft banner and
   const before = fs.readFileSync(path.join(src, 'index.html'), 'utf8').split('\n').length;
   const after = fs.readFileSync(path.join(out, 'index.html'), 'utf8').split('\n').length;
   assert.equal(before - after, 3, 'exactly the comment, the robots tag and the banner were removed');
+  assert.match(fs.readFileSync(path.join(out, 'index.html'), 'utf8'), /<h1 data-i18n="hero\.title">[^<]+<\/h1>/);
+});
+
+test('built index.html carries the Hebrew text without JavaScript, for crawlers and link previews', () => {
+  const out = tmp();
+  build({ out });
+  const html = fs.readFileSync(path.join(out, 'index.html'), 'utf8');
+  assert.match(html, /<title>Core8-AI — פחות עבודה חוזרת\. יותר זמן לעסק שלך\.<\/title>/);
+  assert.match(html, /<h1 data-i18n="hero\.title">פחות עבודה חוזרת\. יותר זמן לעסק שלך\.<\/h1>/);
+  assert.match(html, /<meta name="description" content="אנחנו ממפים תהליכים[^"]+" data-i18n-content="meta\.description">/);
+  assert.match(html, /<meta property="og:title" content="Core8-AI — [^"]+"/);
+  assert.match(html, /<meta property="og:description" content="אנחנו ממפים[^"]+"/);
+  assert.equal((html.match(/data-i18n="[^"]+"><\//g) || []).length, 0, 'no element is left without text');
+  assert.match(html, /<html lang="he" dir="rtl">/);
+  // Text is escaped, and unknown keys stop the build instead of shipping blanks.
+  assert.equal(prerender('<p data-i18n="k"></p>', { k: '<b>&"', 'meta.title': 't' }), '<p data-i18n="k">&lt;b&gt;&amp;&quot;</p>');
+  assert.throws(() => prerender('<p data-i18n="nope"></p>', { 'meta.title': 't' }), /unknown text keys: nope/);
 });

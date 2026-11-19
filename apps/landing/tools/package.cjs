@@ -33,6 +33,22 @@ function launchProblems(root) {
   return problems;
 }
 
+const esc = (t) => String(t).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+
+// Writes the Hebrew text straight into the HTML. Without this the page is
+// empty for anything that does not run JavaScript: link previews in WhatsApp
+// and social networks, some search and AI crawlers, and visitors with scripts
+// blocked. app.js still takes over in the browser and handles the language switch.
+function prerender(html, strings) {
+  let missing = [];
+  const text = (k) => { if (!(k in strings)) { missing.push(k); return ''; } return esc(strings[k]); };
+  html = html.replace(/(<[a-z0-9]+\b[^>]*\sdata-i18n="([^"]+)"[^>]*>)(<\/)/g, (m, open, key, close) => open + text(key) + close);
+  html = html.replace(/content=""(\s+data-i18n-content="([^"]+)")/g, (m, rest, key) => 'content="' + text(key) + '"' + rest);
+  html = html.replace(/<title>[^<]*<\/title>/, '<title>' + text('meta.title') + '</title>');
+  if (missing.length) throw new Error('prerender: unknown text keys: ' + missing.join(', '));
+  return html;
+}
+
 function build(opts) {
   const root = opts.root || ROOT;
   const out = opts.out || path.join(root, 'out', 'site');
@@ -45,6 +61,10 @@ function build(opts) {
     const dest = path.join(out, f);
     fs.mkdirSync(path.dirname(dest), { recursive: true });
     let data = fs.readFileSync(path.join(root, f));
+    if (f === 'index.html') {
+      delete require.cache[require.resolve(path.join(root, 'content.js'))];
+      data = Buffer.from(prerender(data.toString('utf8'), require(path.join(root, 'content.js')).strings.he), 'utf8');
+    }
     if (opts.launch && f.endsWith('.html')) {
       data = Buffer.from(data.toString('utf8')
         .replace(/^\s*<!-- Prototype:[^\n]*-->\n/m, '')
@@ -59,7 +79,7 @@ function build(opts) {
   return { ok: true, out, files: SITE_FILES, launch: !!opts.launch };
 }
 
-module.exports = { build, launchProblems, SITE_FILES };
+module.exports = { build, launchProblems, prerender, SITE_FILES };
 
 if (require.main === module) {
   const launch = process.argv.includes('--launch');
