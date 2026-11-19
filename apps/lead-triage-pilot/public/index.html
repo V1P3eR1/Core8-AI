@@ -1,0 +1,69 @@
+<!doctype html>
+<html lang="en" dir="ltr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="robots" content="noindex, nofollow">
+  <title>Core8-AI — lead-triage pilot (local)</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <div class="banner" role="note" data-testid="banner">
+    <strong>PILOT · DRAFTS ONLY</strong>
+    <span>This tool cannot send anything. You copy an approved reply and send it yourself.</span>
+    <span class="banner__engine" id="engine" data-testid="engine"></span>
+  </div>
+
+  <header class="top">
+    <div class="brand"><span class="brand__mark" aria-hidden="true">8</span><span>Core8-AI</span><span class="brand__tag">Lead-triage pilot · local</span></div>
+    <div class="top__right">
+      <span class="chain" id="chain" data-testid="chain" role="status"></span>
+      <button type="button" class="btn" id="report" data-testid="report">Download evidence report</button>
+    </div>
+  </header>
+
+  <main>
+    <section class="metrics" aria-label="Pilot metrics" id="metrics" data-testid="metrics"></section>
+
+    <div class="cols">
+      <div class="col">
+        <section class="card" aria-labelledby="h-add">
+          <h2 id="h-add">Add an inquiry</h2>
+          <form id="add-form" novalidate>
+            <label for="f-text">Inquiry text, as received</label>
+            <textarea id="f-text" rows="6" maxlength="4000" dir="auto" required data-testid="f-text"></textarea>
+            <div class="row">
+              <div>
+                <label for="f-channel">Channel</label>
+                <select id="f-channel" data-testid="f-channel"></select>
+              </div>
+              <div>
+                <label for="f-received">Received at</label>
+                <input id="f-received" type="datetime-local" data-testid="f-received">
+              </div>
+            </div>
+            <label for="f-label">Your own short label (optional, stays local)</label>
+            <input id="f-label" type="text" maxlength="80" dir="auto" data-testid="f-label">
+            <p class="hint">Stored only in a file on this computer. With the offline engine nothing leaves it.</p>
+            <button type="submit" class="btn btn--primary" data-testid="add">Add and draft a reply</button>
+            <p class="error" id="add-error" role="alert"></p>
+          </form>
+        </section>
+
+        <section class="card" aria-labelledby="h-queue">
+          <h2 id="h-queue">Queue</h2>
+          <div class="filters" role="group" aria-label="Filter by status" id="filters"></div>
+          <ul class="queue" id="queue" data-testid="queue"></ul>
+        </section>
+      </div>
+
+      <section class="card detail" aria-labelledby="h-detail" id="detail" data-testid="detail">
+        <h2 id="h-detail">Review</h2>
+        <p class="empty">Select an inquiry from the queue.</p>
+      </section>
+    </div>
+  </main>
+
+  <script src="app.js"></script>
+</body>
+</html>
