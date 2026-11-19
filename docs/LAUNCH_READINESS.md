@@ -155,7 +155,7 @@ customer data needs Lev's separate approval.
 | `cd backend && pip install -r requirements-dev.txt && python -m pytest -q` | ✅ 131 passed |
 | `cd frontend && npm ci` | ✅ (uses the `package-lock.json` added in this PR, identical to PR #9's) |
 | `cd frontend && npx next build` | ✅ after adding the missing `components/ui/*` (shadcn) and `types/speech-recognition.d.ts`, the same files as PR #9. Before: build failed on missing imports |
-| `cd frontend && npx eslint .` | ❌ 8 errors, 2 warnings, all existing code: `react-hooks/set-state-in-effect` (data loading in `useEffect` in `SecurityDashboard`, `InstagramCalendar` and others), `prefer-const` (`ParticleBackground`), `react-hooks/refs`, 2× `exhaustive-deps`. Not runtime bugs; fix when the frontend is reworked, then add frontend lint/build to CI |
+| `cd frontend && npx eslint . --max-warnings 0` | ✅ 0 problems (was 8 errors, 2 warnings; fixed 2026-11-19). Now enforced in CI together with `next build` (`frontend-checks` workflow) |
 | `gitleaks detect --source . --log-opts="--all" --redact` | ✅ no leaks |
 
 ## 11. Who does what (issue #10)
@@ -163,3 +163,23 @@ customer data needs Lev's separate approval.
 - **Claude Code (this PR):** inventory, commands, blockers, lead-capture endpoint, proxy-IP fix.
 - **ChatGPT:** landing-page copy and the LEV brand brief (per issue #10); draft consent text and privacy policy for Lev's review.
 - **Lev:** blockers 1, 3 (hosting choice) and 5; approve consent text; decide on the Google Sheet leads.
+
+## 12. Security review pass on merged `main` (2026-11-19)
+
+Reviewed after #8, #13, #14 and #25 were merged. Found and fixed (branch `fix/security-review-pass`):
+
+| # | Finding | Severity | Fix |
+|---|---|---|---|
+| 1 | Any logged-in user (even a tenant viewer) could turn the global **kill switch** on or off | 🔴 High | Platform admins only |
+| 2 | Password login had **no lockout** — the 10-failures lockout only covered the legacy bearer token | 🔴 High | Same per-IP lockout on `/api/auth/login` (10 failures / 5 min → 15 min) |
+| 3 | On a fresh deployment, whoever called `/api/auth/setup` first became admin (`setup_key` was accepted but never checked) | 🔴 High | Outside dev mode `SETUP_KEY` must be configured and match; guesses are locked out |
+| 4 | Any logged-in user could create **global agents** (shared by all tenants) with any prompt and model | 🟡 Medium | Platform admins only |
+| 5 | `/api/admin/security-status` readable by any user; `/docs`, `/redoc`, `/openapi.json` public | 🟡 Low | Admin only; API docs served only in dev mode |
+| 6 | WebSocket errors sent raw exception text to the browser | 🟡 Low | Generic message; details stay in the server log |
+
+Also: `require_admin` now fails closed when given no token payload. 10 new tests
+(`tests/test_security_review.py`); 147 backend tests pass.
+
+Still open (not code): lockouts and rate limits are per process (shared store needed before
+running more than one backend instance); tenant membership is checked when a chat connects, not
+re-checked mid-session; credential rotation and Drive cleanup (§2–3) remain with Lev.

@@ -1,0 +1,33 @@
+name: frontend-checks
+
+on:
+  pull_request:
+    paths:
+      - "apps/core8-platform/frontend/**"
+      - ".github/workflows/frontend-checks.yml"
+  push:
+    branches: [main]
+    paths:
+      - "apps/core8-platform/frontend/**"
+
+permissions:
+  contents: read
+
+jobs:
+  lint-and-build:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: apps/core8-platform/frontend
+    env:
+      NEXT_TELEMETRY_DISABLED: "1"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: apps/core8-platform/frontend/package-lock.json
+      - run: npm ci --no-audit --no-fund
+      - run: npx eslint . --max-warnings 0
+      - run: npx next build
