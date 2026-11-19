@@ -172,5 +172,5 @@ async def require_jwt(request: Request) -> dict:
 
 def require_admin(payload: dict = None):
     """Use after require_jwt to enforce admin role."""
-    if payload and payload.get("role") != "admin":
+    if not payload or payload.get("role") != "admin":
         raise HTTPException(status_code=403, detail="Admin role required")

@@ -3,22 +3,22 @@ import os
 sys.path.insert(0, os.path.dirname(__file__))
 
 import asyncio
-import json
+import hmac
 import logging
 import uuid
 from contextlib import asynccontextmanager
 
 import aiosqlite
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect, Depends, HTTPException
+from fastapi import FastAPI, WebSocket, WebSocketDisconnect, Depends, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
 from config import cfg
 from database import init_db, get_db
-from security.auth import _verify_token
+from security.auth import _verify_token, _check_auth_rate, _record_auth_fail, client_ip
 from security.headers import SecurityHeadersMiddleware
-from security.approval import is_blocklisted, needs_approval, risk_level
+from security.approval import risk_level
 from security.jwt_auth import (
     require_jwt, require_admin,
     create_access_token, create_refresh_token,
@@ -112,7 +112,9 @@ async def lifespan(app: FastAPI):
 # A pending approval that gets no answer is denied after this long (fail closed).
 APPROVAL_TIMEOUT_SECONDS = 120.0
 
-app = FastAPI(title="Core8-AI", version="0.1.0", lifespan=lifespan)
+# Interactive API docs describe every endpoint; outside dev mode they are not served.
+_docs = {} if cfg.dev_mode else {"docs_url": None, "redoc_url": None, "openapi_url": None}
+app = FastAPI(title="Core8-AI", version="0.1.0", lifespan=lifespan, **_docs)
 
 app.add_middleware(SecurityHeadersMiddleware)
 app.add_middleware(
@@ -155,11 +157,34 @@ class RefreshRequest(BaseModel):
     refresh_token: str
 
 
+def _login_throttle(request: Request) -> str:
+    """Per-IP lockout for password guessing (10 failures / 5 min -> 15 min lockout)."""
+    ip = client_ip(request)
+    allowed, retry_after = _check_auth_rate(ip)
+    if not allowed:
+        raise HTTPException(status_code=429, detail="Too many failed attempts",
+                            headers={"Retry-After": str(int(retry_after))})
+    return ip
+
+
+async def admin_only(payload: dict = Depends(require_jwt)) -> dict:
+    require_admin(payload)
+    return payload
+
+
 @app.post("/api/auth/setup")
-async def setup_first_user(req: RegisterRequest):
-    """One-time endpoint to create the first admin. Disabled once any user exists."""
+async def setup_first_user(req: RegisterRequest, request: Request):
+    """One-time endpoint to create the first admin. Disabled once any user exists.
+
+    Outside dev mode the caller must present SETUP_KEY, so whoever reaches a fresh
+    deployment first cannot claim the admin account."""
     if await user_count() > 0:
         raise HTTPException(status_code=403, detail="Setup already complete")
+    if not cfg.dev_mode:
+        ip = _login_throttle(request)
+        if not cfg.setup_key or not hmac.compare_digest(req.setup_key.encode(), cfg.setup_key.encode()):
+            _record_auth_fail(ip)
+            raise HTTPException(status_code=403, detail="Valid setup key required")
     if len(req.password) < 8:
         raise HTTPException(status_code=400, detail="Password must be at least 8 characters")
     user = await create_user(req.email, req.password, role="admin")
@@ -170,9 +195,11 @@ async def setup_first_user(req: RegisterRequest):
 
 
 @app.post("/api/auth/login")
-async def login(req: LoginRequest):
+async def login(req: LoginRequest, request: Request):
+    ip = _login_throttle(request)
     user = await get_user_by_email(req.email)
     if not user or not verify_password(req.password, user["password_hash"]):
+        _record_auth_fail(ip)
         raise HTTPException(status_code=401, detail="Invalid credentials")
     await touch_last_login(user["id"])
     access = create_access_token(user["id"], user["email"], user["role"])
@@ -225,7 +252,7 @@ class KillSwitchRequest(BaseModel):
     active: bool
 
 
-@app.post("/api/admin/kill-switch", dependencies=[Depends(require_jwt)])
+@app.post("/api/admin/kill-switch", dependencies=[Depends(admin_only)])
 async def set_kill_switch(req: KillSwitchRequest):
     global _kill_switch_active
     _kill_switch_active = req.active
@@ -233,7 +260,7 @@ async def set_kill_switch(req: KillSwitchRequest):
     return {"kill_switch": _kill_switch_active}
 
 
-@app.get("/api/admin/security-status", dependencies=[Depends(require_jwt)])
+@app.get("/api/admin/security-status", dependencies=[Depends(admin_only)])
 async def security_status():
     return {
         "kill_switch": _kill_switch_active,
@@ -259,7 +286,8 @@ class CreateAgentRequest(BaseModel):
     model: str = "claude-sonnet-4-6"
 
 
-@app.post("/api/agents", dependencies=[Depends(require_jwt)])
+# Agents are global (shared by every tenant), so only platform admins create them.
+@app.post("/api/agents", dependencies=[Depends(admin_only)])
 async def create_agent(req: CreateAgentRequest):
     agent_id = req.name.lower().replace(" ", "-") + "-" + uuid.uuid4().hex[:6]
     async with get_db() as db:
@@ -477,7 +505,8 @@ async def websocket_endpoint(websocket: WebSocket, agent_id: str):
     except Exception as e:
         logger.error("WebSocket error: %s", e)
         try:
-            await websocket.send_json({"type": "error", "message": str(e)})
+            # Details stay in the server log; exception text can carry internals.
+            await websocket.send_json({"type": "error", "message": "Internal error"})
         except Exception:
             pass
     finally:
