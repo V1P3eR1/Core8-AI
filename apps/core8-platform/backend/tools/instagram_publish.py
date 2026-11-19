@@ -15,6 +15,7 @@ import uuid
 import aiosqlite
 
 from database import get_db
+from tenancy import current_tenant
 from tools.registry import ToolDef, registry
 
 _VALID_POST_TYPES = {"image", "reel", "carousel"}
@@ -69,12 +70,19 @@ async def queue_post(scheduled_for: str, media_url: str = "",
         primary_url = media_url.strip()
         media_urls_json = None
     post_id = str(uuid.uuid4())
+    tenant_id = current_tenant()
     async with get_db() as db:
+        if plan_id:
+            async with db.execute(
+                "SELECT 1 FROM content_plans WHERE tenant_id=? AND id=?", (tenant_id, plan_id),
+            ) as cur:
+                if await cur.fetchone() is None:
+                    return {"error": f"Content plan {plan_id} not found"}
         await db.execute(
             """INSERT INTO scheduled_posts
-                   (id, plan_id, post_type, media_url, media_urls, caption, scheduled_for)
-               VALUES (?, ?, ?, ?, ?, ?, ?)""",
-            (post_id, plan_id or None, post_type, primary_url, media_urls_json,
+                   (tenant_id, id, plan_id, post_type, media_url, media_urls, caption, scheduled_for)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
+            (tenant_id, post_id, plan_id or None, post_type, primary_url, media_urls_json,
              caption, when),
         )
         await db.commit()
@@ -88,13 +96,13 @@ async def list_scheduled_posts(status: str = "", limit: int = 50) -> list[dict]:
     async with get_db() as db:
         db.row_factory = aiosqlite.Row
         if status:
-            query = (f"SELECT {cols} FROM scheduled_posts WHERE status=? "
+            query = (f"SELECT {cols} FROM scheduled_posts WHERE tenant_id=? AND status=? "
                      "ORDER BY scheduled_for LIMIT ?")
-            args = (status, min(limit, 200))
+            args = (current_tenant(), status, min(limit, 200))
         else:
-            query = (f"SELECT {cols} FROM scheduled_posts "
+            query = (f"SELECT {cols} FROM scheduled_posts WHERE tenant_id=? "
                      "ORDER BY scheduled_for LIMIT ?")
-            args = (min(limit, 200),)
+            args = (current_tenant(), min(limit, 200))
         async with db.execute(query, args) as cur:
             rows = await cur.fetchall()
     return [_parse_media_urls(dict(r)) for r in rows]
@@ -104,7 +112,7 @@ async def cancel_scheduled_post(post_id: str) -> dict:
     async with get_db() as db:
         db.row_factory = aiosqlite.Row
         async with db.execute(
-            "SELECT status FROM scheduled_posts WHERE id=?", (post_id,),
+            "SELECT status FROM scheduled_posts WHERE tenant_id=? AND id=?", (current_tenant(), post_id),
         ) as cur:
             row = await cur.fetchone()
         if not row:
@@ -113,7 +121,7 @@ async def cancel_scheduled_post(post_id: str) -> dict:
             return {"error": f"Cannot cancel — post is '{row['status']}', not 'pending'."}
         await db.execute(
             "UPDATE scheduled_posts SET status='cancelled', updated_at=datetime('now') "
-            "WHERE id=?", (post_id,),
+            "WHERE tenant_id=? AND id=?", (current_tenant(), post_id),
         )
         await db.commit()
     return {"cancelled": post_id}
@@ -122,8 +130,11 @@ async def cancel_scheduled_post(post_id: str) -> dict:
 # ── Scheduler data layer (used by scheduler.py — not registry tools) ────────
 
 async def claim_due_posts(limit: int = 10) -> list[dict]:
-    """Pending posts whose scheduled_for (UTC) has passed. media_urls is parsed
-    from its JSON column for the scheduler."""
+    """Pending posts whose scheduled_for (UTC) has passed, across ALL tenants.
+
+    The only deliberately cross-tenant read: used by the scheduler, never exposed as a
+    tool. Each row carries tenant_id; the scheduler publishes it inside use_tenant(...).
+    media_urls is parsed from its JSON column."""
     async with get_db() as db:
         db.row_factory = aiosqlite.Row
         async with db.execute(
@@ -140,7 +151,7 @@ async def mark_publishing(post_id: str) -> None:
     async with get_db() as db:
         await db.execute(
             "UPDATE scheduled_posts SET status='publishing', updated_at=datetime('now') "
-            "WHERE id=?", (post_id,),
+            "WHERE tenant_id=? AND id=?", (current_tenant(), post_id),
         )
         await db.commit()
 
@@ -149,7 +160,8 @@ async def mark_published(post_id: str, ig_media_id: str) -> None:
     async with get_db() as db:
         await db.execute(
             "UPDATE scheduled_posts SET status='published', ig_media_id=?, "
-            "updated_at=datetime('now') WHERE id=?", (ig_media_id, post_id),
+            "updated_at=datetime('now') WHERE tenant_id=? AND id=?",
+            (ig_media_id, current_tenant(), post_id),
         )
         await db.commit()
 
@@ -161,18 +173,19 @@ async def mark_attempt_failed(post_id: str, error: str, give_up: bool) -> None:
         await db.execute(
             """UPDATE scheduled_posts
                SET status=?, attempts=attempts+1, last_error=?, updated_at=datetime('now')
-               WHERE id=?""",
-            ("failed" if give_up else "pending", error[:500], post_id),
+               WHERE tenant_id=? AND id=?""",
+            ("failed" if give_up else "pending", error[:500], current_tenant(), post_id),
         )
         await db.commit()
 
 
 async def count_published_last_24h() -> int:
-    """Posts published in the last 24h — backs the API rate cap (25/day)."""
+    """Posts this tenant published in the last 24h — backs the per-account API cap (25/day)."""
     async with get_db() as db:
         async with db.execute(
             "SELECT COUNT(*) FROM scheduled_posts "
-            "WHERE status='published' AND updated_at >= datetime('now','-1 day')",
+            "WHERE tenant_id=? AND status='published' AND updated_at >= datetime('now','-1 day')",
+            (current_tenant(),),
         ) as cur:
             row = await cur.fetchone()
     return row[0] if row else 0

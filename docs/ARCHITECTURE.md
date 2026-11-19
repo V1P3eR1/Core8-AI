@@ -76,6 +76,21 @@ Engine → AI Transformation Plan draft → role-scoped context for agents. REST
 `/ws/{agent_id}?token=…&tenant_id=…` receive the agent's scoped Brain context as a system
 block. Full design: [business-brain/DESIGN.md](business-brain/DESIGN.md).
 
+### Multi-tenancy (CORE8-005)
+One shared database; every operational row (`conversations`, `messages`, `leads`, `events`,
+`design_docs`, `content_plans`, `plan_artifacts`, `ig_accounts`, `scheduled_posts`,
+`media_assets`) and every Business Brain row carries `tenant_id`.
+- **Tenant context is server-side** (`tenancy.py`, `contextvars`): set per WebSocket session,
+  REST request (`?tenant_id=`), scheduler job and OAuth callback. Tools read it; the model can
+  never pass or change it. Data functions refuse to run without a tenant in context.
+- Sessions without `tenant_id` run in the **Core8 internal tenant** (`core8-internal`), which holds
+  all pre-multi-tenancy data. Platform admins own it implicitly; other staff need membership.
+- Instagram: one connected account per tenant; OAuth `state` is bound to the tenant that
+  started the connection; the scheduler publishes each post with its own tenant's account and
+  applies the 25/day cap per tenant; tokens refresh per tenant.
+- Media files live under `media/<tenant_id>/` (public by unguessable URL — Instagram must fetch them).
+- The only cross-tenant reads are system jobs (`claim_due_posts`, `list_accounts_for_refresh`), never tools.
+
 ### Frontend
 Single page (`app/page.tsx`) with: `LoginPage`, `AgentSidebar`, `ConversationList`,
 `ChatWindow`, `ApprovalModal`, `CreateAgentDialog`, `HistoryView`, `InstagramCalendar`,

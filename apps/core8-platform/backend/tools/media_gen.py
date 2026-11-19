@@ -1,7 +1,8 @@
 """Post-media pipeline — the media library and Gemini image generation.
 
-Media files live in backend/media/ (served by FastAPI in dev, nginx in prod)
-and are tracked in the media_assets table. Both uploaded and generated assets
+Media files live in backend/media/<tenant_id>/ (served by FastAPI in dev, nginx in
+prod) and are tracked in the media_assets table; `filename` holds the path relative to
+media/. Files are public by URL because Instagram must fetch them; names are random UUIDs. Both uploaded and generated assets
 produce a media_url that queue_post can publish.
 
 Generated images use Imagen via the Gemini API and are written as JPEG —
@@ -9,17 +10,21 @@ Instagram's publish API accepts JPEG for image posts.
 """
 
 import os
+import re
 import uuid
 
 import aiosqlite
 
 from config import cfg
 from database import get_db
+from tenancy import current_tenant
 from tools.registry import ToolDef, registry
 
 MEDIA_DIR = os.path.join(
     os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "media")
 os.makedirs(MEDIA_DIR, exist_ok=True)
+
+_SAFE_TENANT = re.compile(r"^[A-Za-z0-9_-]{1,64}$")
 
 IMAGEN_MODEL = "imagen-4.0-generate-001"
 _VALID_ASPECT = {"1:1", "3:4", "4:3", "9:16", "16:9"}
@@ -31,17 +36,21 @@ def _public_url(filename: str) -> str:
 
 async def save_media_asset(data: bytes, ext: str, source: str, media_type: str,
                            prompt: str = "", plan_id: str = "") -> dict:
-    """Write a media file to MEDIA_DIR and record it in media_assets."""
+    """Write a media file to MEDIA_DIR/<tenant_id>/ and record it in media_assets."""
+    tenant_id = current_tenant()
+    if not _SAFE_TENANT.match(tenant_id):
+        raise ValueError("unsafe tenant id for a media path")
     asset_id = str(uuid.uuid4())
-    filename = f"{asset_id}.{ext.lstrip('.')}"
+    filename = f"{tenant_id}/{asset_id}.{ext.lstrip('.')}"
+    os.makedirs(os.path.join(MEDIA_DIR, tenant_id), exist_ok=True)
     with open(os.path.join(MEDIA_DIR, filename), "wb") as f:
         f.write(data)
     async with get_db() as db:
         await db.execute(
             """INSERT INTO media_assets
-                   (id, filename, source, media_type, prompt, plan_id)
-               VALUES (?, ?, ?, ?, ?, ?)""",
-            (asset_id, filename, source, media_type, prompt, plan_id or None),
+                   (tenant_id, id, filename, source, media_type, prompt, plan_id)
+               VALUES (?, ?, ?, ?, ?, ?, ?)""",
+            (tenant_id, asset_id, filename, source, media_type, prompt, plan_id or None),
         )
         await db.commit()
     return {"id": asset_id, "filename": filename, "media_type": media_type,
@@ -87,13 +96,13 @@ async def list_media_assets(source: str = "", limit: int = 50) -> list[dict]:
     async with get_db() as db:
         db.row_factory = aiosqlite.Row
         if source:
-            query = (f"SELECT {cols} FROM media_assets WHERE source=? "
+            query = (f"SELECT {cols} FROM media_assets WHERE tenant_id=? AND source=? "
                      "ORDER BY created_at DESC LIMIT ?")
-            args = (source, min(limit, 200))
+            args = (current_tenant(), source, min(limit, 200))
         else:
-            query = (f"SELECT {cols} FROM media_assets "
+            query = (f"SELECT {cols} FROM media_assets WHERE tenant_id=? "
                      "ORDER BY created_at DESC LIMIT ?")
-            args = (min(limit, 200),)
+            args = (current_tenant(), min(limit, 200))
         async with db.execute(query, args) as cur:
             rows = await cur.fetchall()
     result = []

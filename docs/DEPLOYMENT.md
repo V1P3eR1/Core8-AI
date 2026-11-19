@@ -77,3 +77,16 @@ Localhost only — it has no authentication.
 - Hosting target for the platform (VPS + compose vs. managed: Fly/Render/Railway; Vercel for frontend).
 - SQLite → Supabase Postgres migration timing.
 - Whether `core8-ai.com` should point at the Netlify landing site or the platform.
+
+## Upgrading an existing database to multi-tenancy (CORE8-005)
+
+On the first start of a build that includes CORE8-005, the backend detects a pre-tenancy
+database and writes a consistent copy next to it **before changing anything**:
+`<DB_PATH>.pre-core8-005-<UTC timestamp>.bak` (mode 600; contains customer data; git-ignored).
+
+- **Verify:** log in, check leads/conversations/Instagram for the Core8 internal tenant.
+- **Rollback:** stop the stack, copy the `.bak` file over `DB_PATH`, deploy the previous build.
+  The upgrade can be re-run later from the restored file.
+- **After verification:** delete the `.bak` file (or move it to encrypted, access-controlled
+  backup storage). Never copy it to Drive or other synced folders.
+- Rehearse this once on a sanitized copy of the production database before the real upgrade.

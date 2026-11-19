@@ -9,6 +9,7 @@ import asyncio
 import logging
 
 from tools import instagram_api
+from tenancy import use_tenant
 from tools.instagram_accounts import get_ig_account
 from tools.instagram_publish import (
     claim_due_posts, count_published_last_24h,
@@ -61,20 +62,29 @@ async def run_scheduler_tick(is_killed) -> None:
     due = await claim_due_posts()
     if not due:
         return
-    account = await get_ig_account()
-    if account is None:
-        logger.warning("%d post(s) due but no Instagram account is connected", len(due))
-        return
-    published_today = await count_published_last_24h()
+    # Group by tenant: each tenant has its own Instagram account and its own daily cap.
+    by_tenant: dict[str, list[dict]] = {}
     for post in due:
+        by_tenant.setdefault(post["tenant_id"], []).append(post)
+    for tenant_id, posts in by_tenant.items():
         if is_killed():
             break
-        if published_today >= DAILY_PUBLISH_CAP:
-            logger.warning("Daily publish cap (%d) reached — deferring the rest",
-                           DAILY_PUBLISH_CAP)
-            break
-        if await _publish_one(post, account):
-            published_today += 1
+        with use_tenant(tenant_id):
+            account = await get_ig_account()
+            if account is None:
+                logger.warning("tenant=%s: %d post(s) due but no Instagram account is connected",
+                               tenant_id, len(posts))
+                continue
+            published_today = await count_published_last_24h()
+            for post in posts:
+                if is_killed():
+                    break
+                if published_today >= DAILY_PUBLISH_CAP:
+                    logger.warning("tenant=%s: daily publish cap (%d) reached — deferring the rest",
+                                   tenant_id, DAILY_PUBLISH_CAP)
+                    break
+                if await _publish_one(post, account):
+                    published_today += 1
 
 
 async def _scheduler_loop(is_killed) -> None:
