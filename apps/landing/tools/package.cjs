@@ -15,7 +15,7 @@ const path = require('node:path');
 
 const ROOT = path.resolve(__dirname, '..');
 const SITE_FILES = ['index.html', 'privacy.html', 'accessibility.html', 'styles.css', 'app.js', 'content.js',
-  'assets/logo-mark.svg', 'assets/favicon.svg', 'server/lead.php'];
+  'assets/logo-mark.svg', 'assets/favicon.svg', 'server/lead.php', 'server/.htaccess'];
 
 function launchProblems(root) {
   const problems = [];

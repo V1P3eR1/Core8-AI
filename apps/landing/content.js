@@ -17,7 +17,8 @@
     langs: { he: { dir: 'rtl', label: 'עברית' }, en: { dir: 'ltr', label: 'English' } },
     // Set by the owner before launch. Empty formEndpoint = the form stays in
     // preview mode and sends nothing. On PHP hosting use 'server/lead.php', and
-    // set consentTextId to the id of the approved consent wording.
+    // set consentTextId to the version of the approved consent wording (e.g. 'v1').
+    // The page sends '<language>-<version>', e.g. 'he-v1'; the handler must list both.
     config: { formEndpoint: '', consentTextId: '', email: 'office.core8ai@gmail.com' },
     strings: {
       he: {

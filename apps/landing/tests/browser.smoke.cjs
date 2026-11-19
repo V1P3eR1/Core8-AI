@@ -143,7 +143,7 @@ async function check(name, fn) { try { await fn(); results.push('PASS  ' + name)
         const p2 = await ctx.newPage();
         p2.on('pageerror', (e) => errs.push(e.message));
         for (let i = 0; i < 50; i++) { try { await p2.goto(origin + '/index.html'); break; } catch (e) { await new Promise((r) => setTimeout(r, 100)); } }
-        await p2.evaluate(() => { window.Core8Landing.config.formEndpoint = 'server/lead.php'; window.Core8Landing.config.consentTextId = 'he-v1'; });
+        await p2.evaluate(() => { window.Core8Landing.config.formEndpoint = 'server/lead.php'; window.Core8Landing.config.consentTextId = 'v1'; });
         await p2.fill('#f-name', 'דנה לדוגמה');
         await p2.fill('#f-email', 'dana@example.invalid');
         await p2.fill('#f-message', 'מעוניינים בשיחת אפיון');

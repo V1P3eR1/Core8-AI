@@ -43,7 +43,7 @@ test('once everything is completed, the launch build strips the draft banner and
   const src = tmp();
   copyTree(src);
   const edit = (f, fn) => fs.writeFileSync(path.join(src, f), fn(fs.readFileSync(path.join(src, f), 'utf8')));
-  edit('content.js', (s) => s.replace("formEndpoint: ''", "formEndpoint: 'server/lead.php'").replace("consentTextId: ''", "consentTextId: 'he-v1'"));
+  edit('content.js', (s) => s.replace("formEndpoint: ''", "formEndpoint: 'server/lead.php'").replace("consentTextId: ''", "consentTextId: 'v1'"));
   for (const f of ['privacy.html', 'accessibility.html']) edit(f, (s) => s.replace(/\[[^\]]*\]/g, 'done'));
   assert.deepEqual(launchProblems(src), []);
   const out = path.join(src, 'out', 'site');

@@ -71,7 +71,7 @@
       body: JSON.stringify({
         name: name, company: f.elements.company.value.trim(), email: email, phone: phone,
         message: f.elements.message.value.trim(), website: f.elements.website.value,
-        consent: true, consent_text_id: C.config.consentTextId, lang: lang
+        consent: true, consent_text_id: lang + '-' + C.config.consentTextId, lang: lang
       })
     }).then(function (res) {
       if (res.status === 202) { f.reset(); return setStatus('form.sent', 'ok'); }
