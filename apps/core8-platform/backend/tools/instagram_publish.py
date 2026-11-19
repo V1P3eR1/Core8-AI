@@ -130,7 +130,10 @@ async def cancel_scheduled_post(post_id: str) -> dict:
 # ── Scheduler data layer (used by scheduler.py — not registry tools) ────────
 
 async def claim_due_posts(limit: int = 10) -> list[dict]:
-    """Pending posts whose scheduled_for (UTC) has passed, across ALL tenants.
+    """Up to `limit` due pending posts PER tenant, across all tenants.
+
+    A blocked tenant must not fill a global batch and starve other tenants.
+    This is a read, not an atomic claim; the scheduler remains single-worker.
 
     The only deliberately cross-tenant read: used by the scheduler, never exposed as a
     tool. Each row carries tenant_id; the scheduler publishes it inside use_tenant(...).
@@ -138,9 +141,17 @@ async def claim_due_posts(limit: int = 10) -> list[dict]:
     async with get_db() as db:
         db.row_factory = aiosqlite.Row
         async with db.execute(
-            """SELECT * FROM scheduled_posts
-               WHERE status='pending' AND scheduled_for <= datetime('now')
-               ORDER BY scheduled_for LIMIT ?""",
+            """SELECT p.* FROM scheduled_posts AS p
+               JOIN (
+                   SELECT tenant_id, id,
+                          ROW_NUMBER() OVER (
+                              PARTITION BY tenant_id ORDER BY scheduled_for, id
+                          ) AS tenant_position
+                   FROM scheduled_posts
+                   WHERE status='pending' AND scheduled_for <= datetime('now')
+               ) AS due ON due.tenant_id=p.tenant_id AND due.id=p.id
+               WHERE due.tenant_position <= ?
+               ORDER BY due.tenant_position, p.scheduled_for, p.tenant_id, p.id""",
             (limit,),
         ) as cur:
             rows = await cur.fetchall()
@@ -243,3 +254,4 @@ def register_instagram_publish_tools():
         },
         handler=cancel_scheduled_post,
     ))
+

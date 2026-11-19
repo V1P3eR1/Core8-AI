@@ -344,6 +344,11 @@ async def websocket_endpoint(websocket: WebSocket, agent_id: str):
         if op_access is None:
             await websocket.close(code=4004)
             return
+        # Chat executes tools and writes conversation data. Read-only members
+        # may inspect history through REST, but cannot start an agent session.
+        if op_access.role not in {"editor", "owner"}:
+            await websocket.close(code=4003)
+            return
         tenant_access = op_access if tenant_id else None
     elif tenant_id:
         await websocket.close(code=4001)
@@ -478,3 +483,4 @@ async def websocket_endpoint(websocket: WebSocket, agent_id: str):
     finally:
         receiver_task.cancel()
         logger.info("WebSocket disconnected: conv=%s", conversation_id)
+
