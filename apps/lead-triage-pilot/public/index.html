@@ -19,6 +19,7 @@
     <div class="top__right">
       <span class="chain" id="chain" data-testid="chain" role="status"></span>
       <button type="button" class="btn" id="report" data-testid="report">Download evidence report</button>
+      <button type="button" class="btn" id="logout" data-testid="logout" hidden>Sign out</button>
     </div>
   </header>
 
@@ -59,6 +60,10 @@
             <button type="submit" class="btn" data-testid="intake">Import lead</button>
             <p class="error" id="intake-error" role="alert" data-testid="intake-error"></p>
           </form>
+          <div class="mailbox" id="mailbox" data-testid="mailbox" hidden>
+            <p class="hint mailbox__status" id="mailbox-status" role="status" data-testid="mailbox-status"></p>
+            <button type="button" class="btn" id="mailbox-check" data-testid="mailbox-check">Check mailbox now</button>
+          </div>
         </section>
 
         <section class="card" aria-labelledby="h-queue">

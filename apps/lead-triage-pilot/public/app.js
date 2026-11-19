@@ -48,6 +48,7 @@
       headers: body ? { 'Content-Type': 'application/json' } : {},
       body: body ? JSON.stringify(body) : undefined
     }).then(function (res) {
+      if (res.status === 401) { window.location.replace('/login.html'); return new Promise(function () {}); }
       return res.json().then(function (data) {
         if (!res.ok) throw new Error(data.error || 'Request failed');
         return data;
@@ -72,6 +73,17 @@
       ? 'Audit log intact · ' + state.integrity.events + ' events'
       : 'AUDIT LOG BROKEN at event ' + state.integrity.brokenAt;
     chain.className = 'chain ' + (state.integrity.ok ? 'chain--ok' : 'chain--bad');
+
+    $('logout').hidden = !c.loginRequired;
+    var mb = c.mailbox || {};
+    $('mailbox').hidden = !mb.enabled;
+    if (mb.enabled) {
+      var r = mb.lastResult;
+      $('mailbox-status').textContent = mb.lastError
+        ? 'Mailbox check failed at ' + when(mb.lastCheckAt) + ': ' + mb.lastError
+        : !mb.lastCheckAt ? 'Mailbox reading is on (read-only). Not checked yet.'
+        : 'Mailbox checked ' + when(mb.lastCheckAt) + ' (read-only): ' + r.created + ' new, ' + r.duplicates + ' already imported, ' + r.rejected + ' rejected.';
+    }
 
     $('intake-mode').textContent = c.signedIntake
       ? 'Only e-mails signed by the website form handler are accepted.'
@@ -364,6 +376,17 @@
       selectedId = r.lead.id; filter = 'needs_review';
       return refresh();
     }).catch(function (err) { fail('intake-error', err); });
+  });
+
+  $('logout').addEventListener('click', function () {
+    call('POST', '/api/logout', {}).then(function () { window.location.replace('/login.html'); });
+  });
+
+  $('mailbox-check').addEventListener('click', function () {
+    var b = $('mailbox-check');
+    b.disabled = true;
+    call('POST', '/api/mailbox/check', {}).then(refresh).catch(function (err) { $('mailbox-status').textContent = err.message; })
+      .then(function () { b.disabled = false; });
   });
 
   $('crm-csv').addEventListener('click', function () {

@@ -18,6 +18,19 @@
  *   ANTHROPIC_API_KEY   read from the environment only; never written to disk or logs
  *   CORE8_LEAD_SECRET   shared secret with the website form handler; when set, only
  *                       signed lead e-mails are accepted
+ *
+ * Running on a server (behind a TLS reverse proxy on the same machine):
+ *   CORE8_PILOT_PUBLIC_HOST     public host name, e.g. agent.example.com. Setting it
+ *                               makes a password mandatory and cookies HTTPS-only.
+ *   CORE8_PILOT_PASSWORD_HASH   from `node tools/hash-password.cjs`
+ *   CORE8_PILOT_BIND            127.0.0.1 (default) or 0.0.0.0. The second is only for
+ *                               running inside a container with no published port, and
+ *                               is refused unless the public host and password are set.
+ *
+ * Reading the business mailbox (read-only IMAP):
+ *   CORE8_PILOT_IMAP_USER / CORE8_PILOT_IMAP_PASS   mailbox address and an app password
+ *   CORE8_PILOT_IMAP_HOST (imap.gmail.com) / CORE8_PILOT_IMAP_PORT (993)
+ *   CORE8_PILOT_IMAP_MINUTES    how often to check (default 5)
  */
 const http = require('node:http');
 const fs = require('node:fs');
@@ -28,11 +41,15 @@ const { createTriage, cleanText, MAX_DRAFT } = require('./lib/triage.cjs');
 const { computeMetrics, evidenceReport } = require('./lib/metrics.cjs');
 const { parseLeadEmail } = require('./lib/intake.cjs');
 const { proposeSlots } = require('./lib/slots.cjs');
+const { createAuth, readCookie } = require('./lib/auth.cjs');
+const { fetchLeadMessages } = require('./lib/mailbox.cjs');
 
 const PUBLIC = path.join(__dirname, 'public');
 const TYPES = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8' };
 const CHANNELS = ['website_form', 'email', 'whatsapp', 'phone_note', 'social', 'other'];
 const MAX_BODY = 64 * 1024;
+const COOKIE = 'c8s';
+const PUBLIC_PATHS = ['/login.html', '/login.js', '/styles.css'];
 const CSP = "default-src 'none'; script-src 'self'; style-src 'self'; connect-src 'self'; img-src 'self' data:; form-action 'none'; base-uri 'none'; frame-ancestors 'none'";
 
 class HttpError extends Error {
@@ -44,15 +61,33 @@ function createApp(opts) {
   const store = openStore(opts.dataDir, { clock });
   const triage = createTriage(opts.triage || {});
   const leadSecret = opts.leadSecret || '';
-  const config = { engine: triage.engine, model: triage.model, channels: CHANNELS, dataDir: store.dir, signedIntake: !!leadSecret };
+  const authOpts = opts.auth || {};
+  const publicHost = String(authOpts.publicHost || '').toLowerCase();
+  if (publicHost && !authOpts.passwordHash) {
+    throw new Error('CORE8_PILOT_PUBLIC_HOST is set but there is no password. Refusing to run on a public address without a login. Set CORE8_PILOT_PASSWORD_HASH.');
+  }
+  const bindHost = opts.bindHost || '127.0.0.1';
+  if (!['127.0.0.1', '0.0.0.0'].includes(bindHost)) throw new Error('CORE8_PILOT_BIND must be 127.0.0.1 or 0.0.0.0');
+  if (bindHost !== '127.0.0.1' && !publicHost) {
+    throw new Error('Refusing to listen beyond this machine without CORE8_PILOT_PUBLIC_HOST and a password.');
+  }
+  const auth = createAuth({ passwordHash: authOpts.passwordHash, clock });
+  const mailCfg = opts.mailbox && opts.mailbox.user && opts.mailbox.pass ? opts.mailbox : null;
+  const fetchMail = (opts.mailbox && opts.mailbox.fetchImpl) || fetchLeadMessages;
+  const mailState = { enabled: !!mailCfg, lastCheckAt: null, lastResult: null, lastError: null, checking: false };
+  const mailStateFile = path.join(store.dir, 'mailbox-state.json');
+  const config = {
+    engine: triage.engine, model: triage.model, channels: CHANNELS, dataDir: store.dir, signedIntake: !!leadSecret,
+    loginRequired: auth.enabled, publicHost: publicHost || null, mailbox: mailState
+  };
 
-  function send(res, status, body, type) {
+  function send(res, status, body, type, extra) {
     const data = typeof body === 'string' || Buffer.isBuffer(body) ? body : JSON.stringify(body);
-    res.writeHead(status, {
+    res.writeHead(status, Object.assign({
       'Content-Type': type || 'application/json; charset=utf-8',
       'Cache-Control': 'no-store', 'X-Content-Type-Options': 'nosniff', 'Referrer-Policy': 'no-referrer',
-      'Content-Security-Policy': CSP
-    });
+      'X-Frame-Options': 'DENY', 'Content-Security-Policy': CSP
+    }, publicHost ? { 'Strict-Transport-Security': 'max-age=31536000' } : {}, extra || {}));
     res.end(data);
   }
 
@@ -85,10 +120,12 @@ function createApp(opts) {
   // Loopback only, and only when the browser is really talking to this server:
   // blocks DNS-rebinding and cross-site requests from other pages.
   function guard(req, port) {
-    const allowed = ['127.0.0.1:' + port, 'localhost:' + port];
-    if (!allowed.includes(req.headers.host || '')) throw new HttpError(403, 'Forbidden host');
+    const local = ['127.0.0.1:' + port, 'localhost:' + port];
+    const hosts = publicHost ? local.concat([publicHost]) : local;
+    if (!hosts.includes(String(req.headers.host || '').toLowerCase())) throw new HttpError(403, 'Forbidden host');
+    const origins = local.map((h) => 'http://' + h).concat(publicHost ? ['https://' + publicHost] : []);
     const origin = req.headers.origin;
-    if (origin && !allowed.map((h) => 'http://' + h).includes(origin)) throw new HttpError(403, 'Forbidden origin');
+    if (origin && !origins.includes(origin)) throw new HttpError(403, 'Forbidden origin');
     if (req.method !== 'GET' && req.headers['sec-fetch-site'] && req.headers['sec-fetch-site'] !== 'same-origin') {
       throw new HttpError(403, 'Cross-site request refused');
     }
@@ -105,6 +142,61 @@ function createApp(opts) {
     // Suggest meeting times only where a conversation is the likely next step.
     result.proposedSlots = ['support', 'not_a_lead'].includes(result.category) ? [] : proposeSlots(clock());
     store.append('triage_completed', leadId, result);
+  }
+
+  // One place where a website-form e-mail becomes a lead, whether pasted or read from the mailbox.
+  async function ingestLeadEmail(raw) {
+    const parsed = parseLeadEmail(raw, { secret: leadSecret });
+    if (!parsed.ok) return { status: 'rejected', error: parsed.error };
+    const L = parsed.lead;
+    if (store.hasSubmission(L.submissionId)) return { status: 'duplicate' };
+    if (new Date(L.submittedAt) > new Date(clock().getTime() + 5 * 60 * 1000)) return { status: 'rejected', error: 'Submission time is in the future' };
+    const id = store.nextLeadId();
+    const text = L.message || 'Discovery call request from the website form (no message).';
+    store.append('lead_added', id, {
+      text, channel: 'website_form', receivedAt: L.submittedAt, label: null,
+      contact: L.contact, consent: L.consent, submissionId: L.submissionId,
+      source: 'form_email', verified: parsed.verified, lang: L.lang
+    });
+    await runTriage(id, text);
+    return { status: 'created', lead: store.get(id) };
+  }
+
+  function readMailPosition() {
+    try { const j = JSON.parse(fs.readFileSync(mailStateFile, 'utf8')); return { uidValidity: j.uidValidity || null, lastUid: Number(j.lastUid) || 0 }; }
+    catch (e) { return { uidValidity: null, lastUid: 0 }; }
+  }
+
+  async function checkMailbox() {
+    if (!mailCfg) throw new HttpError(409, 'Mailbox reading is not configured');
+    if (mailState.checking) return mailState;
+    mailState.checking = true;
+    try {
+      let pos = readMailPosition();
+      const res = await fetchMail(mailCfg, pos.lastUid);
+      // If the server renumbered the mailbox, start again; duplicates are ignored by submission id.
+      let messages = res.messages;
+      if (pos.uidValidity !== null && res.uidValidity !== null && res.uidValidity !== pos.uidValidity) {
+        pos = { uidValidity: res.uidValidity, lastUid: 0 };
+        messages = (await fetchMail(mailCfg, 0)).messages;
+      }
+      const tally = { fetched: messages.length, created: 0, duplicates: 0, rejected: 0 };
+      let maxUid = pos.lastUid;
+      for (const msg of messages) {
+        const r = await ingestLeadEmail(msg.body);
+        if (r.status === 'created') tally.created += 1; else if (r.status === 'duplicate') tally.duplicates += 1; else tally.rejected += 1;
+        if (msg.uid > maxUid) maxUid = msg.uid;
+      }
+      fs.writeFileSync(mailStateFile, JSON.stringify({ uidValidity: res.uidValidity, lastUid: maxUid }) + '\n', { mode: 0o600 });
+      mailState.lastResult = tally; mailState.lastError = null;
+    } catch (err) {
+      // Short reason only; never the address, the password or message content.
+      mailState.lastError = String(err && err.message ? err.message : 'Mailbox check failed').slice(0, 160);
+    } finally {
+      mailState.lastCheckAt = clock().toISOString();
+      mailState.checking = false;
+    }
+    return mailState;
   }
 
   async function api(req, res, url) {
@@ -136,20 +228,14 @@ function createApp(opts) {
     }
     if (m === 'POST' && url.pathname === '/api/intake/email') {
       const body = await readJson(req);
-      const parsed = parseLeadEmail(body.raw, { secret: leadSecret });
-      if (!parsed.ok) throw new HttpError(422, parsed.error);
-      const L = parsed.lead;
-      if (store.hasSubmission(L.submissionId)) return send(res, 200, { duplicate: true });
-      if (new Date(L.submittedAt) > new Date(clock().getTime() + 5 * 60 * 1000)) throw new HttpError(422, 'Submission time is in the future');
-      const id = store.nextLeadId();
-      const text = L.message || 'Discovery call request from the website form (no message).';
-      store.append('lead_added', id, {
-        text, channel: 'website_form', receivedAt: L.submittedAt, label: null,
-        contact: L.contact, consent: L.consent, submissionId: L.submissionId,
-        source: 'form_email', verified: parsed.verified, lang: L.lang
-      });
-      await runTriage(id, text);
-      return send(res, 201, { lead: store.get(id) });
+      const r = await ingestLeadEmail(body.raw);
+      if (r.status === 'rejected') throw new HttpError(422, r.error);
+      if (r.status === 'duplicate') return send(res, 200, { duplicate: true });
+      return send(res, 201, { lead: r.lead });
+    }
+    if (m === 'POST' && url.pathname === '/api/mailbox/check') {
+      await readJson(req);
+      return send(res, 200, { mailbox: await checkMailbox() });
     }
     if (m === 'POST' && parts.length === 4 && parts[1] === 'leads') {
       const lead = needLead(parts[2]);
@@ -194,6 +280,26 @@ function createApp(opts) {
       const port = server.address().port;
       guard(req, port);
       const url = new URL(req.url, 'http://127.0.0.1:' + port);
+      const token = readCookie(req.headers.cookie, COOKIE);
+      const cookieFlags = '; Path=/; HttpOnly; SameSite=Strict' + (publicHost ? '; Secure' : '');
+
+      if (req.method === 'POST' && url.pathname === '/api/login') {
+        const body = await readJson(req);
+        if (!auth.enabled) return send(res, 200, { ok: true, loginRequired: false });
+        const r = auth.login(typeof body.password === 'string' ? body.password : '');
+        if (r.ok) return send(res, 200, { ok: true }, null, { 'Set-Cookie': COOKIE + '=' + r.token + cookieFlags + '; Max-Age=' + r.maxAgeSeconds });
+        if (r.locked) return send(res, 429, { error: 'Too many wrong passwords. Try again later.' }, null, { 'Retry-After': String(r.retryAfterSeconds) });
+        return send(res, 401, { error: 'Wrong password' });
+      }
+      if (req.method === 'POST' && url.pathname === '/api/logout') {
+        await readJson(req);
+        auth.logout(token);
+        return send(res, 200, { ok: true }, null, { 'Set-Cookie': COOKIE + '=' + cookieFlags + '; Max-Age=0' });
+      }
+      if (auth.enabled && !auth.check(token) && !(req.method === 'GET' && PUBLIC_PATHS.includes(url.pathname))) {
+        if (url.pathname.startsWith('/api/')) throw new HttpError(401, 'Login required');
+        return send(res, 302, '', 'text/plain; charset=utf-8', { Location: '/login.html' });
+      }
       if (url.pathname.startsWith('/api/')) return await api(req, res, url);
       if (req.method !== 'GET') throw new HttpError(405, 'Method not allowed');
       const rel = url.pathname === '/' ? '/index.html' : url.pathname;
@@ -209,10 +315,10 @@ function createApp(opts) {
   });
 
   return {
-    server, store, config,
+    server, store, config, checkMailbox, auth,
     listen: (port) => new Promise((resolve, reject) => {
       server.once('error', reject);
-      server.listen(port, '127.0.0.1', () => resolve(server.address().port));
+      server.listen(port, bindHost, () => resolve(server.address().port));
     }),
     close: () => new Promise((resolve) => server.close(resolve))
   };
@@ -229,7 +335,13 @@ if (require.main === module) {
       model: process.env.CORE8_PILOT_MODEL || 'claude-sonnet-5-5',
       fetchImpl: globalThis.fetch
     },
-    leadSecret: process.env.CORE8_LEAD_SECRET || ''
+    leadSecret: process.env.CORE8_LEAD_SECRET || '',
+    bindHost: process.env.CORE8_PILOT_BIND || '127.0.0.1',
+    auth: { publicHost: process.env.CORE8_PILOT_PUBLIC_HOST || '', passwordHash: process.env.CORE8_PILOT_PASSWORD_HASH || '' },
+    mailbox: {
+      user: process.env.CORE8_PILOT_IMAP_USER || '', pass: process.env.CORE8_PILOT_IMAP_PASS || '',
+      host: process.env.CORE8_PILOT_IMAP_HOST || 'imap.gmail.com', port: Number(process.env.CORE8_PILOT_IMAP_PORT) || 993
+    }
   });
   app.listen(Number(process.env.CORE8_PILOT_PORT) || 4180).then((port) => {
     console.log('Core8-AI lead-triage pilot  http://127.0.0.1:' + port + '/');
@@ -238,6 +350,16 @@ if (require.main === module) {
       console.log('ANTHROPIC_API_KEY is not set, so the offline rules engine is in use.');
     }
     console.log('Intake: ' + (app.config.signedIntake ? 'signed lead e-mails only' : 'unsigned lead e-mails accepted (set CORE8_LEAD_SECRET to require a signature)'));
+    console.log('Login:  ' + (app.config.loginRequired ? 'password required' : 'OFF (local use only; never expose this port)'));
+    if (app.config.publicHost) console.log('Public: https://' + app.config.publicHost + ' (through a TLS reverse proxy on this machine)');
+    if (app.config.mailbox.enabled) {
+      const minutes = Math.max(1, Number(process.env.CORE8_PILOT_IMAP_MINUTES) || 5);
+      console.log('Mailbox: read-only check every ' + minutes + ' min for [CORE8-LEAD] messages');
+      app.checkMailbox();
+      setInterval(() => { app.checkMailbox(); }, minutes * 60000).unref();
+    } else {
+      console.log('Mailbox: not configured (paste lead e-mails in by hand)');
+    }
     console.log('Data:   ' + app.store.file);
     console.log('This tool drafts replies only. It cannot send anything.');
   }).catch((err) => { console.error(err.message); process.exit(1); });

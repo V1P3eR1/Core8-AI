@@ -1,0 +1,28 @@
+# Lead agent on the VPS. It publishes NO port on the host: only the reverse
+# proxy (Caddy) can reach it, over the shared "core8-edge" network.
+#
+#   docker network create core8-edge        # once
+#   docker compose --env-file /etc/core8/lead-agent.env up -d --build
+services:
+  lead-agent:
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile
+    restart: unless-stopped
+    env_file: /etc/core8/lead-agent.env
+    read_only: true
+    tmpfs: [/tmp]
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    mem_limit: 256m
+    pids_limit: 100
+    volumes:
+      - lead-agent-data:/data
+    networks: [core8-edge]
+
+volumes:
+  lead-agent-data:
+
+networks:
+  core8-edge:
+    external: true

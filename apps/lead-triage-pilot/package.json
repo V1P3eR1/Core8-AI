@@ -5,8 +5,8 @@
   "description": "Standalone, single-user, local lead-triage pilot tool. Drafts only; never sends anything. Not part of the Core8 platform.",
   "scripts": {
     "start": "node server.cjs",
-    "test": "node --test tests/store.test.cjs tests/triage.test.cjs tests/metrics.test.cjs tests/server.test.cjs tests/intake.test.cjs",
-    "test:browser": "node tests/browser.smoke.cjs"
+    "test": "node --test tests/store.test.cjs tests/triage.test.cjs tests/metrics.test.cjs tests/server.test.cjs tests/intake.test.cjs tests/auth.test.cjs tests/mailbox.test.cjs",
+    "test:browser": "node tests/browser.smoke.cjs && node tests/browser.login.cjs"
   },
   "engines": { "node": ">=20" }
 }

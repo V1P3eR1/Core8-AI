@@ -1,0 +1,24 @@
+<!doctype html>
+<html lang="en" dir="ltr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="robots" content="noindex, nofollow">
+  <title>Core8-AI — sign in</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body class="login">
+  <main class="login__box card">
+    <div class="brand"><span class="brand__mark" aria-hidden="true">8</span><span>Core8-AI</span></div>
+    <h1 class="login__title">Lead agent — sign in</h1>
+    <form id="login-form" novalidate>
+      <label for="password">Password</label>
+      <input id="password" name="password" type="password" autocomplete="current-password" required autofocus data-testid="password">
+      <button type="submit" class="btn btn--primary" data-testid="login">Sign in</button>
+      <p class="error" id="login-error" role="alert" data-testid="login-error"></p>
+    </form>
+    <p class="hint">One user. Five wrong passwords lock sign-in for fifteen minutes.</p>
+  </main>
+  <script src="login.js"></script>
+</body>
+</html>

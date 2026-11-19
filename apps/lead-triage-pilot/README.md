@@ -108,19 +108,37 @@ labels, names or reasons, so it can be shown to third parties.
 There is no built-in baseline. To claim an improvement, record how long replies
 took before the pilot, over a comparable period, and keep that record.
 
+## Running it on a server, and reading the mailbox
+
+Local use needs none of this. For a server:
+
+- `CORE8_PILOT_PUBLIC_HOST` + `CORE8_PILOT_PASSWORD_HASH` turn on sign-in
+  (`public/login.html`). The process refuses to start on a public address
+  without a password. Make the hash with `node tools/hash-password.cjs`.
+- `CORE8_PILOT_IMAP_USER` + `CORE8_PILOT_IMAP_PASS` (an app password) turn on a
+  read-only mailbox check (`lib/mailbox.cjs`): `EXAMINE`, a server-side search
+  for `[CORE8-LEAD]` in the subject, and `BODY.PEEK`. It cannot send, move,
+  flag or delete mail, and other messages are never downloaded.
+- `deploy/` holds a Dockerfile, a compose file with no published port, a Caddy
+  site block and a step-by-step guide. **Prepared, not deployed; the image has
+  not been built** (no Docker daemon was available where this was written).
+
 ## Tests
 
 ```
-npm test               # 34 tests: log integrity, triage engines, metrics, HTTP API, form-e-mail intake
-npm run test:browser   # 13 browser checks; needs Playwright and Chrome
+npm test               # 46 tests: log integrity, triage engines, metrics, HTTP API, form-e-mail intake, sign-in, mailbox reader
+npm run test:browser   # 13 + 5 browser checks; needs Playwright and Chrome
 ```
 
 Last recorded run (2026-11-19, Node 22.23.5, Playwright 1.63.0, Chrome 153,
-Linux): 34 of 34 and 13 of 13 passed. One test parses a message produced by the
-real PHP handler and verifies its signature. Screenshots from that run, using made-up
+Linux): 46 of 46, 13 of 13 and 5 of 5 passed. One test parses a message produced by the
+real PHP handler and verifies its signature. The mailbox reader is tested against
+a local fake IMAP server that records every command, to show only read-only
+commands are sent. Screenshots from that run, using made-up
 inquiries, are in `docs/evidence/lead-triage-pilot/`.
 
-Not tested: a real mailbox or real e-mail delivery, the real Anthropic API (no key was used; the adapter is exercised
+Not tested: a real mailbox (Gmail IMAP over TLS) or real e-mail delivery, the
+Docker image, a real reverse proxy, the real Anthropic API (no key was used; the adapter is exercised
 with a stub), Windows, macOS, Firefox, Safari, screen readers.
 
 ## Before using it on real inquiries
