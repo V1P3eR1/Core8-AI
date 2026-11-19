@@ -11,6 +11,7 @@ services:
       - BIND_PORT=8000
       - DEV_MODE=false
       - DB_PATH=/data/core8.db
+      - TRUST_PROXY_HEADERS=true   # only nginx can reach the backend (internal network)
     expose:
       - "8000"
     networks:
