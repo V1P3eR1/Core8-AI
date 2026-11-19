@@ -1,8 +1,12 @@
 # Running the lead agent on the VPS (Hostinger KVM 2, Ubuntu 24.04 + Docker)
 
-Status: **prepared, not deployed.** Nothing in this folder has been run on a
-server. Deploying needs Lev's explicit approval and the secrets listed below,
-which only he can create.
+Status (2026-11-19): **running on the VPS, locked and not reachable.** The
+container was started through Hostinger's Docker manager from
+`docker-compose.hostinger.yml` on Lev's instruction. Its log shows the data
+folder writable, sign-in locked (no password set) and the health check passing.
+No port is published and the reverse proxy is not wired (platform PR #41), so
+nothing can reach it from outside yet. The `Dockerfile` route below was never
+built.
 
 ## What you get
 

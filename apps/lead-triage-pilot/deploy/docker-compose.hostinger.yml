@@ -1,25 +1,57 @@
-# Self-contained variant for Hostinger's Docker manager (hPanel or API): it
-# builds straight from the public repository, so no checkout is needed on the
-# server. It publishes NO port: until a reverse proxy joins the "core8-edge"
-# network, the agent is unreachable from outside.
+# Self-contained variant for Hostinger's Docker manager (hPanel or API).
+# Hostinger's manager did not build images from a compose file when this was
+# tried (the project was created with no containers), so this variant uses the
+# stock Node image and unpacks one pinned commit of this folder at start.
+# To update: change the commit id below and redeploy.
 #
-# It starts LOCKED. Set the password on the server:
-#   docker exec -it core8-lead-agent node tools/set-password.cjs
+# It publishes NO port: until a reverse proxy joins the "core8-edge" network,
+# the agent is unreachable from outside. It starts LOCKED; set the password on
+# the server:  docker exec -it core8-lead-agent node tools/set-password.cjs
 services:
+  # The data volume starts owned by root; hand it to the unprivileged user once.
+  init-data:
+    image: node:22-alpine
+    user: root
+    command: ["chown", "1000:1000", "/data"]
+    network_mode: none
+    restart: "no"
+    volumes:
+      - lead-agent-data:/data
+
   lead-agent:
     container_name: core8-lead-agent
-    build:
-      context: https://github.com/V1P3eR1/Core8-AI.git#pilot/lead-triage-standalone:apps/lead-triage-pilot
-      dockerfile: deploy/Dockerfile
+    image: node:22-alpine
+    user: node
+    working_dir: /app
+    depends_on:
+      init-data:
+        condition: service_completed_successfully
+    command:
+      - sh
+      - -c
+      - 'set -e; touch /data/.writable; rm /data/.writable; echo "Data folder is writable"; S=4d3cd31d260473f7ff4d4f36305f4f7d1e4423b8; wget -qO- https://github.com/V1P3eR1/Core8-AI/archive/$$S.tar.gz | tar xz --strip-components=3 -f - Core8-AI-$$S/apps/lead-triage-pilot; exec node server.cjs'
     restart: unless-stopped
     environment:
+      NODE_ENV: production
       CORE8_PILOT_PUBLIC_HOST: agent.core8-ai.io
+      CORE8_PILOT_DATA: /data
+      CORE8_PILOT_BIND: 0.0.0.0
+      CORE8_PILOT_PORT: "4180"
+      CORE8_PILOT_PASSWORD_HASH_FILE: /data/password.hash
     read_only: true
-    tmpfs: [/tmp]
+    tmpfs:
+      - /tmp
+      - /app:uid=1000,gid=1000,mode=0700
     cap_drop: [ALL]
     security_opt: ["no-new-privileges:true"]
     mem_limit: 256m
     pids_limit: 100
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:4180/login.html >/dev/null || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
     volumes:
       - lead-agent-data:/data
     networks: [core8-edge]

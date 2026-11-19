@@ -122,8 +122,8 @@ Local use needs none of this. For a server:
   for `[CORE8-LEAD]` in the subject, and `BODY.PEEK`. It cannot send, move,
   flag or delete mail, and other messages are never downloaded.
 - `deploy/` holds a Dockerfile, a compose file with no published port, a Caddy
-  site block and a step-by-step guide. **Prepared, not deployed; the image has
-  not been built** (no Docker daemon was available where this was written).
+  site block and a step-by-step guide. See `deploy/README.md` for the current
+  server status. The Dockerfile image has never been built.
 
 ## Tests
 
