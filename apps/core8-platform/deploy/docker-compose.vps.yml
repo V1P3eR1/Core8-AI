@@ -10,6 +10,9 @@ services:
       BIND_HOST: 0.0.0.0
       BIND_PORT: "8000"
       DEV_MODE: "false"
+      # Caddy is the only way in (backend is not published), so its X-Forwarded-For is trusted.
+      # Without this every visitor shares one IP for login lockout and lead-form limits.
+      TRUST_PROXY_HEADERS: "true"
       DB_PATH: /data/core8.db
       SOCIAL_MEDIA_DIR: /data/media-social
       SOCIAL_WORKER_INPROCESS: "false"
