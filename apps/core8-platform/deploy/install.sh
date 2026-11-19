@@ -59,6 +59,9 @@ if command -v ufw >/dev/null; then ufw allow 22/tcp >/dev/null; ufw allow 80/tcp
 
 cd "$APP"
 export DOMAIN
+# Shared network for other services behind this Caddy; extra site files live in deploy/sites/.
+docker network inspect core8-edge >/dev/null 2>&1 || docker network create core8-edge >/dev/null
+mkdir -p deploy/sites
 docker compose -f deploy/docker-compose.vps.yml up -d --build
 echo
 echo "==> done. Dashboard: https://$DOMAIN/social   (first visit creates the admin user)"

@@ -17,3 +17,8 @@
 		reverse_proxy frontend:3000
 	}
 }
+
+# Extra sites served by this same Caddy (other Core8 services on this VPS).
+# Drop one *.caddy file per site into deploy/sites/ on the server; an empty
+# folder is fine. Those files are local to the server and not tracked in git.
+import /etc/caddy/sites/*.caddy
