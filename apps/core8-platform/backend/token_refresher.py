@@ -11,7 +11,8 @@ import datetime
 import logging
 
 from tools import instagram_api
-from tools.instagram_accounts import get_ig_account, save_ig_account
+from tenancy import use_tenant
+from tools.instagram_accounts import get_ig_account, list_accounts_for_refresh, save_ig_account
 
 logger = logging.getLogger("core8.token_refresher")
 
@@ -20,9 +21,17 @@ REFRESH_WHEN_DAYS_LEFT = 7.0      # refresh if expiry < 7 days away
 
 
 async def run_token_refresher_tick(is_killed) -> None:
-    """One refresh check. Safe to call directly (used by tests)."""
+    """One refresh check across all tenants' accounts. Safe to call directly (used by tests)."""
     if is_killed():
         return
+    for row in await list_accounts_for_refresh():
+        if is_killed():
+            return
+        with use_tenant(row["tenant_id"]):
+            await _refresh_current_tenant()
+
+
+async def _refresh_current_tenant() -> None:
     acct = await get_ig_account()
     if acct is None:
         return
@@ -37,11 +46,11 @@ async def run_token_refresher_tick(is_killed) -> None:
     days_left = (expires_at - datetime.datetime.utcnow()).total_seconds() / 86400.0
     if days_left > REFRESH_WHEN_DAYS_LEFT:
         return
-    logger.info("Refreshing Instagram token (%.1f days left)", days_left)
+    logger.info("Refreshing Instagram token for tenant=%s (%.1f days left)", acct["tenant_id"], days_left)
     try:
         new_token, expires_in = await instagram_api.get_long_lived_token(acct["access_token"])
     except Exception as e:
-        logger.error("Token refresh failed: %s", e)
+        logger.error("Token refresh failed for tenant=%s: %s", acct["tenant_id"], e)
         return
     new_expiry = (datetime.datetime.utcnow()
                   + datetime.timedelta(seconds=expires_in)).isoformat()
@@ -52,7 +61,7 @@ async def run_token_refresher_tick(is_killed) -> None:
         access_token=new_token,
         token_expires_at=new_expiry,
     )
-    logger.info("Instagram token refreshed; new expiry %s", new_expiry)
+    logger.info("Instagram token refreshed for tenant=%s; new expiry %s", acct["tenant_id"], new_expiry)
 
 
 async def _loop(is_killed) -> None:

@@ -11,6 +11,7 @@ services:
       - BIND_PORT=8000
       - DEV_MODE=false
       - DB_PATH=/data/core8.db
+      - TRUST_PROXY_HEADERS=true   # only nginx can reach the backend (internal network)
     expose:
       - "8000"
     networks:
@@ -21,7 +22,6 @@ services:
       context: ./frontend
       args:
         NEXT_PUBLIC_API_URL: https://${DOMAIN:-localhost}
-        NEXT_PUBLIC_BEARER_TOKEN: ""
     restart: unless-stopped
     expose:
       - "3000"

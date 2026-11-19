@@ -2,6 +2,7 @@
 
 import uuid
 from database import get_db
+from tenancy import current_tenant
 from tools.registry import ToolDef, registry
 
 _VALID_STATUSES = {"new", "contacted", "qualified", "proposal", "won", "lost"}
@@ -14,9 +15,9 @@ async def create_lead(name: str, email: str = "", company: str = "",
     lead_id = str(uuid.uuid4())
     async with get_db() as db:
         await db.execute(
-            """INSERT INTO leads (id, name, email, company, status, source, notes)
-               VALUES (?, ?, ?, ?, ?, ?, ?)""",
-            (lead_id, name, email, company, status, source, notes),
+            """INSERT INTO leads (tenant_id, id, name, email, company, status, source, notes)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
+            (current_tenant(), lead_id, name, email, company, status, source, notes),
         )
         await db.commit()
     return {"id": lead_id, "name": name, "email": email, "company": company,
@@ -29,14 +30,14 @@ async def list_leads(status: str = "", limit: int = 50) -> list[dict]:
         db.row_factory = aiosqlite.Row
         if status and status in _VALID_STATUSES:
             async with db.execute(
-                "SELECT * FROM leads WHERE status=? ORDER BY created_at DESC LIMIT ?",
-                (status, min(limit, 200)),
+                "SELECT * FROM leads WHERE tenant_id=? AND status=? ORDER BY created_at DESC LIMIT ?",
+                (current_tenant(), status, min(limit, 200)),
             ) as cur:
                 rows = await cur.fetchall()
         else:
             async with db.execute(
-                "SELECT * FROM leads ORDER BY created_at DESC LIMIT ?",
-                (min(limit, 200),),
+                "SELECT * FROM leads WHERE tenant_id=? ORDER BY created_at DESC LIMIT ?",
+                (current_tenant(), min(limit, 200)),
             ) as cur:
                 rows = await cur.fetchall()
     return [dict(r) for r in rows]
@@ -56,12 +57,14 @@ async def update_lead(lead_id: str, name: str = "", email: str = "", company: st
     if not updates:
         return {"error": "No fields to update"}
     updates.append("updated_at=datetime('now')")
-    params.append(lead_id)
+    params += [current_tenant(), lead_id]
     async with get_db() as db:
-        await db.execute(
-            f"UPDATE leads SET {', '.join(updates)} WHERE id=?", params
+        cur = await db.execute(
+            f"UPDATE leads SET {', '.join(updates)} WHERE tenant_id=? AND id=?", params
         )
         await db.commit()
+    if cur.rowcount == 0:
+        return {"error": f"Lead {lead_id} not found"}
     return {"updated": lead_id}
 
 
@@ -69,7 +72,8 @@ async def add_note(lead_id: str, note: str) -> dict:
     async with get_db() as db:
         import aiosqlite
         db.row_factory = aiosqlite.Row
-        async with db.execute("SELECT notes FROM leads WHERE id=?", (lead_id,)) as cur:
+        async with db.execute("SELECT notes FROM leads WHERE tenant_id=? AND id=?",
+                              (current_tenant(), lead_id)) as cur:
             row = await cur.fetchone()
         if not row:
             return {"error": f"Lead {lead_id} not found"}
@@ -78,8 +82,8 @@ async def add_note(lead_id: str, note: str) -> dict:
         timestamp = datetime.datetime.utcnow().strftime("%Y-%m-%d %H:%M")
         new_notes = f"{existing}\n[{timestamp}] {note}".strip()
         await db.execute(
-            "UPDATE leads SET notes=?, updated_at=datetime('now') WHERE id=?",
-            (new_notes, lead_id),
+            "UPDATE leads SET notes=?, updated_at=datetime('now') WHERE tenant_id=? AND id=?",
+            (new_notes, current_tenant(), lead_id),
         )
         await db.commit()
     return {"lead_id": lead_id, "note_added": note}
@@ -92,9 +96,9 @@ async def search_leads(query: str) -> list[dict]:
         db.row_factory = aiosqlite.Row
         async with db.execute(
             """SELECT * FROM leads
-               WHERE name LIKE ? OR email LIKE ? OR company LIKE ? OR notes LIKE ?
+               WHERE tenant_id=? AND (name LIKE ? OR email LIKE ? OR company LIKE ? OR notes LIKE ?)
                ORDER BY updated_at DESC LIMIT 50""",
-            (like, like, like, like),
+            (current_tenant(), like, like, like, like),
         ) as cur:
             rows = await cur.fetchall()
     return [dict(r) for r in rows]
@@ -104,7 +108,8 @@ async def get_lead(lead_id: str) -> dict:
     async with get_db() as db:
         import aiosqlite
         db.row_factory = aiosqlite.Row
-        async with db.execute("SELECT * FROM leads WHERE id=?", (lead_id,)) as cur:
+        async with db.execute("SELECT * FROM leads WHERE tenant_id=? AND id=?",
+                              (current_tenant(), lead_id)) as cur:
             row = await cur.fetchone()
     if not row:
         return {"error": f"Lead {lead_id} not found"}

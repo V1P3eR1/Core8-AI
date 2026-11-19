@@ -58,7 +58,8 @@ export async function fetchMessages(conversationId: string): Promise<Message[]> 
 
 export function createWebSocket(agentId: string): WebSocket {
   const wsBase = API_BASE.replace(/^http/, "ws");
-  const token = getAccessToken() || process.env.NEXT_PUBLIC_BEARER_TOKEN || "";
+  // JWT only. No shared secret ever ships in the browser bundle (issue #11).
+  const token = getAccessToken() || "";
   return new WebSocket(`${wsBase}/ws/${agentId}?token=${encodeURIComponent(token)}`);
 }
 

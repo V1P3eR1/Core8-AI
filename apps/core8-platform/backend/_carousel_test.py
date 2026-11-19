@@ -126,4 +126,13 @@ async def main():
     print("\nCAROUSEL OK")
 
 
-asyncio.run(main())
+from tenancy import INTERNAL_TENANT_ID, use_tenant  # noqa: E402
+
+
+async def _run():
+    # Data functions are tenant-scoped (CORE8-005); this script runs as the internal tenant.
+    with use_tenant(INTERNAL_TENANT_ID):
+        await main()
+
+
+asyncio.run(_run())

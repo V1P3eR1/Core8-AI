@@ -1,0 +1,44 @@
+name: Core8 Notion synchronization
+on:
+  workflow_dispatch:
+    inputs:
+      apply:
+        description: Write approved public tasks and status updates
+        type: boolean
+        default: false
+  schedule:
+    - cron: '*/15 * * * *'
+permissions:
+  contents: read
+concurrency:
+  group: core8-notion-sync
+  cancel-in-progress: false
+jobs:
+  sync:
+    if: vars.CORE8_SYNC_ENABLED == 'true' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    environment: core8-sync
+    permissions:
+      contents: read
+      issues: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Reconcile approved public scope and observed status
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          NOTION_TOKEN: ${{ secrets.NOTION_TOKEN }}
+          NOTION_DATA_SOURCE_ID: ${{ vars.NOTION_DATA_SOURCE_ID }}
+          APPLY: ${{ github.event_name == 'schedule' || inputs.apply }}
+        run: |
+          if [ "$APPLY" = "true" ]; then
+            python tools/handoff/bridge.py sync --apply
+          else
+            python tools/handoff/bridge.py sync
+          fi

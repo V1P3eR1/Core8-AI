@@ -3,6 +3,7 @@
 import uuid
 import aiosqlite
 from database import get_db
+from tenancy import current_tenant
 from tools.registry import ToolDef, registry
 
 
@@ -12,12 +13,12 @@ async def write_design_doc(project: str, path: str, content: str) -> dict:
         return {"error": "project and path are required"}
     async with get_db() as db:
         await db.execute(
-            """INSERT INTO design_docs (id, project, path, content)
-               VALUES (?, ?, ?, ?)
-               ON CONFLICT(project, path) DO UPDATE SET
+            """INSERT INTO design_docs (tenant_id, id, project, path, content)
+               VALUES (?, ?, ?, ?, ?)
+               ON CONFLICT(tenant_id, project, path) DO UPDATE SET
                  content=excluded.content,
                  updated_at=datetime('now')""",
-            (str(uuid.uuid4()), project, path, content),
+            (current_tenant(), str(uuid.uuid4()), project, path, content),
         )
         await db.commit()
     return {"written": f"{project}/{path}", "bytes": len(content)}
@@ -28,8 +29,8 @@ async def read_design_doc(project: str, path: str) -> dict:
     async with get_db() as db:
         db.row_factory = aiosqlite.Row
         async with db.execute(
-            "SELECT content, updated_at FROM design_docs WHERE project=? AND path=?",
-            (project, path),
+            "SELECT content, updated_at FROM design_docs WHERE tenant_id=? AND project=? AND path=?",
+            (current_tenant(), project, path),
         ) as cur:
             row = await cur.fetchone()
     if not row:
@@ -42,8 +43,9 @@ async def list_design_docs(project: str) -> list[dict]:
     async with get_db() as db:
         db.row_factory = aiosqlite.Row
         async with db.execute(
-            "SELECT path, length(content) as size_bytes, updated_at FROM design_docs WHERE project=? ORDER BY path",
-            (project,),
+            "SELECT path, length(content) as size_bytes, updated_at FROM design_docs "
+            "WHERE tenant_id=? AND project=? ORDER BY path",
+            (current_tenant(), project),
         ) as cur:
             rows = await cur.fetchall()
     return [dict(r) for r in rows]
@@ -57,7 +59,8 @@ async def list_design_projects() -> list[dict]:
             """SELECT project,
                       COUNT(*) as doc_count,
                       MAX(updated_at) as last_updated
-               FROM design_docs GROUP BY project ORDER BY last_updated DESC""",
+               FROM design_docs WHERE tenant_id=? GROUP BY project ORDER BY last_updated DESC""",
+            (current_tenant(),),
         ) as cur:
             rows = await cur.fetchall()
     return [dict(r) for r in rows]
@@ -73,7 +76,8 @@ async def delete_design_doc(project: str, path: str) -> dict:
     """Delete a design document."""
     async with get_db() as db:
         await db.execute(
-            "DELETE FROM design_docs WHERE project=? AND path=?", (project, path)
+            "DELETE FROM design_docs WHERE tenant_id=? AND project=? AND path=?",
+            (current_tenant(), project, path)
         )
         await db.commit()
     return {"deleted": f"{project}/{path}"}
