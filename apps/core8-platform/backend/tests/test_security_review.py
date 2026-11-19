@@ -127,3 +127,34 @@ def test_websocket_errors_do_not_leak_exception_text(api, monkeypatch):
         ws.send_json({"message": "hi"})
         event = ws.receive_json()
     assert event == {"type": "error", "message": "Internal error"}
+
+
+def test_login_lockout_tables_are_bounded(monkeypatch):
+    """Failures from many distinct IPs must not grow the lockout tables without limit."""
+    monkeypatch.setattr(auth, "MAX_TRACKED_IPS", 50)
+    for i in range(500):
+        auth._record_auth_fail(f"10.0.{i // 250}.{i % 250}")
+    assert len(auth._fail_times) <= 50
+    assert len(auth._lockout_until) <= 50
+
+
+def test_lockout_survives_table_pressure(monkeypatch):
+    """An IP that earned a lockout stays locked while other IPs churn through the table."""
+    monkeypatch.setattr(auth, "MAX_TRACKED_IPS", 50)
+    for _ in range(auth._N):
+        auth._record_auth_fail("203.0.113.9")
+    for i in range(200):
+        auth._record_auth_fail(f"10.1.0.{i}")
+    allowed, _retry = auth._check_auth_rate("203.0.113.9")
+    assert allowed is False
+
+
+def test_expired_failures_are_pruned_before_eviction(monkeypatch):
+    monkeypatch.setattr(auth, "MAX_TRACKED_IPS", 10)
+    clock = {"t": 1000.0}
+    monkeypatch.setattr(auth.time, "monotonic", lambda: clock["t"])
+    for i in range(10):
+        auth._record_auth_fail(f"10.2.0.{i}")
+    clock["t"] += auth._W + 1
+    auth._record_auth_fail("10.2.1.1")
+    assert list(auth._fail_times) == ["10.2.1.1"]
