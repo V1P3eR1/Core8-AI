@@ -12,8 +12,29 @@ replace the current site, which runs on a third-party closed platform. Open
 - Prices, figures, percentages, "24/7", guarantees, client names or results
   (enforced by `tests/static.test.cjs`).
 - Any phone number, tracking script, font or asset from another domain.
-- A working form. With `config.formEndpoint` empty the form validates and then
-  says nothing was sent. There is no network code in the page.
+- A connected form. With `config.formEndpoint` empty (the default) the form
+  validates and then says nothing was sent.
+
+## Form handler for PHP hosting
+
+`server/lead.php` receives the form and e-mails one signed `CORE8 LEAD v1`
+message to the business mailbox. The lead-triage tool (`apps/lead-triage-pilot`,
+PR #31) reads that format and verifies the signature.
+
+To switch the form on, on the host only:
+
+1. Copy `server/lead-config.example.php` to `server/lead-config.php` and fill in
+   the mailbox, a sender address on your own domain, a long random `secret`,
+   the site's exact origin, and the id of the approved consent wording.
+2. In `content.js` set `formEndpoint: 'server/lead.php'` and the same
+   `consentTextId`.
+3. Give the same secret to the lead-triage tool as `CORE8_LEAD_SECRET`.
+
+`lead-config.php` is git-ignored and must never be committed. The handler needs
+PHP 8.1+, puts no visitor input in mail headers, keeps only keyed-hash rate-limit
+counters, and logs nothing personal. It has been tested in dry-run mode only:
+**no real e-mail has been sent through it**, and delivery from the actual host
+(SPF/DKIM, spam folder) is unverified.
 
 ## Decisions needed before launch (Lev)
 
@@ -21,9 +42,9 @@ replace the current site, which runs on a third-party closed platform. Open
    2026-11-19: headline, supporting copy and primary CTA are used verbatim
    (enforced by a test). The other sections are still Claude's draft.
 2. **Consent wording and privacy policy.** The form shows a placeholder.
-3. **Form destination.** The platform already has a tested endpoint
-   (`POST /api/public/lead-forms/{key}/submit`; see `docs/LAUNCH_READINESS.md`
-   §9) but the platform has no production host. The field names here match it.
+3. **Form destination.** Lev chose e-mail to the business mailbox via
+   `server/lead.php`. The platform's own endpoint (`docs/LAUNCH_READINESS.md`
+   §9) remains the later option; the field names match it.
 4. **Hosting and DNS** for the page itself, and who controls the domain today.
 5. **Logo file**, and the phone/WhatsApp number once the new one is active.
    The page shows the business email only.
@@ -31,10 +52,10 @@ replace the current site, which runs on a third-party closed platform. Open
 ## Tests
 
 ```
-npm test               # 7 static checks: copy rules, i18n parity, no network code, contrast
-npm run test:browser   # 6 browser checks, offline; needs Playwright and Chrome
+npm test               # 7 static checks + 6 PHP handler tests (handler tests skip without php)
+npm run test:browser   # 6 offline browser checks + 1 browser-to-PHP check; needs Playwright and Chrome
 ```
 
 Last recorded run (2026-11-19, Node 22.23.5, Playwright 1.63.0, Chrome 153,
-Linux): 7 of 7 and 6 of 6 passed. Screenshots: `docs/evidence/landing-prototype/`.
+Linux): 13 of 13 and 7 of 7 passed (PHP 8.3.6). Screenshots: `docs/evidence/landing-prototype/`.
 Not tested: Firefox, Safari, real phones, screen readers.

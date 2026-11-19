@@ -1,8 +1,8 @@
 /*
  * Core8-AI landing prototype - language switch and form validation.
  * Preview mode: with no form endpoint configured the form validates and then
- * says plainly that nothing was sent. There is no network code in this file;
- * wiring the form to the platform's lead endpoint is a separate, reviewed step.
+ * says plainly that nothing was sent. With an endpoint configured it makes one
+ * same-origin POST to that endpoint and nothing else.
  */
 (function () {
   'use strict';
@@ -59,8 +59,26 @@
     }
     if (!f.elements.consent.checked) { f.elements.consent.setAttribute('aria-invalid', 'true'); f.elements.consent.focus(); return setStatus('form.err.consent', 'error'); }
 
-    // Bots fill the hidden field; show the same message and do nothing.
-    setStatus('form.preview', 'info');
+    if (!C.config.formEndpoint) return setStatus('form.preview', 'info');
+
+    var button = f.querySelector('[type="submit"]');
+    button.disabled = true;
+    setStatus('form.sending', 'info');
+    fetch(C.config.formEndpoint, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      credentials: 'omit',
+      body: JSON.stringify({
+        name: name, company: f.elements.company.value.trim(), email: email, phone: phone,
+        message: f.elements.message.value.trim(), website: f.elements.website.value,
+        consent: true, consent_text_id: C.config.consentTextId, lang: lang
+      })
+    }).then(function (res) {
+      if (res.status === 202) { f.reset(); return setStatus('form.sent', 'ok'); }
+      setStatus(res.status === 429 ? 'form.err.rate' : 'form.err.send', 'error');
+    }).catch(function () {
+      setStatus('form.err.send', 'error');
+    }).then(function () { button.disabled = false; });
   });
 
   render();

@@ -102,9 +102,50 @@ async function check(name, fn) { try { await fn(); results.push('PASS  ' + name)
     assert.deepEqual(await context.cookies(), []);
   });
 
+  // End to end with the PHP handler in dry-run mode: browser -> lead.php -> spooled message.
+  const os = require('node:os');
+  const { spawn, spawnSync } = require('node:child_process');
+  if (spawnSync('php', ['-v']).status !== 0) {
+    results.push('SKIP  form submits through server/lead.php (php is not installed)');
+  } else {
+    await check('with an endpoint configured, the form posts once to server/lead.php and a signed message is spooled', async () => {
+      const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'core8-landing-e2e-'));
+      const spool = path.join(dir, 'spool'); fs.mkdirSync(spool);
+      const port = 20000 + Math.floor(Math.random() * 20000);
+      const origin = 'http://127.0.0.1:' + port;
+      const cfg = { to: 'leads@example.invalid', from: 'Core8-AI website <no-reply@example.invalid>', secret: 'e2e-secret-not-real', allowed_origins: [origin], consent_text_ids: ['he-v1'], spool_dir: spool, rate_limit_dir: dir };
+      fs.writeFileSync(path.join(dir, 'cfg.php'), '<?php return json_decode(' + JSON.stringify(JSON.stringify(cfg)) + ', true);');
+      const php = spawn('php', ['-S', '127.0.0.1:' + port, '-t', DIR], { env: Object.assign({}, process.env, { CORE8_LEAD_CONFIG: path.join(dir, 'cfg.php') }), stdio: 'ignore' });
+      const ctx = await browser.newContext({ viewport: { width: 1280, height: 900 }, reducedMotion: 'reduce' });
+      try {
+        const live = []; const errs = [];
+        await ctx.route('**/*', (route) => { const u = route.request().url(); live.push(route.request().method() + ' ' + u); return u.startsWith(origin + '/') ? route.continue() : route.abort(); });
+        const p2 = await ctx.newPage();
+        p2.on('pageerror', (e) => errs.push(e.message));
+        for (let i = 0; i < 50; i++) { try { await p2.goto(origin + '/index.html'); break; } catch (e) { await new Promise((r) => setTimeout(r, 100)); } }
+        await p2.evaluate(() => { window.Core8Landing.config.formEndpoint = 'server/lead.php'; window.Core8Landing.config.consentTextId = 'he-v1'; });
+        await p2.fill('#f-name', 'דנה לדוגמה');
+        await p2.fill('#f-email', 'dana@example.invalid');
+        await p2.fill('#f-message', 'מעוניינים בשיחת אפיון');
+        await p2.check('#f-consent');
+        await p2.click('[data-testid="submit"]');
+        await p2.waitForFunction(() => /הפנייה התקבלה/.test(document.querySelector('[data-testid="form-status"]').textContent), null, { timeout: 8000 });
+        assert.equal(await p2.inputValue('#f-name'), '', 'form is cleared after sending');
+        const posts = live.filter((l) => l.startsWith('POST '));
+        assert.deepEqual(posts, ['POST ' + origin + '/server/lead.php']);
+        assert.deepEqual(live.filter((l) => !l.includes(origin + '/')), [], 'no request left the site');
+        const mails = fs.readdirSync(spool);
+        assert.equal(mails.length, 1);
+        assert.match(fs.readFileSync(path.join(spool, mails[0]), 'utf8'), /-----BEGIN CORE8 LEAD v1-----[\s\S]+sig: [0-9a-f]{64}/);
+        assert.deepEqual(errs, []);
+      } finally { await ctx.close(); php.kill(); fs.rmSync(dir, { recursive: true, force: true }); }
+    });
+  }
+
   await browser.close();
   console.log('Browser: chromium ' + browser.version());
   console.log(results.join('\n'));
-  console.log(`\n${results.length - failed} passed, ${failed} failed, ${results.length} total`);
+  const skipped = results.filter((r) => r.startsWith('SKIP')).length;
+  console.log(`\n${results.length - failed - skipped} passed, ${failed} failed, ${skipped} skipped, ${results.length} total`);
   process.exit(failed ? 1 : 0);
 })().catch((e) => { console.error(e); process.exit(2); });

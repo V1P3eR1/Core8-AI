@@ -95,6 +95,8 @@ textarea { resize: vertical; line-height: 1.5; }
 .status { min-height: 1.4em; font-weight: 600; }
 .status--error { color: var(--bad); }
 .status--info { color: var(--warn); }
+.status--ok { color: var(--ok); }
+button:disabled { opacity: 0.6; cursor: progress; }
 
 .mail { margin-block-start: 18px; color: var(--muted); }
 .mail a { color: var(--primary); font-weight: 700; }

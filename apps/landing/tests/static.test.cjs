@@ -46,13 +46,18 @@ test('page is static: no remote URLs, no network or storage APIs, strict CSP, no
   for (const f of FILES) {
     const src = read(f);
     assert.ok(!/https?:\/\//i.test(src), f + ' has a remote URL');
-    for (const re of [/\bfetch\s*\(/, /XMLHttpRequest/, /sendBeacon/, /WebSocket/, /localStorage|sessionStorage|document\.cookie/, /innerHTML|document\.write|\beval\s*\(/]) {
+    for (const re of [/XMLHttpRequest/, /sendBeacon/, /WebSocket/, /localStorage|sessionStorage|document\.cookie/, /innerHTML|document\.write|\beval\s*\(/]) {
       assert.ok(!re.test(src), `${f} ${re}`);
     }
   }
+  // Exactly one network call in the whole page: the form POST to the configured endpoint.
+  const calls = FILES.map(read).join('\n').match(/\bfetch\s*\(/g) || [];
+  assert.equal(calls.length, 1);
+  assert.match(read('app.js'), /fetch\(C\.config\.formEndpoint,/);
+  assert.match(read('app.js'), /credentials: 'omit'/);
   const html = read('index.html');
   assert.match(html, /default-src 'none'/);
-  assert.match(html, /connect-src 'none'/);
+  assert.match(html, /connect-src 'self'/);
   assert.match(html, /form-action 'none'/);
   assert.match(html, /name="robots" content="noindex, nofollow"/);
   assert.ok(!/unsafe-inline|unsafe-eval/.test(html));
@@ -68,7 +73,10 @@ test('no contact details or credentials are committed; form endpoint is unset', 
   assert.equal(C.config.email, 'office.core8ai@gmail.com');
   assert.ok(!/\+?\d[\d\s().-]{7,}\d/.test(read('content.js') + read('index.html').replace(/content="[^"]*"/g, '')), 'no phone number');
   assert.ok(!/sk-ant-|AKIA[0-9A-Z]{16}|api[_-]?key\s*[:=]/i.test(all));
-  assert.equal(C.config.formEndpoint, '');
+  assert.equal(C.config.formEndpoint, '', 'ships in preview mode');
+  assert.equal(C.config.consentTextId, '');
+  assert.ok(!fs.existsSync(path.join(ROOT, 'server', 'lead-config.php')), 'real handler config is never committed');
+  assert.match(fs.readFileSync(path.join(ROOT, 'server', '.gitignore'), 'utf8'), /lead-config\.php/);
 });
 
 test('text colours meet WCAG AA', () => {

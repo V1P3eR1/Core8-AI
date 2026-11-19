@@ -15,7 +15,9 @@
   'use strict';
   return {
     langs: { he: { dir: 'rtl', label: 'עברית' }, en: { dir: 'ltr', label: 'English' } },
-    // Set by the owner before launch. Empty = the form stays in preview mode.
+    // Set by the owner before launch. Empty formEndpoint = the form stays in
+    // preview mode and sends nothing. On PHP hosting use 'server/lead.php', and
+    // set consentTextId to the id of the approved consent wording.
     config: { formEndpoint: '', consentTextId: '', email: 'office.core8ai@gmail.com' },
     strings: {
       he: {
@@ -66,6 +68,9 @@
         'form.submit': 'שליחה',
         'form.err.name': 'נא למלא שם.', 'form.err.contact': 'נא למלא אימייל או טלפון תקינים.', 'form.err.consent': 'נדרשת הסכמה כדי לשלוח.',
         'form.preview': 'מצב תצוגה מקדימה: הטופס עדיין לא מחובר, ושום דבר לא נשלח.',
+        'form.sending': 'שולח…', 'form.sent': 'תודה, הפנייה התקבלה. נחזור אליך בהקדם.',
+        'form.err.send': 'לא הצלחנו לשלוח את הפנייה. אפשר לנסות שוב או לכתוב לנו במייל.',
+        'form.err.rate': 'נשלחו יותר מדי פניות בזמן קצר. נא לנסות שוב מאוחר יותר.',
         'contact.or': 'אפשר גם לכתוב לנו:',
         'footer.rights': 'Core8-AI', 'footer.note': 'האתר אינו מציג תוצאות של לקוחות או נתוני ביצועים עד שיהיו כאלה, עם מקור ושיטת מדידה.'
       },
@@ -117,6 +122,9 @@
         'form.submit': 'Send',
         'form.err.name': 'Please enter your name.', 'form.err.contact': 'Please enter a valid email or phone number.', 'form.err.consent': 'Consent is required to send.',
         'form.preview': 'Preview mode: the form is not connected yet, and nothing was sent.',
+        'form.sending': 'Sending…', 'form.sent': 'Thank you, we received your inquiry and will get back to you soon.',
+        'form.err.send': 'We could not send your inquiry. Please try again or write to us by email.',
+        'form.err.rate': 'Too many inquiries were sent in a short time. Please try again later.',
         'contact.or': 'אפשר גם לכתוב לנו:',
         'contact.or': 'You can also write to us:',
         'footer.rights': 'Core8-AI', 'footer.note': 'This site shows no customer results or performance figures until they exist, with a source and a method.'
