@@ -62,6 +62,12 @@ test('page is static: no remote URLs, no network or storage APIs, strict CSP, no
   assert.match(html, /name="robots" content="noindex, nofollow"/);
   assert.ok(!/unsafe-inline|unsafe-eval/.test(html));
   assert.ok(!/<form[^>]*action=/i.test(html), 'form has no action');
+  // Logo assets are local, script-free SVG.
+  for (const f of ['assets/logo-mark.svg', 'assets/favicon.svg']) {
+    const svg = read(f);
+    assert.ok(!/<script|on[a-z]+=|href=|<image|<foreignObject/i.test(svg), f + ' is inert');
+  }
+  assert.match(html, /<img class="brand__mark" src="assets\/logo-mark\.svg" alt=""/);
   assert.ok(!/etx|oia/i.test(html + read('content.js')), 'no third-party platform credit');
 });
 

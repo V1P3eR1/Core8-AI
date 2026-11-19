@@ -35,6 +35,7 @@ async function check(name, fn) { try { await fn(); results.push('PASS  ' + name)
     assert.match(await page.title(), /Core8-AI/);
     assert.match(await page.locator('[data-testid="mock"]').innerText(), /המחשה בלבד/);
     assert.equal(await page.locator('[data-i18n]:empty').count(), 0, 'no untranslated element');
+    assert.ok(await page.locator('[data-testid="logo"]').evaluate((img) => img.complete && img.naturalWidth > 0), 'logo image loads');
     assert.equal(await page.locator('[data-testid="contact-email"]').innerText(), 'office.core8ai@gmail.com');
     assert.equal(await page.getAttribute('[data-testid="contact-email"]', 'href'), 'mailto:office.core8ai@gmail.com');
     assert.equal(await page.locator('a[href^="tel:"], a[href*="wa.me"]').count(), 0, 'no phone or WhatsApp link yet');

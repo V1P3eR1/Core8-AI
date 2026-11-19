@@ -46,8 +46,10 @@ counters, and logs nothing personal. It has been tested in dry-run mode only:
    `server/lead.php`. The platform's own endpoint (`docs/LAUNCH_READINESS.md`
    §9) remains the later option; the field names match it.
 4. **Hosting and DNS** for the page itself, and who controls the domain today.
-5. **Logo file**, and the phone/WhatsApp number once the new one is active.
-   The page shows the business email only.
+5. **Logo.** The page uses the proposed "Orbit" mark (`docs/brand/logo-orbit/`).
+   It has not had a trademark or similarity check.
+6. **Phone/WhatsApp number** once the new one is active. The page shows the
+   business email only.
 
 ## Tests
 
