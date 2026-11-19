@@ -1,6 +1,6 @@
 import time
 import hmac
-from collections import defaultdict, deque
+from collections import OrderedDict, deque
 from fastapi import Request, HTTPException
 from config import cfg
 
@@ -9,8 +9,24 @@ _N = 10
 _W = 300.0
 _L = 900.0
 
-_fail_times: dict[str, deque] = defaultdict(deque)
+# Hard cap on tracked IPs so the tables stay bounded however many addresses probe the API
+# (same approach as the lead-form limiter). Expired entries are pruned first; only then are the
+# least recently failing IPs, and after them the lockouts closest to expiry, evicted.
+MAX_TRACKED_IPS = 20_000
+
+_fail_times: "OrderedDict[str, deque]" = OrderedDict()
 _lockout_until: dict[str, float] = {}
+
+
+def _prune(now: float) -> None:
+    for ip in [k for k, dq in _fail_times.items() if not dq or dq[-1] < now - _W]:
+        del _fail_times[ip]
+    for ip in [k for k, until in _lockout_until.items() if until <= now]:
+        del _lockout_until[ip]
+    while len(_fail_times) >= MAX_TRACKED_IPS:
+        _fail_times.popitem(last=False)
+    while len(_lockout_until) >= MAX_TRACKED_IPS:
+        del _lockout_until[min(_lockout_until, key=_lockout_until.get)]
 
 
 def _client_ip(request: Request) -> str:
@@ -43,12 +59,19 @@ def _check_auth_rate(ip: str) -> tuple[bool, float]:
 
 def _record_auth_fail(ip: str):
     now = time.monotonic()
-    dq = _fail_times[ip]
+    dq = _fail_times.get(ip)
+    if dq is None:
+        if len(_fail_times) >= MAX_TRACKED_IPS:
+            _prune(now)
+        dq = _fail_times[ip] = deque()
+    _fail_times.move_to_end(ip)
     dq.append(now)
     # trim old entries outside the window
     while dq and dq[0] < now - _W:
         dq.popleft()
     if len(dq) >= _N:
+        if ip not in _lockout_until and len(_lockout_until) >= MAX_TRACKED_IPS:
+            _prune(now)
         _lockout_until[ip] = now + _L
 
 
