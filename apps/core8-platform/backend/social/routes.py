@@ -34,7 +34,19 @@ from .settings import DEFAULT_PUBLISHING, PILLARS, get_setting, set_setting
 
 logger = logging.getLogger("core8.social.api")
 
-router = APIRouter(prefix="/api/social", tags=["social"], dependencies=[Depends(require_jwt)])
+async def require_social_operator(payload: dict = Depends(require_jwt)) -> dict:
+    """Only platform admins may use the Social Manager.
+
+    Its sm_* tables have no tenant_id and it publishes to the Core8 internal tenant's Instagram
+    account, so a client tenant's user must not reach it. Relax this to per-tenant membership
+    once the module is tenant-scoped."""
+    if payload.get("role") != "admin":
+        raise HTTPException(status_code=403, detail="Admin role required")
+    return payload
+
+
+router = APIRouter(prefix="/api/social", tags=["social"],
+                   dependencies=[Depends(require_social_operator)])
 public_router = APIRouter(prefix="/api/social", tags=["social-public"])
 
 

@@ -619,3 +619,13 @@ def test_third_party_imports_are_declared_in_requirements():
         if not any(d.lower().replace("_", "-") in req for d in dists):
             missing.append(f"{mod} ({', '.join(dists)})")
     assert not missing, "imports not in requirements.txt: " + ", ".join(missing)
+
+
+def test_social_manager_is_admin_only(api):
+    """A non-admin user (e.g. a client tenant's member) cannot read or operate the Social Manager."""
+    member = api.user("member@client.test")
+    assert api.c.get("/api/social/settings", headers=member).status_code == 403
+    assert api.c.post("/api/social/settings/emergency-pause", json={"paused": True},
+                      headers=member).status_code == 403
+    assert api.c.get("/api/social/settings", headers=api.admin).status_code == 200
+    assert api.c.get("/api/social/settings").status_code == 401
