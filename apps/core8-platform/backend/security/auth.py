@@ -14,10 +14,21 @@ _lockout_until: dict[str, float] = {}
 
 
 def _client_ip(request: Request) -> str:
-    forwarded = request.headers.get("CF-Connecting-IP") or request.headers.get("X-Forwarded-For")
-    if forwarded:
-        return forwarded.split(",")[0].strip()
+    """The caller's IP for rate limiting. Proxy headers are client-controlled, so they are used
+    only with TRUST_PROXY_HEADERS=true (behind our nginx), and then only the values our proxy
+    itself writes: X-Real-IP (nginx overwrites it), else the LAST X-Forwarded-For hop (nginx
+    appends; earlier hops can be forged by the client)."""
+    if cfg.trust_proxy_headers:
+        real = request.headers.get("X-Real-IP")
+        if real:
+            return real.strip()
+        fwd = request.headers.get("X-Forwarded-For")
+        if fwd:
+            return fwd.split(",")[-1].strip()
     return request.client.host if request.client else "unknown"
+
+
+client_ip = _client_ip
 
 
 def _check_auth_rate(ip: str) -> tuple[bool, float]:

@@ -41,7 +41,9 @@ from media_routes import router as media_router
 from scheduler import start_scheduler
 from business_brain.schema import init_brain_schema
 from business_brain.routes import router as business_brain_router
-from business_brain.access import resolve_access
+from lead_capture import init_lead_capture_schema, router as lead_capture_router
+from business_brain.access import TenantAccess, query_tenant, resolve_access
+from tenancy import INTERNAL_TENANT_ID, use_tenant
 from business_brain.context import get_agent_context, render_context_block
 from token_refresher import start_token_refresher
 from social.schema import init_social_schema
@@ -96,6 +98,7 @@ async def lifespan(app: FastAPI):
     await ensure_schedules()
     if (await _sm_get("publishing")).get("demo_mode", True) and os.getenv("SOCIAL_SEED_DEMO", "true").lower() in ("1", "true", "yes"):
         await _sm_seed()
+    await init_lead_capture_schema()
     async with get_db() as db:
         db.row_factory = aiosqlite.Row
         async with db.execute("SELECT * FROM agents") as cursor:
@@ -122,12 +125,15 @@ async def lifespan(app: FastAPI):
             pass
 
 
+# A pending approval that gets no answer is denied after this long (fail closed).
+APPROVAL_TIMEOUT_SECONDS = 120.0
+
 app = FastAPI(title="Core8-AI", version="0.1.0", lifespan=lifespan)
 
 app.add_middleware(SecurityHeadersMiddleware)
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000"],
+    allow_origins=["http://localhost:3000", *cfg.cors_extra_origins],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -139,6 +145,7 @@ app.include_router(media_router)
 app.include_router(business_brain_router)
 app.include_router(social_router)
 app.include_router(social_public_router)
+app.include_router(lead_capture_router)
 app.mount("/media", StaticFiles(directory=MEDIA_DIR), name="media")
 
 
@@ -287,7 +294,7 @@ async def create_agent(req: CreateAgentRequest):
 
 
 @app.get("/api/agents/{agent_id}/conversations", dependencies=[Depends(require_jwt)])
-async def get_agent_conversations(agent_id: str):
+async def get_agent_conversations(agent_id: str, access: TenantAccess = Depends(query_tenant("viewer"))):
     async with get_db() as db:
         db.row_factory = aiosqlite.Row
         # Return conversations that have at least one message, most recent first
@@ -300,26 +307,26 @@ async def get_agent_conversations(agent_id: str):
                     WHERE conversation_id = c.id AND role = 'user'
                     ORDER BY created_at ASC LIMIT 1) as preview
             FROM conversations c
-            LEFT JOIN messages m ON m.conversation_id = c.id
-            WHERE c.agent_id = ?
+            LEFT JOIN messages m ON m.conversation_id = c.id AND m.tenant_id = c.tenant_id
+            WHERE c.tenant_id = ? AND c.agent_id = ?
             GROUP BY c.id
             HAVING message_count > 0
             ORDER BY last_message_at DESC
             LIMIT 50
             """,
-            (agent_id,),
+            (access.tenant_id, agent_id),
         ) as cur:
             rows = await cur.fetchall()
     return [dict(r) for r in rows]
 
 
 @app.get("/api/conversations/{conversation_id}/messages", dependencies=[Depends(require_jwt)])
-async def get_messages(conversation_id: str):
+async def get_messages(conversation_id: str, access: TenantAccess = Depends(query_tenant("viewer"))):
     async with get_db() as db:
         db.row_factory = aiosqlite.Row
         async with db.execute(
-            "SELECT * FROM messages WHERE conversation_id=? ORDER BY created_at",
-            (conversation_id,),
+            "SELECT * FROM messages WHERE tenant_id=? AND conversation_id=? ORDER BY created_at",
+            (access.tenant_id, conversation_id),
         ) as cur:
             rows = await cur.fetchall()
     return [dict(r) for r in rows]
@@ -336,22 +343,34 @@ async def websocket_endpoint(websocket: WebSocket, agent_id: str):
         from security.jwt_auth import decode_access_token
         ws_user = decode_access_token(token)
     except Exception:
-        # Fall back to legacy bearer token for local dev convenience
-        if not _verify_token(token):
+        # Legacy shared bearer token: local development only (DEV_MODE), never in production.
+        if not cfg.dev_mode or not _verify_token(token):
             await websocket.close(code=4001)
             return
 
-    # Optional Business Brain context: requires a JWT user who has access to the tenant.
+    # Every session runs in exactly one tenant (CORE8-005): the named one, or the Core8
+    # internal tenant. JWT users need access to it; the legacy dev bearer token may only use
+    # the internal tenant. Business Brain context is injected only when a tenant is named.
     tenant_id = websocket.query_params.get("tenant_id")
+    op_tenant_id = tenant_id or INTERNAL_TENANT_ID
     tenant_access = None
-    if tenant_id:
-        if ws_user is None or ws_user.get("type") != "access":
+    if ws_user is not None:
+        if ws_user.get("type") != "access":
             await websocket.close(code=4001)
             return
-        tenant_access = await resolve_access(tenant_id, ws_user)
-        if tenant_access is None:
+        op_access = await resolve_access(op_tenant_id, ws_user)
+        if op_access is None:
             await websocket.close(code=4004)
             return
+        # Chat executes tools and writes conversation data. Read-only members
+        # may inspect history through REST, but cannot start an agent session.
+        if op_access.role not in {"editor", "owner"}:
+            await websocket.close(code=4003)
+            return
+        tenant_access = op_access if tenant_id else None
+    elif tenant_id:
+        await websocket.close(code=4001)
+        return
 
     await websocket.accept()
 
@@ -369,8 +388,8 @@ async def websocket_endpoint(websocket: WebSocket, agent_id: str):
     conversation_id = str(uuid.uuid4())
     async with get_db() as db:
         await db.execute(
-            "INSERT INTO conversations (id, agent_id) VALUES (?,?)",
-            (conversation_id, agent_id),
+            "INSERT INTO conversations (tenant_id, id, agent_id) VALUES (?,?,?)",
+            (op_tenant_id, conversation_id, agent_id),
         )
         await db.commit()
 
@@ -385,10 +404,17 @@ async def websocket_endpoint(websocket: WebSocket, agent_id: str):
     approval_futures: dict[str, asyncio.Future] = {}
 
     async def receiver():
-        """Pump all incoming WS frames into the queue; None signals disconnect."""
+        """Pump incoming WS frames; None signals disconnect. Approval responses are resolved
+        here, not in the main loop: the main loop is blocked inside agent.run() while a tool
+        waits for approval, so routing them through the queue would never deliver them."""
         try:
             while True:
                 data = await websocket.receive_json()
+                if isinstance(data, dict) and data.get("type") == "tool_approval_response":
+                    fut = approval_futures.get(data.get("request_id", ""))
+                    if fut and not fut.done():
+                        fut.set_result(data.get("approved") is True)
+                    continue
                 await incoming.put(data)
         except WebSocketDisconnect:
             await incoming.put(None)
@@ -408,7 +434,7 @@ async def websocket_endpoint(websocket: WebSocket, agent_id: str):
         fut: asyncio.Future = loop.create_future()
         approval_futures[request_id] = fut
         try:
-            return await asyncio.wait_for(asyncio.shield(fut), timeout=120.0)
+            return await asyncio.wait_for(asyncio.shield(fut), timeout=APPROVAL_TIMEOUT_SECONDS)
         except asyncio.TimeoutError:
             logger.warning("Approval timeout for tool %s — denying", tool_name)
             return False
@@ -423,14 +449,6 @@ async def websocket_endpoint(websocket: WebSocket, agent_id: str):
             if data is None:
                 break  # client disconnected
 
-            # Route approval responses to waiting futures
-            if data.get("type") == "tool_approval_response":
-                req_id = data.get("request_id", "")
-                fut = approval_futures.get(req_id)
-                if fut and not fut.done():
-                    fut.set_result(data.get("approved", False))
-                continue
-
             user_message = data.get("message", "").strip()
             if not user_message:
                 continue
@@ -441,8 +459,8 @@ async def websocket_endpoint(websocket: WebSocket, agent_id: str):
 
             async with get_db() as db:
                 await db.execute(
-                    "INSERT INTO messages (id, conversation_id, role, content) VALUES (?,?,?,?)",
-                    (str(uuid.uuid4()), conversation_id, "user", user_message),
+                    "INSERT INTO messages (tenant_id, id, conversation_id, role, content) VALUES (?,?,?,?,?)",
+                    (op_tenant_id, str(uuid.uuid4()), conversation_id, "user", user_message),
                 )
                 await db.commit()
 
@@ -455,20 +473,22 @@ async def websocket_endpoint(websocket: WebSocket, agent_id: str):
                     full_response += event["text"]
                 await websocket.send_json(event)
 
-            gate = approval_gate if cfg.approval_mode != "off" else None
+            # Always connect the approver: even with APPROVAL_MODE=off, external actions need approval.
+            gate = approval_gate
             system_context = None
             if tenant_access is not None:
                 # Re-read each turn so Brain updates and scope changes apply immediately.
                 ctx = await get_agent_context(tenant_access.repo, agent_id)
                 system_context = render_context_block(ctx)
-            await agent.run(history, on_event=on_event, approval_gate=gate, system_context=system_context)
+            with use_tenant(op_tenant_id):
+                await agent.run(history, on_event=on_event, approval_gate=gate, system_context=system_context)
 
             if full_response:
                 history.append({"role": "assistant", "content": full_response})
                 async with get_db() as db:
                     await db.execute(
-                        "INSERT INTO messages (id, conversation_id, role, content) VALUES (?,?,?,?)",
-                        (str(uuid.uuid4()), conversation_id, "assistant", full_response),
+                        "INSERT INTO messages (tenant_id, id, conversation_id, role, content) VALUES (?,?,?,?,?)",
+                        (op_tenant_id, str(uuid.uuid4()), conversation_id, "assistant", full_response),
                     )
                     await db.commit()
 
@@ -481,3 +501,4 @@ async def websocket_endpoint(websocket: WebSocket, agent_id: str):
     finally:
         receiver_task.cancel()
         logger.info("WebSocket disconnected: conv=%s", conversation_id)
+

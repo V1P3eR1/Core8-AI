@@ -134,6 +134,12 @@ CREATE TABLE IF NOT EXISTS agent_assignments (
 
 
 async def init_brain_schema() -> None:
+    from tenancy import INTERNAL_TENANT_ID, INTERNAL_TENANT_NAME
     async with database.get_db() as db:
         await db.executescript(_DDL)
+        # Core8's own workspace; holds operational data created before multi-tenancy.
+        await db.execute(
+            "INSERT OR IGNORE INTO tenants (id, name, created_by) VALUES (?, ?, 'system')",
+            (INTERNAL_TENANT_ID, INTERNAL_TENANT_NAME),
+        )
         await db.commit()

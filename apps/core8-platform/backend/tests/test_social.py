@@ -325,11 +325,21 @@ def test_missing_token_blocks_live(s, live_mode):
     assert r["detail"]["code"] == "account"
 
 
-def test_expired_token_blocks_live(s, live_mode):
+def _save_internal_account(*args):
+    """The Social Manager acts on the Core8 internal tenant; store its test account there."""
+    from tenancy import INTERNAL_TENANT_ID, use_tenant
     from tools.instagram_accounts import save_ig_account
+
+    async def _run():
+        with use_tenant(INTERNAL_TENANT_ID):
+            await save_ig_account(*args)
+    asyncio.run(_run())
+
+
+def test_expired_token_blocks_live(s, live_mode):
     s.publishing(demo_mode=False)
-    asyncio.run(save_ig_account("1784140000", "page1", "core8ai", "EAAexpired-not-a-real-token",
-                                (datetime.datetime.utcnow() - datetime.timedelta(days=1)).isoformat()))
+    _save_internal_account("1784140000", "page1", "core8ai", "EAAexpired-not-a-real-token",
+                                (datetime.datetime.utcnow() - datetime.timedelta(days=1)).isoformat())
     item, _ = s.image_item()
     s.req("patch", f"/api/social/items/{item['id']}", 200, json={"account_id": "1784140000"})
     s.approve(item["id"])
@@ -343,9 +353,8 @@ def test_expired_token_blocks_live(s, live_mode):
 # ── 8. demo mode cannot publish to a real account ─────────────────────────
 
 def test_demo_mode_blocks_live_provider(s, live_mode):
-    from tools.instagram_accounts import save_ig_account
-    asyncio.run(save_ig_account("1784140000", "page1", "core8ai", "EAAvalid-not-a-real-token",
-                                (datetime.datetime.utcnow() + datetime.timedelta(days=30)).isoformat()))
+    _save_internal_account("1784140000", "page1", "core8ai", "EAAvalid-not-a-real-token",
+                                (datetime.datetime.utcnow() + datetime.timedelta(days=30)).isoformat())
     assert s.req("get", "/api/social/settings/publishing", 200).json()["demo_mode"] is True
     item, _ = s.image_item()
     s.req("patch", f"/api/social/items/{item['id']}", 200, json={"account_id": "1784140000"})
@@ -437,10 +446,9 @@ def test_redaction_covers_meta_and_anthropic_tokens():
 
 
 def test_audit_log_and_api_never_contain_tokens(s, live_mode):
-    from tools.instagram_accounts import save_ig_account
     token = "EAAsecret" + "Z" * 40
-    asyncio.run(save_ig_account("1784140000", "page1", "core8ai", token,
-                                (datetime.datetime.utcnow() + datetime.timedelta(days=30)).isoformat()))
+    _save_internal_account("1784140000", "page1", "core8ai", token,
+                                (datetime.datetime.utcnow() + datetime.timedelta(days=30)).isoformat())
     for url in ("/api/social/overview", "/api/social/instagram/status", "/api/social/audit", "/api/social/jobs"):
         assert token not in s.req("get", url, 200).text
     rows = asyncio.run(__import__("social.db", fromlist=["fetch_all"]).fetch_all("SELECT details FROM sm_audit_log"))

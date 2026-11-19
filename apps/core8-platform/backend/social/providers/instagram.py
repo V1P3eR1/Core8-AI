@@ -20,7 +20,21 @@ import uuid
 
 import httpx
 
+from tenancy import INTERNAL_TENANT_ID, TenantContextError, current_tenant, use_tenant
 from tools.instagram_accounts import get_account_summary, get_ig_account
+
+
+def _account_tenant() -> str:
+    """Tenant whose Instagram account the Social Manager acts on.
+
+    The Social Manager is single-tenant today: its own tables carry no tenant_id, so when no
+    tenant is in context (API routes, the standalone worker) it operates on the Core8 internal
+    tenant. A caller that has already set a tenant keeps it. Per-client social workspaces need
+    tenant columns across social/* before this can serve more than one client."""
+    try:
+        return current_tenant()
+    except TenantContextError:
+        return INTERNAL_TENANT_ID
 
 from ..config import scfg
 
@@ -116,7 +130,8 @@ class LiveInstagramProvider(BaseInstagramProvider):
         return data
 
     async def account(self) -> dict | None:
-        return await get_account_summary()
+        with use_tenant(_account_tenant()):
+            return await get_account_summary()
 
     async def create_container(self, ig_user_id, token, **params) -> str:
         data = {k: v for k, v in params.items() if v is not None}
@@ -249,7 +264,8 @@ def mock_provider() -> MockInstagramProvider:
 
 async def live_account_with_token() -> dict | None:
     """Decrypted token for live calls only. Never returned to the API layer."""
-    return await get_ig_account()
+    with use_tenant(_account_tenant()):
+        return await get_ig_account()
 
 
 async def wait_until_ready(provider: BaseInstagramProvider, container_id: str, token: str,
