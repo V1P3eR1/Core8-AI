@@ -155,7 +155,7 @@ customer data needs Lev's separate approval.
 | `cd backend && pip install -r requirements-dev.txt && python -m pytest -q` | ✅ 131 passed |
 | `cd frontend && npm ci` | ✅ (uses the `package-lock.json` added in this PR, identical to PR #9's) |
 | `cd frontend && npx next build` | ✅ after adding the missing `components/ui/*` (shadcn) and `types/speech-recognition.d.ts`, the same files as PR #9. Before: build failed on missing imports |
-| `cd frontend && npx eslint .` | ❌ 8 errors, 2 warnings, all existing code: `react-hooks/set-state-in-effect` (data loading in `useEffect` in `SecurityDashboard`, `InstagramCalendar` and others), `prefer-const` (`ParticleBackground`), `react-hooks/refs`, 2× `exhaustive-deps`. Not runtime bugs; fix when the frontend is reworked, then add frontend lint/build to CI |
+| `cd frontend && npx eslint . --max-warnings 0` | ✅ 0 problems (was 8 errors, 2 warnings; fixed 2026-11-19). Now enforced in CI together with `next build` (`frontend-checks` workflow) |
 | `gitleaks detect --source . --log-opts="--all" --redact` | ✅ no leaks |
 
 ## 11. Who does what (issue #10)

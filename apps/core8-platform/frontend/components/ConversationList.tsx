@@ -29,15 +29,19 @@ export default function ConversationList({
   refreshKey,
 }: Props) {
   const [conversations, setConversations] = useState<Conversation[]>([]);
-  const [loading, setLoading] = useState(true);
+  // Loading is derived: true until the request for the current agent/refresh has settled.
+  const requestKey = `${agentId}:${refreshKey}`;
+  const [loadedKey, setLoadedKey] = useState<string | null>(null);
+  const loading = loadedKey !== requestKey;
 
   useEffect(() => {
-    setLoading(true);
+    let current = true;
     fetchConversations(agentId)
-      .then(setConversations)
-      .catch(() => setConversations([]))
-      .finally(() => setLoading(false));
-  }, [agentId, refreshKey]);
+      .then((c) => { if (current) setConversations(c); })
+      .catch(() => { if (current) setConversations([]); })
+      .finally(() => { if (current) setLoadedKey(requestKey); });
+    return () => { current = false; };
+  }, [agentId, refreshKey, requestKey]);
 
   return (
     <div className="flex flex-col">
