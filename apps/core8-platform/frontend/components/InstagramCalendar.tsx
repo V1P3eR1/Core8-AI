@@ -16,29 +16,27 @@ export default function InstagramCalendar() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  const load = async () => {
-    setLoading(true);
-    setError(null);
-    try {
-      const [acct, scheduled, ins] = await Promise.all([
-        fetchInstagramAccount(),
-        fetchScheduledPosts(),
-        fetchInstagramInsights(7).catch((e) => (
-          { error: e instanceof Error ? e.message : "unavailable" } as IGInsights
-        )),
-      ]);
-      setAccount(acct.account);
-      setConnected(acct.connected);
-      setPosts(scheduled);
-      setInsights(ins);
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "Failed to load");
-    } finally {
-      setLoading(false);
-    }
-  };
+  const fetchAll = () =>
+    Promise.all([
+      fetchInstagramAccount(),
+      fetchScheduledPosts(),
+      fetchInstagramInsights(7).catch((e) => (
+        { error: e instanceof Error ? e.message : "unavailable" } as IGInsights
+      )),
+    ])
+      .then(([acct, scheduled, ins]) => {
+        setAccount(acct.account);
+        setConnected(acct.connected);
+        setPosts(scheduled);
+        setInsights(ins);
+      })
+      .catch((e) => setError(e instanceof Error ? e.message : "Failed to load"))
+      .finally(() => setLoading(false));
 
-  useEffect(() => { load(); }, []);
+  // First load: `loading` already starts true. The Refresh button resets the flags first.
+  const load = () => { setLoading(true); setError(null); return fetchAll(); };
+
+  useEffect(() => { fetchAll(); }, []);
 
   const byStatus = posts.reduce<Record<string, IGScheduledPost[]>>((m, p) => {
     (m[p.status] ||= []).push(p);

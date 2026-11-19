@@ -18,16 +18,17 @@ function formatTime(dateStr: string): string {
 
 export default function HistoryView({ conversationId, agentName }: Props) {
   const [messages, setMessages] = useState<Message[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  // One result per conversation; loading and error are derived from it.
+  const [result, setResult] = useState<{ id: string; error: string | null } | null>(null);
+  const loading = result?.id !== conversationId;
+  const error = loading ? null : result?.error ?? null;
 
   useEffect(() => {
-    setLoading(true);
-    setError(null);
+    let current = true;
     fetchMessages(conversationId)
-      .then(setMessages)
-      .catch((e) => setError(e.message))
-      .finally(() => setLoading(false));
+      .then((m) => { if (current) { setMessages(m); setResult({ id: conversationId, error: null }); } })
+      .catch((e) => { if (current) setResult({ id: conversationId, error: e.message }); });
+    return () => { current = false; };
   }, [conversationId]);
 
   return (
