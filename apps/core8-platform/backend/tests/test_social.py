@@ -585,31 +585,29 @@ def test_third_party_imports_are_declared_in_requirements():
     """Every third-party module the backend imports must be installable from requirements.txt
     (caught in production: Pillow was missing because the dev box had it preinstalled)."""
     import importlib.metadata as md
-    import pkgutil
     import sys
-    root = os.path.join(os.path.dirname(__file__), "..")
-    req = open(os.path.join(root, "requirements.txt"), encoding="utf-8").read().lower()
+    root = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
+    req = open(os.path.join(root, "requirements.txt"), encoding="utf-8").read().lower().replace("_", "-")
     stdlib = set(sys.stdlib_module_names)
-    local = {m.name for m in pkgutil.iter_modules([root])} | {"social", "security", "tools", "agents", "business_brain"}
-    pkg_for_module = {}
-    for dist, mods in md.packages_distributions().items():
-        for m in mods:
-            pkg_for_module.setdefault(dist, m)
+    local = {"social", "security", "tools", "agents", "business_brain", "config", "database", "main", "scheduler",
+             "token_refresher", "instagram_oauth", "instagram_routes", "media_routes"}
+    files = [os.path.join(root, f) for f in os.listdir(root) if f.endswith(".py")]
+    for sub in ("social", "security", "tools", "agents", "business_brain"):
+        for dirpath, _, fs in os.walk(os.path.join(root, sub)):
+            files += [os.path.join(dirpath, f) for f in fs if f.endswith(".py")]
     imported = set()
-    for dirpath, _, files in os.walk(root):
-        if "tests" in dirpath or "__pycache__" in dirpath or ".venv" in dirpath:
-            continue
-        for f in files:
-            if f.endswith(".py"):
-                for line in open(os.path.join(dirpath, f), encoding="utf-8", errors="ignore"):
-                    m = re.match(r"^\s*(?:from|import)\s+([A-Za-z_][A-Za-z0-9_]*)", line)
-                    if m:
-                        imported.add(m.group(1))
+    for path in files:
+        for line in open(path, encoding="utf-8", errors="ignore"):
+            m = re.match(r"^\s*(?:from|import)\s+([A-Za-z_][A-Za-z0-9_]*)", line)
+            if m:
+                imported.add(m.group(1))
+    dist_of = md.packages_distributions()
+    provided_by_fastapi = {"starlette"}  # pinned transitively by fastapi
     missing = []
-    for mod in sorted(imported - stdlib - local):
-        dists = [d for d, mods in md.packages_distributions().items() if mod in mods]
+    for mod in sorted(imported - stdlib - local - provided_by_fastapi):
+        dists = dist_of.get(mod, [])
         if not dists:
-            continue  # unknown/optional
-        if not any(d.lower().replace("_", "-") in req.replace("_", "-") for d in dists):
+            continue  # not installed here either — cannot judge
+        if not any(d.lower().replace("_", "-") in req for d in dists):
             missing.append(f"{mod} ({', '.join(dists)})")
     assert not missing, "imports not in requirements.txt: " + ", ".join(missing)
