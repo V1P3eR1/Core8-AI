@@ -3,8 +3,8 @@
 set -euo pipefail
 OUT=/opt/core8-backups; mkdir -p "$OUT"
 STAMP=$(date +%F)
-docker run --rm -v core8-platform_db_data:/data -v "$OUT":/out python:3.12-slim \
+docker run --rm -v deploy_db_data:/data -v "$OUT":/out python:3.12-slim \
   python -c "import sqlite3;s=sqlite3.connect('/data/core8.db');d=sqlite3.connect('/out/core8-$STAMP.db');s.backup(d);d.close()"
-docker run --rm -v core8-platform_db_data:/data -v "$OUT":/out alpine tar czf "/out/media-$STAMP.tgz" -C /data media-social 2>/dev/null || true
+docker run --rm -v deploy_db_data:/data -v "$OUT":/out alpine tar czf "/out/media-$STAMP.tgz" -C /data media-social 2>/dev/null || true
 find "$OUT" -type f -mtime +14 -delete
 echo "backup $STAMP ok"

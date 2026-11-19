@@ -579,3 +579,37 @@ def test_carousel_renders_identically_without_raqm(monkeypatch):
     without = cr.render_slide(slide, tpl, 0, 3)
     diff = ImageStat.Stat(ImageChops.difference(with_raqm.convert("L"), without.convert("L"))).mean[0]
     assert diff < 1.5, f"fallback rendering differs from raqm rendering (mean diff {diff:.2f})"
+
+
+def test_third_party_imports_are_declared_in_requirements():
+    """Every third-party module the backend imports must be installable from requirements.txt
+    (caught in production: Pillow was missing because the dev box had it preinstalled)."""
+    import importlib.metadata as md
+    import pkgutil
+    import sys
+    root = os.path.join(os.path.dirname(__file__), "..")
+    req = open(os.path.join(root, "requirements.txt"), encoding="utf-8").read().lower()
+    stdlib = set(sys.stdlib_module_names)
+    local = {m.name for m in pkgutil.iter_modules([root])} | {"social", "security", "tools", "agents", "business_brain"}
+    pkg_for_module = {}
+    for dist, mods in md.packages_distributions().items():
+        for m in mods:
+            pkg_for_module.setdefault(dist, m)
+    imported = set()
+    for dirpath, _, files in os.walk(root):
+        if "tests" in dirpath or "__pycache__" in dirpath or ".venv" in dirpath:
+            continue
+        for f in files:
+            if f.endswith(".py"):
+                for line in open(os.path.join(dirpath, f), encoding="utf-8", errors="ignore"):
+                    m = re.match(r"^\s*(?:from|import)\s+([A-Za-z_][A-Za-z0-9_]*)", line)
+                    if m:
+                        imported.add(m.group(1))
+    missing = []
+    for mod in sorted(imported - stdlib - local):
+        dists = [d for d, mods in md.packages_distributions().items() if mod in mods]
+        if not dists:
+            continue  # unknown/optional
+        if not any(d.lower().replace("_", "-") in req.replace("_", "-") for d in dists):
+            missing.append(f"{mod} ({', '.join(dists)})")
+    assert not missing, "imports not in requirements.txt: " + ", ".join(missing)
