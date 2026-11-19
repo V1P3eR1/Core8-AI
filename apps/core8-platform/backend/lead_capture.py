@@ -305,7 +305,7 @@ async def create_lead_form(req: LeadFormCreate, access: TenantAccess = Depends(_
 @router.get("/api/tenants/{tenant_id}/lead-forms")
 async def list_lead_forms(access: TenantAccess = Depends(_viewer)):
     async with database.get_db() as db:
-        async with db.execute(_FORM_SELECT + " WHERE f.tenant_id=? ORDER BY f.created_at",
+        async with db.execute(_FORM_SELECT + " WHERE f.tenant_id=? ORDER BY f.rowid",
                               (access.tenant_id,)) as cur:
             rows = await cur.fetchall()
     return [_form_out(r) for r in rows]
@@ -334,7 +334,7 @@ async def consent_text_history(access: TenantAccess = Depends(_viewer)):
     async with database.get_db() as db:
         async with db.execute(
             """SELECT id, locale, text, sha256, created_by, created_at, approved_by, approved_at
-               FROM consent_texts WHERE tenant_id=? ORDER BY created_at, id""",
+               FROM consent_texts WHERE tenant_id=? ORDER BY rowid""",
             (access.tenant_id,),
         ) as cur:
             rows = await cur.fetchall()
