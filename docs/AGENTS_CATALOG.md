@@ -106,3 +106,22 @@ Notable personas for the Core8 roadmap: `engineering-multi-agent-systems-archite
 | Higgsfield image/video generation | Notion Ecosystem OS roadmap |
 | Obsidian second-brain memory (remember/recall/journal) | Notion roadmap — marked done, **code not found** |
 | browser-harness, codebase-memory-mcp, Kanban mission board, OpenMontage video division | My Goddess INTEGRATIONS "next wave" |
+
+## D. Developer agent team (`.claude/`, `.codex/`, `.agents/`)
+
+Not a runtime system: these are the coding-assistant agents and skills used to work **on** this
+repository in Claude Code and Codex. They do not run in the platform, hold no customer data and
+are not connected to sections A or B.
+
+| Agent / skill | Scope |
+|---|---|
+| `core8-team` (skill) | Routes a task to the right department |
+| `core8-build` | Plan, implement, verify and review code |
+| `core8-design` | Interface, RTL, motion and short video |
+| `core8-grow` | Market research, offers, organic social copy |
+| `core8-make` | Social and reporting assets |
+| `core8-run` | Briefings, inbox and calendar drafts, team updates |
+
+Operating guide, the 42-capability catalog and a pilot live in
+[`docs/core8-agents/`](core8-agents/README.md). The files are generated; verify them with
+`python3 tools/core8_agent_team.py --check` rather than editing them by hand.
