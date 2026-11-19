@@ -5,7 +5,7 @@ is a human decision; passing local tests does not establish it.
 
 - Intake: Issue #24 · scope doc `docs/CUSTOMER_DEMO_SPRINT_01.md`
 - Branch: `demo/p0-receptionist-or-clinic` → base `demo/customer-showcase-sprint-01`
-- Draft PR: PR_LINK_PLACEHOLDER
+- Draft PR: https://github.com/V1P3eR1/Core8-AI/pull/26
 - Run date: 2026-11-19 (Asia/Jerusalem), Claude Code session started by Lev
 - Delivered: **P0 only.** P1 and P2 are not started.
 
