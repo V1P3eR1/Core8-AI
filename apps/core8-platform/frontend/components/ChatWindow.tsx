@@ -40,6 +40,8 @@ export default function ChatWindow({ agentId, agentName, onSessionEnd }: Props) 
   const [ttsEnabled, setTtsEnabled] = useState(false);
 
   const attemptRef = useRef(0);
+  const [attempt, setAttempt] = useState(0);  // shown in the UI; the ref drives the timers
+  const scheduleReconnectRef = useRef<() => void>(() => {});
   const wsRef = useRef<WebSocket | null>(null);
   const activeRef = useRef(true);
   const retryTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -75,10 +77,10 @@ export default function ChatWindow({ agentId, agentName, onSessionEnd }: Props) 
       if (messagesRef.current.length > 0) onSessionEnd?.();
       if (e.code === 4001) {
         setStatus("error");
-        setErrorMsg("Authentication failed — check your bearer token.");
+        setErrorMsg("Authentication failed — please sign in again.");
         return;
       }
-      scheduleReconnect();
+      scheduleReconnectRef.current();
     };
 
     ws.onerror = () => {
@@ -142,6 +144,7 @@ export default function ChatWindow({ agentId, agentName, onSessionEnd }: Props) 
     const delay = BACKOFF_DELAYS[attempt];
     const delaySecs = Math.ceil(delay / 1000);
     attemptRef.current = attempt + 1;
+    setAttempt(attempt + 1);
     setReconnectCountdown(delaySecs);
     let remaining = delaySecs;
     countdownIntervalRef.current = setInterval(() => {
@@ -152,6 +155,8 @@ export default function ChatWindow({ agentId, agentName, onSessionEnd }: Props) 
     retryTimerRef.current = setTimeout(() => { if (activeRef.current) connect(); }, delay);
   }, [connect]);
 
+  useEffect(() => { scheduleReconnectRef.current = scheduleReconnect; }, [scheduleReconnect]);
+
   const manualReconnect = () => {
     clearTimers(); attemptRef.current = 0;
     setReconnectCountdown(null); setStatus("idle"); setErrorMsg(null);
@@ -159,10 +164,11 @@ export default function ChatWindow({ agentId, agentName, onSessionEnd }: Props) 
   };
 
   useEffect(() => {
+    // The parent remounts this component per agent (keyed by agent id), so state starts fresh.
     activeRef.current = true; attemptRef.current = 0;
-    setConnected(false); setStatus("idle"); setErrorMsg(null); setReconnectCountdown(null);
     connect();
     return () => { activeRef.current = false; clearTimers(); wsRef.current?.close(); };
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- connect once per mount
   }, [agentId]);
 
   useEffect(() => {
@@ -221,7 +227,7 @@ export default function ChatWindow({ agentId, agentName, onSessionEnd }: Props) 
             )}
             {reconnectCountdown !== null && (
               <span className="font-mono text-xs text-yellow-400 bg-yellow-400/10 border border-yellow-400/30 px-2.5 py-1 rounded-lg">
-                RETRY {attemptRef.current}/{BACKOFF_DELAYS.length} · {reconnectCountdown}s
+                RETRY {attempt}/{BACKOFF_DELAYS.length} · {reconnectCountdown}s
               </span>
             )}
             {status === "error" && reconnectCountdown === null && (

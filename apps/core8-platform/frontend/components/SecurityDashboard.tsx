@@ -9,15 +9,16 @@ export default function SecurityDashboard() {
   const [toggling, setToggling] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const load = () => {
-    setLoading(true);
+  const fetchStatus = () =>
     fetchSecurityStatus()
       .then(setStatus)
       .catch((e) => setError(e.message))
       .finally(() => setLoading(false));
-  };
 
-  useEffect(() => { load(); }, []);
+  // First load: `loading` already starts true. The Refresh button resets the flag first.
+  const load = () => { setLoading(true); return fetchStatus(); };
+
+  useEffect(() => { fetchStatus(); }, []);
 
   const toggleKillSwitch = async () => {
     if (!status) return;
