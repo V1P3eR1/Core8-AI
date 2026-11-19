@@ -18,6 +18,15 @@ import database  # noqa: E402
 import main  # noqa: E402
 
 
+@pytest.fixture(autouse=True)
+def _fresh_auth_lockouts():
+    """Login lockouts are per process; never let one test's failed logins lock out another."""
+    from security import auth
+    auth._fail_times.clear()
+    auth._lockout_until.clear()
+    yield
+
+
 @pytest.fixture
 def client(tmp_path, monkeypatch):
     monkeypatch.setattr(database, "DB_PATH", str(tmp_path / "core8-test.db"))
