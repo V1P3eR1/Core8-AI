@@ -19,7 +19,7 @@ from config import cfg as platform_cfg
 from security.jwt_auth import require_jwt
 from tools.instagram_api import GraphAPIError, OAUTH_SCOPES, build_oauth_url
 
-from . import agents, carousel_render, content, jobs, leads, metrics, publishing, reports
+from . import agents, carousel_render, content, jobs, leads, links, metrics, publishing, reports
 from .config import scfg
 from .db import audit, execute, fetch_all, fetch_one, utc_to_local_iso, utc_str
 from .demo_data import clear_demo, seed_demo
@@ -106,7 +106,7 @@ async def overview():
 
 # ── Settings ───────────────────────────────────────────────────────────────
 
-SETTING_KEYS = ("brand", "publishing", "content_mix")
+SETTING_KEYS = ("brand", "publishing", "content_mix", "tracking")
 
 
 @router.get("/settings")
@@ -146,6 +146,11 @@ async def settings_put(key: str, body: SettingBody, payload: dict = Depends(requ
         value = {**DEFAULT_PUBLISHING, **value, "auto": {**DEFAULT_PUBLISHING["auto"], **(value.get("auto") or {})}}
         await audit(_actor(payload), "publishing_settings", "settings", None,
                     {"mode": value["mode"], "demo_mode": value.get("demo_mode")})
+    if key == "tracking":
+        try:
+            value = links.validate_tracking(value)
+        except links.TrackedLinkError as e:
+            raise HTTPException(400, str(e))
     out = await set_setting(key, value)
     await audit(_actor(payload), f"settings_updated:{key}", "settings")
     return out
@@ -372,6 +377,28 @@ async def items_status(item_id: str, body: StatusIn, payload: dict = Depends(req
         for p in await fetch_all("SELECT id FROM sm_publications WHERE content_item_id=? AND state IN ('queued','claimed')", (item_id,)):
             await publishing.cancel_publication(p["id"], _actor(payload))
     return await content.set_status(item_id, body.status, _actor(payload), body.note)
+
+
+@router.get("/items/{item_id}/tracked-links")
+async def items_tracked_links(item_id: str):
+    """Tracked links for one item, per channel and placement. Read-only: nothing is stored and
+    the caption is not touched, so an existing approval stays valid."""
+    item = await content.get_item(item_id)
+    if not item:
+        raise HTTPException(404)
+    tracking = await get_setting("tracking")
+    if not tracking.get("landing_url"):
+        return {"configured": False, "links": {}}
+    out: dict[str, dict[str, str]] = {}
+    for channel in links.CHANNELS:
+        out[channel] = {
+            placement: links.tracked_url(tracking["landing_url"], channel=channel,
+                                         campaign=tracking["campaign"], content_id=item_id,
+                                         placement=placement)
+            for placement in links.PLACEMENTS
+        }
+    return {"configured": True, "campaign": tracking["campaign"], "utm_content": links.slug(item_id),
+            "links": out}
 
 
 @router.get("/items/{item_id}/gates")
