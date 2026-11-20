@@ -1,0 +1,50 @@
+name: Core8 launch synthetic contract (no secrets)
+on:
+  pull_request:
+    paths:
+      - 'tools/launch/**'
+      - 'docs/launch/**'
+      - '.github/workflows/launch-contract.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - name: Checkout proposed launch tests (no persisted credentials)
+        uses: actions/checkout@v4
+        with:
+          path: core8
+          persist-credentials: false
+      - name: Checkout pinned draft landing PR 32 (read only)
+        uses: actions/checkout@v4
+        with:
+          ref: 64f77c4a7d414de5866865203168334ddb477cbf
+          path: landing
+          persist-credentials: false
+      - name: Checkout pinned draft triage PR 31 (read only)
+        uses: actions/checkout@v4
+        with:
+          ref: 6cab22ca56558a9a6fce214e7c57f88148123274
+          path: triage
+          persist-credentials: false
+      - name: Verify installed runtimes
+        run: |
+          node --version
+          php --version
+          php -m | grep -i '^mbstring$'
+      - name: Static bilingual social draft completeness
+        run: node core8/tools/launch/social_drafts.test.cjs
+      - name: Offline Social Manager draft payload preview
+        run: |
+          node core8/tools/launch/build_social_queue.cjs > /tmp/core8-social-preview.json
+          node -e 'const x=require("/tmp/core8-social-preview.json");if(x.items.length!==7||x.imported!==false||x.published!==false||x.items.some(i=>i.account_id||i.scheduled_for||i.status)) process.exit(1); console.log("PASS: 7 schema-shaped draft payloads; no account/schedule/publication")'
+      - name: Syntax validation
+        run: node --check core8/tools/launch/lead_contract.cjs
+      - name: Contract test from real PHP to local lead triage (synthetic only)
+        env:
+          CORE8_LANDING_DIR: landing
+          CORE8_TRIAGE_DIR: triage
+        run: node core8/tools/launch/lead_contract.cjs
