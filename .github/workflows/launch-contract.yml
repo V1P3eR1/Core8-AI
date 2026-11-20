@@ -37,6 +37,10 @@ jobs:
           php -m | grep -i '^mbstring$'
       - name: Static bilingual social draft completeness
         run: node core8/tools/launch/social_drafts.test.cjs
+      - name: Offline Social Manager draft payload preview
+        run: |
+          node core8/tools/launch/build_social_queue.cjs > /tmp/core8-social-preview.json
+          node -e 'const x=require("/tmp/core8-social-preview.json");if(x.items.length!==7||x.imported!==false||x.published!==false||x.items.some(i=>i.account_id||i.scheduled_for||i.status)) process.exit(1); console.log("PASS: 7 schema-shaped draft payloads; no account/schedule/publication")'
       - name: Syntax validation
         run: node --check core8/tools/launch/lead_contract.cjs
       - name: Contract test from real PHP to local lead triage (synthetic only)
