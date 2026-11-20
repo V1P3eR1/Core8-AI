@@ -65,6 +65,8 @@ async def instagram_oauth_callback(request: Request):
         )
 
     try:
+        from social import keystore as social_secrets
+        await social_secrets.refresh()  # pick up dashboard-managed Meta credentials
         short_token = await exchange_code_for_token(code)
         long_token, expires_in = await get_long_lived_token(short_token)
         account = await resolve_ig_account(long_token)

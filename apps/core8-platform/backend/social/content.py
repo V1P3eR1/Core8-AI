@@ -34,6 +34,10 @@ def url_hash(url: str) -> str:
     return hashlib.sha256(normalise_url(url).encode()).hexdigest()
 
 
+async def source_exists(url: str) -> bool:
+    return bool(await fetch_one("SELECT 1 FROM sm_sources WHERE url_hash=?", (url_hash(url),)))
+
+
 async def upsert_source(rec: dict) -> tuple[dict, bool]:
     """Insert unless a record with the same normalised URL exists. Returns (row, created)."""
     h = url_hash(rec["url"])

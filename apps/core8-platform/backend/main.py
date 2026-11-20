@@ -75,7 +75,7 @@ def startup_guard():
     if not cfg.jwt_secret:
         logger.warning("JWT_SECRET is not set — tokens will fail! Set it in .env")
     if not cfg.anthropic_api_key:
-        logger.warning("ANTHROPIC_API_KEY is not set — agents will not work!")
+        logger.warning("ANTHROPIC_API_KEY is not set in the environment — agents run in mock mode until a key is saved in the dashboard (Instagram & connections → keys).")
 
 
 @asynccontextmanager
@@ -92,6 +92,8 @@ async def lifespan(app: FastAPI):
     await init_db()
     await init_brain_schema()
     await init_social_schema()
+    from social import keystore as _sm_secrets
+    await _sm_secrets.refresh(force=True)
     from social.jobs import ensure_schedules, worker_loop
     from social.settings import get_setting as _sm_get
     from social.demo_data import seed_demo as _sm_seed
