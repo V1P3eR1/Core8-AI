@@ -18,7 +18,7 @@ import random
 
 from security.injection_gate import gate
 
-from .content import create_idea, create_item, upsert_source
+from .content import create_idea, create_item, source_exists, upsert_source
 from .db import audit, fetch_all, jload
 from .fact_check import check_text
 from .providers.llm import llm
@@ -89,6 +89,9 @@ async def run_research(job_id: str | None = None, max_per_feed: int = 8) -> dict
     records, errors = await research.fetch(max_per_feed=max_per_feed)
     stored, duplicates, flagged = 0, 0, 0
     for rec in records:
+        if not rec.get("url") or await source_exists(rec["url"]):
+            duplicates += 1  # known URL: no LLM call, no re-insert (cost guard)
+            continue
         g_title = gate(rec.get("title", ""), "web")
         g_sum = gate(rec.get("summary", ""), "web")
         is_flagged = g_title.flagged or g_sum.flagged

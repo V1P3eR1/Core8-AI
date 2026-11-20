@@ -668,3 +668,27 @@ def test_live_model_outputs_with_lists_are_coerced_before_storage(client, monkey
 
     item = asyncio.run(agents.draft_package(ideas[0], "image", actor="test"))
     assert item["caption"] == "שורה 1; שורה 2" and item["production_status"] == "script_only"
+
+
+def test_research_rerun_does_not_reanalyse_known_sources(client, monkeypatch):
+    """Cost guard: a URL already in sm_sources is skipped before any LLM call (seen in production:
+    a re-run spent 16 live calls re-analysing stored sources)."""
+    from social import agents
+    from social.providers.llm import llm
+    from social.providers.research import research
+    calls = {"n": 0}
+
+    async def fake_complete(task, system, user, mock_result, job_id=None):
+        calls["n"] += 1
+        return mock_result() if callable(mock_result) else mock_result
+
+    async def fake_fetch(max_per_feed=8):
+        return [{"title": "A", "url": "https://example.com/a", "publisher": "Ex", "summary": "s", "provider": "rss"},
+                {"title": "B", "url": "https://example.com/b?utm_source=x", "publisher": "Ex", "summary": "s", "provider": "rss"}], []
+
+    monkeypatch.setattr(llm, "complete_json", fake_complete)
+    monkeypatch.setattr(research, "fetch", fake_fetch)
+    r1 = asyncio.run(agents.run_research())
+    assert r1["stored"] == 2 and calls["n"] == 2
+    r2 = asyncio.run(agents.run_research())
+    assert r2["stored"] == 0 and r2["duplicates"] == 2 and calls["n"] == 2  # no new LLM calls
