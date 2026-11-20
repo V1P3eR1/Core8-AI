@@ -41,6 +41,7 @@ const waitId = (page, id, pattern) => waitText(page, `[data-testid="${id}"]`, pa
     if (u.startsWith(origin + '/') || u.startsWith('blob:')) return route.continue();
     blocked.push(u); return route.abort();
   });
+  await context.addInitScript(() => localStorage.setItem('c8lang', 'en')); // assertions below use the English text
   const page = await context.newPage();
   page.on('console', (m) => { if (m.type() === 'error' || m.type() === 'warning') problems.push(m.text()); });
   page.on('pageerror', (e) => problems.push('pageerror: ' + e.message));

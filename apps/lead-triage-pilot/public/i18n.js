@@ -195,7 +195,7 @@
   var lang = 'en';
   // Private windows or blocked site data can make storage throw: the page must still work.
   try { lang = root.localStorage.getItem(KEY) || ''; } catch (e) { lang = ''; }
-  if (lang !== 'he' && lang !== 'en') lang = /^he\b/i.test(root.navigator.language || '') ? 'he' : 'en';
+  if (lang !== 'he' && lang !== 'en') lang = 'he'; // Hebrew first; English is one click away and remembered
 
   function t(key, vars) {
     var s = lang === 'he' && Object.prototype.hasOwnProperty.call(HE, key) ? HE[key] : key;

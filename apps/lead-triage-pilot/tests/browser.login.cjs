@@ -35,6 +35,7 @@ async function check(name, fn) {
     if (u.startsWith(origin + '/')) return route.continue();
     blocked.push(u); return route.abort();
   });
+  await context.addInitScript(() => localStorage.setItem('c8lang', 'en')); // assertions below use the English text
   const page = await context.newPage();
   const T = (id) => page.locator(`[data-testid="${id}"]`);
 
