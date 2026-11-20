@@ -69,6 +69,21 @@ AUDIENCE_LABEL = {"smb": "עסקים קטנים ובינוניים", "enterprise
 
 # ── 1. Researcher ──────────────────────────────────────────────────────────
 
+def _text(value, max_len: int = 4000) -> str | None:
+    """Coerce a model-supplied field to a string. Live models sometimes return lists or
+    objects where the prompt asked for text; SQLite cannot bind those (observed in
+    production 2026-11-20: `unknowns` came back as a list)."""
+    if value is None:
+        return None
+    if isinstance(value, str):
+        return value[:max_len]
+    if isinstance(value, (list, tuple)):
+        return "; ".join(str(_text(v, max_len) or "") for v in value if v not in (None, ""))[:max_len] or None
+    if isinstance(value, dict):
+        return "; ".join(f"{k}: {_text(v, max_len)}" for k, v in value.items())[:max_len] or None
+    return str(value)[:max_len]
+
+
 async def run_research(job_id: str | None = None, max_per_feed: int = 8) -> dict:
     """Fetch from the research provider, analyse (LLM or mock), store with duplicate detection."""
     records, errors = await research.fetch(max_per_feed=max_per_feed)
@@ -80,10 +95,10 @@ async def run_research(job_id: str | None = None, max_per_feed: int = 8) -> dict
         analysis = await _analyse_source(rec, g_title, g_sum, job_id)
         row, created = await upsert_source({
             **rec,
-            "summary": analysis.get("summary") or rec.get("summary"),
-            "relevance": analysis.get("relevance"),
-            "unknowns": analysis.get("unknowns"),
-            "angle": analysis.get("angle"),
+            "summary": _text(analysis.get("summary")) or rec.get("summary"),
+            "relevance": _text(analysis.get("relevance")),
+            "unknowns": _text(analysis.get("unknowns")),
+            "angle": _text(analysis.get("angle")),
             "topic": analysis.get("topic"),
             "source_type": analysis.get("source_type", "reporting"),
             "confidence": analysis.get("confidence", "medium"),
@@ -233,7 +248,10 @@ async def generate_ideas(count: int = 20, job_id: str | None = None, source_ids:
     created = []
     seen_titles = {r["title"] for r in await fetch_all("SELECT title FROM sm_ideas")}
     for idea in ideas if isinstance(ideas, list) else []:
-        if not isinstance(idea, dict) or not idea.get("title") or idea["title"] in seen_titles:
+        if not isinstance(idea, dict):
+            continue
+        idea["title"] = _text(idea.get("title"), 300)
+        if not idea["title"] or idea["title"] in seen_titles:
             continue
         if idea.get("pillar") not in PILLAR_LABEL or idea.get("audience") not in AUDIENCE_LABEL:
             continue
@@ -241,6 +259,11 @@ async def generate_ideas(count: int = 20, job_id: str | None = None, source_ids:
             continue
         idea = {k: idea.get(k) for k in ("title", "pillar", "audience", "problem", "core_message", "desired_action",
                                           "format", "business_goal", "measurement", "source_ids")}
+        for k in ("title", "problem", "core_message", "desired_action", "business_goal", "measurement"):
+            idea[k] = _text(idea.get(k), 2000)
+        if not isinstance(idea.get("source_ids"), list):
+            idea["source_ids"] = [idea["source_ids"]] if isinstance(idea.get("source_ids"), str) else []
+        idea["source_ids"] = [str(x) for x in idea["source_ids"] if isinstance(x, (str, int))][:10]
         idea["notes"] = f"origin: {llm.mode}" + ("; demo" if is_demo else "")
         idea["is_demo"] = 1 if is_demo else 0
         created.append(await create_idea(idea))
@@ -338,7 +361,10 @@ async def draft_package(idea: dict, fmt: str | None = None, job_id: str | None =
         pkg = mock_fn(idea)
     pkg.setdefault("origin", llm.mode)
     pkg = producer_enrich(pkg, fmt)
-    caption = pkg.get("caption") or ""
+    caption = _text(pkg.get("caption"), 2200) or ""  # Instagram caption limit; model may return a list of lines
+    pkg["caption"] = caption
+    if not isinstance(pkg.get("production_status"), str):
+        pkg["production_status"] = "script_only"
     item = await create_item({
         "idea_id": idea["id"], "format": fmt, "title": idea["title"], "pillar": idea["pillar"],
         "audience": idea["audience"], "status": "draft", "package": pkg, "caption": caption,

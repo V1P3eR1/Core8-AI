@@ -629,3 +629,42 @@ def test_social_manager_is_admin_only(api):
                       headers=member).status_code == 403
     assert api.c.get("/api/social/settings", headers=api.admin).status_code == 200
     assert api.c.get("/api/social/settings").status_code == 401
+
+
+def test_live_model_outputs_with_lists_are_coerced_before_storage(client, monkeypatch):
+    """Live models sometimes return lists/objects where text was asked (seen in production
+    2026-11-20: `unknowns` as a list → sqlite 'type list is not supported'). The pipeline must
+    coerce, not crash."""
+    from social import agents
+    from social.providers.llm import llm
+
+    async def fake_complete(task, system, user, mock_result, job_id=None):
+        if task == "research_analyse":
+            return {"summary": ["שורה א", "שורה ב"], "relevance": {"smb": "גבוה"}, "unknowns": ["מחיר", "זמינות"],
+                    "angle": "להסביר", "topic": "ai_plain", "source_type": "official", "confidence": "high"}
+        if task == "ideas":
+            return [{"title": ["כותרת", "ברשימה"], "pillar": "ai_plain", "audience": "smb", "problem": ["א", "ב"],
+                     "core_message": {"k": "v"}, "desired_action": "DM", "format": "image", "business_goal": "x",
+                     "measurement": ["reach"], "source_ids": "not-a-list"}]
+        return {"headline": "h", "body": ["b1", "b2"], "visual_brief": "v", "caption": ["שורה 1", "שורה 2"],
+                "cta": "c", "alt_text": "a", "sources": [], "required_assets": [], "production_status": ["x"]}
+
+    monkeypatch.setattr(llm, "complete_json", fake_complete)
+    monkeypatch.setattr(type(llm), "mode", property(lambda self: "live"))
+
+    async def fake_fetch(max_per_feed=8):
+        return [{"title": "T", "url": "https://example.com/p1", "publisher": "Example", "summary": "s",
+                 "published_at": None, "provider": "rss"}], []
+    from social.providers.research import research
+    monkeypatch.setattr(research, "fetch", fake_fetch)
+
+    r = asyncio.run(agents.run_research())
+    assert r["stored"] == 1
+    src = asyncio.run(fetch_one("SELECT unknowns, summary, relevance FROM sm_sources WHERE url='https://example.com/p1'"))
+    assert src["unknowns"] == "מחיר; זמינות" and src["summary"] == "שורה א; שורה ב" and "smb: גבוה" in src["relevance"]
+
+    ideas = asyncio.run(agents.generate_ideas(count=1))
+    assert len(ideas) == 1 and ideas[0]["title"] == "כותרת; ברשימה" and ideas[0]["source_ids"] == ["not-a-list"]
+
+    item = asyncio.run(agents.draft_package(ideas[0], "image", actor="test"))
+    assert item["caption"] == "שורה 1; שורה 2" and item["production_status"] == "script_only"
