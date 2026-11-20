@@ -16,10 +16,10 @@ from fastapi.responses import FileResponse
 from pydantic import BaseModel, Field
 
 from config import cfg as platform_cfg
-from security.jwt_auth import require_jwt
+from security.jwt_auth import require_admin, require_jwt
 from tools.instagram_api import GraphAPIError, OAUTH_SCOPES, build_oauth_url
 
-from . import agents, carousel_render, content, jobs, leads, metrics, publishing, reports
+from . import agents, carousel_render, content, jobs, leads, metrics, publishing, reports, keystore as secret_store
 from .config import scfg
 from .db import audit, execute, fetch_all, fetch_one, utc_to_local_iso, utc_str
 from .demo_data import clear_demo, seed_demo
@@ -61,6 +61,7 @@ def _local(row: dict, *keys: str) -> dict:
 
 @router.get("/overview")
 async def overview():
+    await secret_store.refresh()
     pub = await get_setting("publishing")
     provider = get_provider()
     acct = await provider.account()
@@ -146,6 +147,60 @@ class PauseBody(BaseModel):
 @router.post("/settings/emergency-pause")
 async def emergency_pause(body: PauseBody, payload: dict = Depends(require_jwt)):
     return await publishing.set_emergency_pause(body.active, _actor(payload))
+
+
+# ── Credentials (dashboard-managed, encrypted at rest; admin only) ─────────
+
+class SecretBody(BaseModel):
+    value: str = Field(min_length=1, max_length=512)
+
+
+@router.get("/secrets")
+async def secrets_status(payload: dict = Depends(require_jwt)):
+    require_admin(payload)
+    return {"items": await secret_store.status(), "llm_mode": llm.mode,
+            "encryption_ready": bool(platform_cfg.ig_token_enc_key)}
+
+
+@router.put("/secrets/{name}")
+async def secrets_put(name: str, body: SecretBody, payload: dict = Depends(require_jwt)):
+    require_admin(payload)
+    if name not in secret_store.SECRET_SPECS:
+        raise HTTPException(404)
+    if not platform_cfg.ig_token_enc_key:
+        raise HTTPException(500, "IG_TOKEN_ENC_KEY חסר בשרת — לא ניתן להצפין")
+    try:
+        out = await secret_store.set_value(name, body.value, _actor(payload))
+    except secret_store.SecretError as e:
+        raise HTTPException(400, str(e))
+    await audit(_actor(payload), f"secret_set:{name}", "secrets", None, {"hint": out.get("hint")})
+    return {"item": out, "llm_mode": llm.mode}
+
+
+@router.delete("/secrets/{name}")
+async def secrets_delete(name: str, payload: dict = Depends(require_jwt)):
+    require_admin(payload)
+    if name not in secret_store.SECRET_SPECS:
+        raise HTTPException(404)
+    out = await secret_store.delete(name)
+    await audit(_actor(payload), f"secret_deleted:{name}", "secrets")
+    return {"item": out, "llm_mode": llm.mode}
+
+
+class SecretTestBody(BaseModel):
+    value: str | None = Field(default=None, max_length=512)
+
+
+@router.post("/secrets/anthropic_api_key/test")
+async def secrets_test_anthropic(body: SecretTestBody | None = None, payload: dict = Depends(require_jwt)):
+    """Live 8-token call with the stored key (or a candidate value, not stored)."""
+    require_admin(payload)
+    try:
+        out = await secret_store.test_anthropic(body.value if body else None)
+    except secret_store.SecretError as e:
+        raise HTTPException(400, str(e))
+    await audit(_actor(payload), "secret_tested:anthropic_api_key", "secrets", None, {"ok": out.get("ok")})
+    return out
 
 
 @router.post("/demo/seed")
@@ -589,6 +644,7 @@ SUPPORTED_FORMATS = [
 
 @router.get("/instagram/status")
 async def instagram_status():
+    await secret_store.refresh()
     provider = get_provider()
     acct = await provider.account()
     pub = await get_setting("publishing")
@@ -598,7 +654,7 @@ async def instagram_status():
         "login_path": "Instagram API with Facebook Login", "scopes": OAUTH_SCOPES,
         "permissions_status": "לא ניתן לאמת הרשאות ללא חיבור אמיתי" if provider.mode != "live" else "ראו token + publishing_limit",
         "supported_formats": SUPPORTED_FORMATS, "publishing_limit": None, "published_24h": None,
-        "app_configured": bool(platform_cfg.meta_app_id),
+        "app_configured": bool(secret_store.cached("meta_app_id")),
         "media_base_url": scfg.media_base_url, "media_url_ttl_seconds": scfg.media_url_ttl_seconds,
     }
     if acct:
@@ -614,6 +670,7 @@ async def instagram_status():
 
 @router.post("/instagram/connect-url")
 async def instagram_connect_url(payload: dict = Depends(require_jwt)):
+    await secret_store.refresh()
     try:
         url = build_oauth_url()
     except GraphAPIError as e:

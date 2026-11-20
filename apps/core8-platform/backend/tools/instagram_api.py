@@ -14,6 +14,16 @@ import httpx
 
 from config import cfg
 
+
+def _meta_app_id() -> str:
+    from social import keystore as _secrets  # dashboard-managed credential with env fallback
+    return _secrets.cached("meta_app_id")
+
+
+def _meta_app_secret() -> str:
+    from social import keystore as _secrets
+    return _secrets.cached("meta_app_secret")
+
 GRAPH_API_VERSION = "v21.0"
 _GRAPH = f"https://graph.facebook.com/{GRAPH_API_VERSION}"
 _DIALOG = f"https://www.facebook.com/{GRAPH_API_VERSION}/dialog/oauth"
@@ -46,13 +56,13 @@ def _prune_states() -> None:
 
 def build_oauth_url() -> str:
     """Generate a CSRF state and return the Meta OAuth consent URL."""
-    if not cfg.meta_app_id:
-        raise GraphAPIError("META_APP_ID is not set — create a Meta app first.")
+    if not _meta_app_id():
+        raise GraphAPIError("META_APP_ID is not set — create a Meta app first (dashboard → אינסטגרם וחיבורים → מפתחות).")
     _prune_states()
     state = secrets.token_urlsafe(24)
     _PENDING_STATES[state] = time.monotonic()
     params = {
-        "client_id": cfg.meta_app_id,
+        "client_id": _meta_app_id(),
         "redirect_uri": cfg.meta_redirect_uri,
         "state": state,
         "scope": ",".join(OAUTH_SCOPES),
@@ -96,8 +106,8 @@ async def _graph_post(path: str, data: dict) -> dict:
 async def exchange_code_for_token(code: str) -> str:
     """OAuth code -> short-lived user access token."""
     data = await _graph_get("oauth/access_token", {
-        "client_id": cfg.meta_app_id,
-        "client_secret": cfg.meta_app_secret,
+        "client_id": _meta_app_id(),
+        "client_secret": _meta_app_secret(),
         "redirect_uri": cfg.meta_redirect_uri,
         "code": code,
     })
@@ -111,8 +121,8 @@ async def get_long_lived_token(short_token: str) -> tuple[str, int]:
     """Short-lived token -> (long-lived token, expires_in seconds, ~60 days)."""
     data = await _graph_get("oauth/access_token", {
         "grant_type": "fb_exchange_token",
-        "client_id": cfg.meta_app_id,
-        "client_secret": cfg.meta_app_secret,
+        "client_id": _meta_app_id(),
+        "client_secret": _meta_app_secret(),
         "fb_exchange_token": short_token,
     })
     token = data.get("access_token")

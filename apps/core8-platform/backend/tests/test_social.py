@@ -520,7 +520,7 @@ def test_demo_flow_research_to_report(s):
 
 def test_llm_daily_budget_guard(client, monkeypatch):
     from social.providers.llm import BudgetExceeded, llm, record_usage
-    monkeypatch.setattr(llm, "mode", "live")
+    monkeypatch.setattr(type(llm), "mode", property(lambda self: "live"))  # mode is dynamic (secrets-aware)
     monkeypatch.setattr(scfg, "ai_daily_token_budget", 10)
     asyncio.run(record_usage("t", "anthropic", "m", 8, 4))
     with pytest.raises(BudgetExceeded):

@@ -13,6 +13,10 @@ os.environ["SOCIAL_RESEARCH_MODE"] = "mock"
 os.environ["SOCIAL_INSTAGRAM_MODE"] = "mock"
 os.environ["SOCIAL_MEDIA_DIR"] = tempfile.mkdtemp()
 os.environ["SOCIAL_SEED_DEMO"] = "false"
+# Fernet key for encrypted-at-rest secrets (IG tokens, dashboard-managed credentials).
+if not os.getenv("IG_TOKEN_ENC_KEY"):
+    from cryptography.fernet import Fernet as _F
+    os.environ["IG_TOKEN_ENC_KEY"] = _F.generate_key().decode()
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 

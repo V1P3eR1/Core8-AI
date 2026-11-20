@@ -57,15 +57,35 @@ def _extract_json(text: str):
 
 
 class LLMProvider:
+    """`mode` is evaluated on every access so a key saved in the dashboard
+    (social.keystore) switches the provider to live without a restart."""
+
     def __init__(self):
-        self.mode = "live" if scfg.llm_live else "mock"
         self.model = scfg.llm_model
+
+    @staticmethod
+    def _api_key() -> str:
+        from .. import keystore as secrets  # local import: avoids an import cycle at module load
+        return secrets.cached("anthropic_api_key")
+
+    @property
+    def mode(self) -> str:
+        if scfg.llm_mode == "mock":
+            return "mock"
+        key = self._api_key()
+        if not key:
+            return "mock"
+        if scfg.llm_mode == "auto" and key.startswith("test-"):
+            return "mock"
+        return "live"
 
     async def complete_json(self, task: str, system: str, user: str,
                             mock_result, job_id: str | None = None):
         """Return a JSON-decoded object. In mock mode returns `mock_result`
         (callable or value) and records zero usage, so the pipeline works
         end-to-end without credentials."""
+        from .. import keystore as secrets
+        await secrets.refresh()
         if self.mode != "live":
             await record_usage(task, "mock", None, 0, 0, job_id)
             return mock_result() if callable(mock_result) else mock_result
@@ -76,7 +96,7 @@ class LLMProvider:
                 f"AI daily token budget reached ({used}/{scfg.ai_daily_token_budget}).")
 
         import anthropic  # imported lazily so mock mode has no SDK dependency at runtime
-        client = anthropic.AsyncAnthropic(api_key=platform_cfg.anthropic_api_key)
+        client = anthropic.AsyncAnthropic(api_key=self._api_key())
         resp = await client.messages.create(
             model=self.model,
             max_tokens=scfg.ai_max_tokens_per_call,
