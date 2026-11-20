@@ -252,14 +252,20 @@ async def generate_ideas(count: int = 20, job_id: str | None = None, source_ids:
     # larger cap, and label the origin truthfully if a batch had to fall back.
     ideas: list = []
     origin = llm.mode
+    # Ideas already in the system (newest first). Without this each run re-proposed yesterday's topics
+    # with new wording (production 2026-11-20).
+    existing_titles = [r["title"] for r in await fetch_all(
+        "SELECT title FROM sm_ideas WHERE is_demo=0 AND status != 'rejected' ORDER BY created_at DESC LIMIT 40")][::-1]
     if llm.mode == "live":
         remaining, batch_no = count, 0
         while remaining > 0 and batch_no < 6:
             n = min(IDEAS_PER_CALL, remaining)
             batch_no += 1
             prompt = user.replace(f"Generate {count} DISTINCT", f"Generate {n} DISTINCT", 1)
-            if ideas:
-                prompt += "\nAlready proposed (do NOT repeat): " + "; ".join(str(i.get("title")) for i in ideas[-20:])
+            taken = existing_titles + [str(i.get("title")) for i in ideas]
+            if taken:
+                prompt += ("\nAlready proposed — do NOT repeat these topics or angles, even reworded "
+                           "(pick different sources, pillars or audiences): " + "; ".join(taken[-60:]))
             try:
                 batch = await llm.complete_json("ideas", sys_p, prompt, mock, job_id=job_id, max_tokens=8192)
             except Exception:
