@@ -119,13 +119,14 @@ async function run() {
 
     app = createApp({ dataDir: db, leadSecret: secret, quiet: true });
     const apiPort = await app.listen(0);
-    const one = await request(apiPort, '/api/intake/email', { raw: bodies[0] });
+    const localHeaders = { Origin: 'http://127.0.0.1:' + apiPort };
+    const one = await request(apiPort, '/api/intake/email', { raw: bodies[0] }, localHeaders);
     assert.equal(one.status, 201, 'Synthetic verified lead created');
-    const replay = await request(apiPort, '/api/intake/email', { raw: bodies[0] });
+    const replay = await request(apiPort, '/api/intake/email', { raw: bodies[0] }, localHeaders);
     assert.equal(replay.status, 200, 'Duplicate returns success without new record');
     assert.equal(replay.json.duplicate, true);
-    assert.equal((await request(apiPort, '/api/intake/email', { raw: forged })).status, 422);
-    assert.equal((await request(apiPort, '/api/intake/email', { raw: bodies[1] })).status, 201);
+    assert.equal((await request(apiPort, '/api/intake/email', { raw: forged }, localHeaders)).status, 422);
+    assert.equal((await request(apiPort, '/api/intake/email', { raw: bodies[1] }, localHeaders)).status, 201);
     assert.equal(app.store.leads().length, 2, 'Only two synthetic leads saved');
     assert.ok(app.store.leads().every((l) => l.status === 'needs_review'), 'No approval or sending');
     assert.ok(app.store.verify().ok, 'Audit chain stays valid');
