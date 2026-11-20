@@ -130,3 +130,26 @@ def test_anthropic_test_endpoint_classifies_errors_without_network(client, monke
     assert "should-not-leak" not in r.text
     # a candidate value is tested but never stored
     assert client.get("/api/social/secrets", headers=api.admin).json()["items"]["anthropic_api_key"]["source"] == "env"
+
+
+def test_anthropic_test_explains_monthly_usage_cap(client, monkeypatch):
+    """Seen in production 2026-11-20: a valid key + account spend cap → 400 'usage limits'."""
+    api = _social(client)
+
+    class CapErr(Exception):
+        status_code = 400
+
+    class FakeMessages:
+        async def create(self, **kw):
+            raise CapErr("Error code: 400 - You have reached your specified API usage limits. You will regain access on 2026-12-01")
+
+    class FakeClient:
+        def __init__(self, api_key):
+            self.messages = FakeMessages()
+
+    import anthropic
+    monkeypatch.setattr(anthropic, "AsyncAnthropic", FakeClient)
+    r = client.post("/api/social/secrets/anthropic_api_key/test", json={"value": FAKE_KEY}, headers=api.admin)
+    assert r.status_code == 200
+    body = r.json()
+    assert body["ok"] is False and body["error"] == "usage_limit" and "מגבלת השימוש החודשית" in body["message"]

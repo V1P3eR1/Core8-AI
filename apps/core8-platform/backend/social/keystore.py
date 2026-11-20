@@ -175,10 +175,18 @@ async def test_anthropic(value: str | None = None) -> dict:
     except Exception as e:  # noqa: BLE001 — classify, never echo the exception body (may contain headers)
         kind = type(e).__name__
         status_code = getattr(e, "status_code", None)
+        raw = str(e)
+        if "usage limits" in raw or "spend limit" in raw or "credit balance" in raw:
+            # Anthropic returns 400 for an account-level monthly cap; the key itself is valid.
+            message = ("המפתח תקין, אבל חשבון Anthropic הגיע למגבלת השימוש החודשית שהוגדרה בו — "
+                       "הגדל את המגבלה או הוסף קרדיט ב-console.anthropic.com → Settings → Limits/Billing. "
+                       "עד אז הסוכנים עובדים בתבניות (mock).")
+            return {"ok": False, "error": "usage_limit", "status_code": status_code, "message": message}
         message = {
+            400: "Anthropic דחה את הבקשה (400) — בדוק את המודל (SOCIAL_LLM_MODEL) והגדרות החשבון",
             401: "המפתח נדחה על-ידי Anthropic (401) — בדוק שהעתקת מפתח API תקין",
             403: "אין הרשאה (403) — בדוק חיוב/הרשאות בחשבון Anthropic",
             404: "המודל לא נמצא (404) — בדוק SOCIAL_LLM_MODEL",
-            429: "חריגה ממגבלת קצב/קרדיט (429) — הוסף קרדיט בחשבון Anthropic",
+            429: "חריגה ממגבלת קצב (429) — נסה שוב בעוד דקה",
         }.get(status_code, f"שגיאת חיבור: {kind}")
         return {"ok": False, "error": kind, "status_code": status_code, "message": message}
