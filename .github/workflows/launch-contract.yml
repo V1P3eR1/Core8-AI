@@ -1,0 +1,46 @@
+name: Core8 launch synthetic contract (no secrets)
+on:
+  pull_request:
+    paths:
+      - 'tools/launch/**'
+      - 'docs/launch/**'
+      - '.github/workflows/launch-contract.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - name: Checkout proposed launch tests (no persisted credentials)
+        uses: actions/checkout@v4
+        with:
+          path: core8
+          persist-credentials: false
+      - name: Checkout pinned draft landing PR 32 (read only)
+        uses: actions/checkout@v4
+        with:
+          ref: 64f77c4a7d414de5866865203168334ddb477cbf
+          path: landing
+          persist-credentials: false
+      - name: Checkout pinned draft triage PR 31 (read only)
+        uses: actions/checkout@v4
+        with:
+          ref: 6cab22ca56558a9a6fce214e7c57f88148123274
+          path: triage
+          persist-credentials: false
+      - name: Verify installed runtimes
+        run: |
+          node --version
+          php --version
+          php -m | grep -i '^mbstring$'
+      - name: Static bilingual social draft completeness
+        run: node core8/tools/launch/social_drafts.test.cjs
+      - name: Syntax validation
+        run: node --check core8/tools/launch/lead_contract.cjs
+      - name: Contract test from real PHP to local lead triage (synthetic only)
+        env:
+          CORE8_LANDING_DIR: landing
+          CORE8_TRIAGE_DIR: triage
+        run: node core8/tools/launch/lead_contract.cjs
