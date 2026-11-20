@@ -124,6 +124,7 @@ function Frame({ user, onLogout, children }: { user: AuthUser; onLogout: () => v
   );
 
   const workerOffline = overview ? overview.worker.online === false : false;
+  const llmBlocked = overview?.modes.llm === "blocked";
   const paused = overview?.publishing.emergency_pause === true;
 
   return (
@@ -169,7 +170,7 @@ function Frame({ user, onLogout, children }: { user: AuthUser; onLogout: () => v
                 {overview ? (
                   <>
                     <ModeBadge label="Instagram" mode={overview.modes.instagram} />
-                    <ModeBadge label="LLM" mode={overview.modes.llm} />
+                    <ModeBadge label="LLM" mode={overview.modes.llm} title={overview.llm_health?.message ?? undefined} />
                     <ModeBadge label="מחקר" mode={overview.modes.research} />
                     {overview.publishing.demo_mode && (
                       <span className="rounded-md border border-yellow-400/50 bg-yellow-400/15 px-1.5 py-0.5 text-[11px] font-bold text-yellow-200" title="מצב demo — רשומות הדגמה מוצגות ופרסום אמיתי חסום">מצב DEMO</span>
@@ -181,8 +182,9 @@ function Frame({ user, onLogout, children }: { user: AuthUser; onLogout: () => v
                 ) : <span className="text-xs text-muted-foreground">מצב ספקים לא ידוע</span>}
               </div>
             </div>
-            {(workerOffline || paused) && (
+            {(workerOffline || paused || llmBlocked) && (
               <div className="flex flex-col gap-1 px-4 pb-2">
+                {llmBlocked && <Banner kind="warning">הסוכנים לא מקבלים תשובות מ-Claude: {overview?.llm_health?.message ?? "הספק חוסם קריאות"} פרטים ובדיקה: אינסטגרם וחיבורים ← מפתחות.</Banner>}
                 {workerOffline && <Banner kind="danger">ה-worker לא פעיל — ג&apos;ובים ופרסומים לא ירוצו. ניתן להריץ tick ידני בעמוד &quot;אוטומציות ולוגים&quot;.</Banner>}
                 {paused && <Banner kind="danger">השהיית חירום פעילה — כל הפרסומים מושהים עד לביטול ההשהיה בעמוד הסקירה.</Banner>}
               </div>

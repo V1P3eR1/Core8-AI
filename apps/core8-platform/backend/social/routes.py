@@ -74,6 +74,7 @@ def _local(row: dict, *keys: str) -> dict:
 @router.get("/overview")
 async def overview():
     await secret_store.refresh()
+    llm_mode, llm_health = await llm.display_mode()
     pub = await get_setting("publishing")
     provider = get_provider()
     acct = await provider.account()
@@ -96,8 +97,9 @@ async def overview():
         "SELECT id, title, format, status, scheduled_for, is_demo FROM sm_content_items WHERE status IN ('scheduled','approved') "
         "ORDER BY scheduled_for LIMIT 8")]
     return {
-        "modes": {"instagram": provider.mode, "llm": llm.mode, "research": research.mode,
+        "modes": {"instagram": provider.mode, "llm": llm_mode, "research": research.mode,
                   "notify": notifier.mode},
+        "llm_health": llm_health,
         "publishing": pub, "account": acct, "token": publishing.token_status(acct) if provider.mode == "live" else
         {"ok": bool(acct), "label": "mock — אין טוקן אמיתי"},
         "worker": await jobs.worker_status(), "counts": counts, "upcoming": upcoming,
@@ -170,7 +172,8 @@ class SecretBody(BaseModel):
 @router.get("/secrets")
 async def secrets_status(payload: dict = Depends(require_jwt)):
     require_admin(payload)
-    return {"items": await secret_store.status(), "llm_mode": llm.mode,
+    llm_mode, llm_health = await llm.display_mode()
+    return {"items": await secret_store.status(), "llm_mode": llm_mode, "llm_health": llm_health,
             "encryption_ready": bool(platform_cfg.ig_token_enc_key)}
 
 

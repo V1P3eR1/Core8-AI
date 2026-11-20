@@ -51,7 +51,8 @@ services:
     build:
       context: ../frontend
       args:
-        NEXT_PUBLIC_API_URL: https://${DOMAIN}
+        # Empty = same origin, so the dashboard works on every hostname Caddy serves (DOMAIN + EXTRA_DOMAINS).
+        NEXT_PUBLIC_API_URL: ""
     restart: unless-stopped
     expose: ["3000"]
     depends_on: [backend]
@@ -63,6 +64,9 @@ services:
     ports: ["80:80", "443:443"]
     environment:
       DOMAIN: ${DOMAIN}
+      # Optional extra hostnames (space-separated), e.g. "app.core8-ai.com". Each needs a DNS A record to this VPS
+      # before it is added, or Caddy keeps retrying its certificate.
+      EXTRA_DOMAINS: ${EXTRA_DOMAINS:-}
     volumes:
       - ./Caddyfile:/etc/caddy/Caddyfile:ro
       - caddy_data:/data

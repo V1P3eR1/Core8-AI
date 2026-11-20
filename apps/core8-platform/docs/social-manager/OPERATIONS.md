@@ -33,6 +33,10 @@ What is *not* acceptable: `SOCIAL_WORKER_INPROCESS=true` on a laptop and hoping 
 
 **Redeploy without SSH**: hPanel → VPS → Docker Manager can run a one-off `core8-ops` project (image `docker:27-cli`, mounts `/var/run/docker.sock` and `/opt/core8`) whose command is `git pull` + `docker compose -p deploy -f deploy/docker-compose.vps.yml up -d --build`. Its logs show the build and the health check. Same effect as `bash /root/install.sh` from the web terminal.
 
+**Hostnames**: Caddy serves `DOMAIN` plus any space-separated `EXTRA_DOMAINS`, each with its own automatic certificate. The frontend is built with an empty `NEXT_PUBLIC_API_URL`, so it calls the API on whatever hostname it was loaded from — no rebuild per domain, no CORS. To move to a custom domain without breaking the old address: (1) add a DNS A record for the new name → `2.25.15.153` (at Cloudflare: **DNS only**, grey cloud — proxied mode breaks large media uploads and certificate issuance); (2) redeploy with `DOMAIN=<new> EXTRA_DOMAINS=srv2179387.hstgr.cloud`. `DOMAIN` is the canonical name used for `MEDIA_BASE_URL` and the Meta OAuth redirect, so update the Meta app's redirect URI at the same time. Only add a hostname after its DNS record resolves, or Caddy retries its certificate in a loop.
+
+**LLM health**: when a live call fails with a blocking error (account usage cap, rejected key, missing permission) the dashboard header shows **LLM: חסום** with the reason, and a banner points to the keys tab. It clears on the next successful call, on "בדוק חיבור" success, or when a new key is saved. Agents keep working on templates (labelled `mock`) meanwhile.
+
 - Data = one SQLite file + the media directory (`SOCIAL_MEDIA_DIR`, default `backend/media/social`).
 - Backup: stop nothing; use `sqlite3 core8.db ".backup 'core8-$(date +%F).db'"` (online, consistent) + `rsync` the media dir. Daily, keep 14.
 - Restore: stop API + worker, replace the file + media dir, start. Approval/publication state is in the DB, so a restore from before a publish could re-queue it: check אינסטגרם וחיבורים → publications after a restore and cancel anything already live.

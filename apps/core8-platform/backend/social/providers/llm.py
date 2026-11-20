@@ -22,6 +22,56 @@ class BudgetExceeded(RuntimeError):
     pass
 
 
+# ── Health: what the dashboard shows next to "LLM" ─────────────────────────
+# A provider can have a valid key and still fail every call (account spend cap,
+# revoked key). Without this the header said "LLM: live" while every agent run
+# silently fell back to templates (production, 2026-11-20).
+
+HEALTH_KEY = "llm_health"
+BLOCKING = {"usage_limit", "auth", "permission"}
+
+
+def classify_error(e: Exception) -> tuple[str, str]:
+    """(code, Hebrew message). Never echoes the exception body, which may carry headers."""
+    raw = str(e)
+    status_code = getattr(e, "status_code", None)
+    if "usage limits" in raw or "spend limit" in raw or "credit balance" in raw:
+        return "usage_limit", ("חשבון Anthropic הגיע למגבלת השימוש שהוגדרה בו — הגדל את המגבלה או הוסף קרדיט "
+                               "ב-console.anthropic.com → Settings → Limits/Billing. עד אז הסוכנים עובדים בתבניות (mock).")
+    if status_code == 401:
+        return "auth", "המפתח נדחה על-ידי Anthropic (401) — החלף אותו בלשונית מפתחות"
+    if status_code == 403:
+        return "permission", "אין הרשאה (403) — בדוק חיוב/הרשאות בחשבון Anthropic"
+    if status_code == 404:
+        return "model", "המודל לא נמצא (404) — בדוק SOCIAL_LLM_MODEL"
+    if status_code == 429:
+        return "rate_limit", "חריגה ממגבלת קצב (429) — המערכת תנסה שוב בריצה הבאה"
+    if status_code == 400:
+        return "bad_request", "Anthropic דחה את הבקשה (400) — בדוק את המודל והגדרות החשבון"
+    return "network", f"שגיאת חיבור: {type(e).__name__}"
+
+
+async def get_health() -> dict:
+    row = await fetch_one("SELECT value FROM sm_settings WHERE key=?", (HEALTH_KEY,))
+    try:
+        return json.loads(row["value"]) if row else {"state": "unknown"}
+    except (TypeError, ValueError):
+        return {"state": "unknown"}
+
+
+async def set_health(state: str, code: str | None = None, message: str | None = None) -> None:
+    from ..db import utc_str
+    current = await get_health()
+    if current.get("state") == state and current.get("code") == code:
+        return  # no write per call when nothing changed
+    value = json.dumps({"state": state, "code": code, "message": message, "at": utc_str()}, ensure_ascii=False)
+    await execute("INSERT INTO sm_settings (key, value, updated_at) VALUES (?,?,datetime('now')) "
+                  "ON CONFLICT(key) DO UPDATE SET value=excluded.value, updated_at=datetime('now')",
+                  (HEALTH_KEY, value))
+    if state == "blocked":
+        logger.error("LLM blocked (%s): %s", code, message)
+
+
 async def tokens_used_today() -> int:
     row = await fetch_one(
         "SELECT COALESCE(SUM(input_tokens + output_tokens), 0) AS t FROM sm_ai_usage "
@@ -79,6 +129,14 @@ class LLMProvider:
             return "mock"
         return "live"
 
+    async def display_mode(self) -> tuple[str, dict]:
+        """Mode for the dashboard: 'blocked' overrides 'live' when the last call hit a blocking error."""
+        mode = self.mode
+        health = await get_health() if mode == "live" else {"state": "n/a"}
+        if mode == "live" and health.get("state") == "blocked":
+            return "blocked", health
+        return mode, health
+
     async def complete_json(self, task: str, system: str, user: str,
                             mock_result, job_id: str | None = None, max_tokens: int | None = None):
         """Return a JSON-decoded object. In mock mode returns `mock_result`
@@ -97,12 +155,18 @@ class LLMProvider:
 
         import anthropic  # imported lazily so mock mode has no SDK dependency at runtime
         client = anthropic.AsyncAnthropic(api_key=self._api_key())
-        resp = await client.messages.create(
-            model=self.model,
-            max_tokens=max_tokens or scfg.ai_max_tokens_per_call,
-            system=system,
-            messages=[{"role": "user", "content": user}],
-        )
+        try:
+            resp = await client.messages.create(
+                model=self.model,
+                max_tokens=max_tokens or scfg.ai_max_tokens_per_call,
+                system=system,
+                messages=[{"role": "user", "content": user}],
+            )
+        except Exception as e:
+            code, message = classify_error(e)
+            await set_health("blocked" if code in BLOCKING else "degraded", code, message)
+            raise
+        await set_health("ok")
         text = "".join(getattr(b, "text", "") for b in resp.content)
         usage = getattr(resp, "usage", None)
         await record_usage(task, "anthropic", self.model,
