@@ -17,3 +17,10 @@
 		reverse_proxy frontend:3000
 	}
 }
+
+# Lead agent (apps/lead-triage-pilot), reached over the external core8-edge network.
+# Added on the VPS by the lead-agent session on 2026-11-19; recorded here so redeploys keep it.
+agent.core8-ai.io {
+	encode gzip
+	reverse_proxy lead-agent:4180
+}

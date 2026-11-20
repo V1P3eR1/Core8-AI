@@ -72,7 +72,8 @@ services:
       - caddy_data:/data
       - caddy_config:/config
     depends_on: [backend, frontend]
-    networks: [internal]
+    # core8-edge is shared with other stacks on this VPS (core8-lead-agent). install.sh creates it if missing.
+    networks: [internal, core8-edge]
 
 volumes:
   db_data:
@@ -83,3 +84,5 @@ volumes:
 networks:
   internal:
     driver: bridge
+  core8-edge:
+    external: true
