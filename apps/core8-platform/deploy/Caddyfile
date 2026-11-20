@@ -1,4 +1,4 @@
-{$DOMAIN} {
+{$DOMAIN} {$EXTRA_DOMAINS} {
 	encode zstd gzip
 	request_body {
 		max_size 320MB

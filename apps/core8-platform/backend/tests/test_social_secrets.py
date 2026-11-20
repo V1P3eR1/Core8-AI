@@ -152,4 +152,54 @@ def test_anthropic_test_explains_monthly_usage_cap(client, monkeypatch):
     r = client.post("/api/social/secrets/anthropic_api_key/test", json={"value": FAKE_KEY}, headers=api.admin)
     assert r.status_code == 200
     body = r.json()
-    assert body["ok"] is False and body["error"] == "usage_limit" and "מגבלת השימוש החודשית" in body["message"]
+    assert body["ok"] is False and body["error"] == "usage_limit" and "מגבלת השימוש" in body["message"] and body["message"].startswith("המפתח תקין")
+
+
+def test_dashboard_shows_llm_blocked_after_usage_cap_and_recovers(client, monkeypatch):
+    """Header said 'LLM: live' while the account was capped (production 2026-11-20).
+    A blocking failure must surface as 'blocked' with a reason; a success or a new key clears it."""
+    import asyncio
+    from social.providers import llm as llm_mod
+    api = _social(client)
+    client.put("/api/social/secrets/anthropic_api_key", json={"value": FAKE_KEY}, headers=api.admin)
+    assert client.get("/api/social/overview", headers=api.admin).json()["modes"]["llm"] == "live"
+
+    class CapErr(Exception):
+        status_code = 400
+
+    state = {"fail": True}
+
+    class FakeMessages:
+        async def create(self, **kw):
+            if state["fail"]:
+                raise CapErr("You have reached your specified API usage limits.")
+            class B:
+                text = '{"ok": true}'
+            class R:
+                content = [B()]
+                usage = None
+                stop_reason = "end_turn"
+            return R()
+
+    class FakeClient:
+        def __init__(self, api_key):
+            self.messages = FakeMessages()
+
+    import anthropic
+    monkeypatch.setattr(anthropic, "AsyncAnthropic", FakeClient)
+    with pytest.raises(CapErr):
+        asyncio.run(llm_mod.llm.complete_json("t", "s", "u", {}))
+    ov = client.get("/api/social/overview", headers=api.admin).json()
+    assert ov["modes"]["llm"] == "blocked" and ov["llm_health"]["code"] == "usage_limit"
+    assert "Limits" in ov["llm_health"]["message"]
+
+    state["fail"] = False
+    assert asyncio.run(llm_mod.llm.complete_json("t", "s", "u", {})) == {"ok": True}
+    assert client.get("/api/social/overview", headers=api.admin).json()["modes"]["llm"] == "live"
+
+    state["fail"] = True
+    with pytest.raises(CapErr):
+        asyncio.run(llm_mod.llm.complete_json("t", "s", "u", {}))
+    client.put("/api/social/secrets/anthropic_api_key", json={"value": FAKE_KEY[:-1] + "B"}, headers=api.admin)
+    assert client.get("/api/social/overview", headers=api.admin).json()["modes"]["llm"] == "live"  # new key resets
+    client.delete("/api/social/secrets/anthropic_api_key", headers=api.admin)

@@ -39,7 +39,7 @@ export default function Home() {
 
   // On mount: try to restore session via refresh token
   useEffect(() => {
-    const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+    const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
     const restore = async () => {
       if (getAccessToken()) { return; }
       const ok = await attemptTokenRefresh();

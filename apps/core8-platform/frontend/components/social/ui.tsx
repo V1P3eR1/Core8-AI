@@ -101,15 +101,17 @@ export function StatusBadge({ status, labels }: { status: string; labels: Record
   return <Badge className={STATUS_COLORS[status] ?? "border-border bg-muted text-foreground"}>{labels[status] ?? status}</Badge>;
 }
 
-export function ModeBadge({ label, mode }: { label: string; mode: string }) {
+export function ModeBadge({ label, mode, title }: { label: string; mode: string; title?: string }) {
   const live = mode === "live";
+  const blocked = mode === "blocked";
+  const cls = live ? "border-emerald-400/40 bg-emerald-500/15 text-emerald-200"
+    : blocked ? "border-red-400/50 bg-red-500/15 text-red-200"
+    : "border-yellow-400/40 bg-yellow-400/10 text-yellow-200";
+  const dot = live ? "bg-emerald-400" : blocked ? "bg-red-400" : "bg-yellow-300";
   return (
-    <Badge
-      className={live ? "border-emerald-400/40 bg-emerald-500/15 text-emerald-200" : "border-yellow-400/40 bg-yellow-400/10 text-yellow-200"}
-      title={live ? "ספק אמיתי מחובר" : "ספק בסימולציה — אין נתונים אמיתיים"}
-    >
-      <span className={cn("h-1.5 w-1.5 rounded-full", live ? "bg-emerald-400" : "bg-yellow-300")} aria-hidden />
-      {label}: {live ? "live" : mode}
+    <Badge className={cls} title={title ?? (live ? "ספק אמיתי מחובר" : blocked ? "הספק מחובר אבל חוסם קריאות" : "ספק בסימולציה — אין נתונים אמיתיים")}>
+      <span className={cn("h-1.5 w-1.5 rounded-full", dot)} aria-hidden />
+      {label}: {live ? "live" : blocked ? "חסום" : mode}
     </Badge>
   );
 }
