@@ -191,7 +191,8 @@ const waitId = (page, id, pattern) => waitText(page, `[data-testid="${id}"]`, pa
     await waitText(page, '[data-metric="leads"] .metric__value', /4/);
     assert.equal(await page.locator('[data-metric="leads"] .metric__value').innerText(), '4');
     assert.deepEqual(await context.cookies(), []);
-    assert.equal(await page.evaluate(() => window.localStorage.length + window.sessionStorage.length), 0);
+    // The only thing the browser keeps is the chosen interface language.
+    assert.deepEqual(await page.evaluate(() => [Object.keys(window.localStorage), window.sessionStorage.length]), [['c8lang'], 0]);
   });
 
   await check('usable at 390px wide with no horizontal overflow', async () => {

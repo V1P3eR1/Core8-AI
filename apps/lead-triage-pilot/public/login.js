@@ -4,6 +4,7 @@
   var form = document.getElementById('login-form');
   var error = document.getElementById('login-error');
   var input = document.getElementById('password');
+  input.focus(); // the language switch rewrites the page first, and Chrome then drops autofocus
   form.addEventListener('submit', function (e) {
     e.preventDefault();
     error.textContent = '';
