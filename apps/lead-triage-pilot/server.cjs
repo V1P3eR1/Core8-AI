@@ -52,7 +52,7 @@ const TYPES = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; ch
 const CHANNELS = ['website_form', 'email', 'whatsapp', 'phone_note', 'social', 'other'];
 const MAX_BODY = 64 * 1024;
 const COOKIE = 'c8s';
-const PUBLIC_PATHS = ['/login.html', '/login.js', '/styles.css'];
+const PUBLIC_PATHS = ['/login.html', '/login.js', '/i18n.js', '/styles.css'];
 const CSP = "default-src 'none'; script-src 'self'; style-src 'self'; connect-src 'self'; img-src 'self' data:; form-action 'none'; base-uri 'none'; frame-ancestors 'none'";
 
 class HttpError extends Error {

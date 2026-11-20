@@ -98,6 +98,7 @@ textarea[readonly] { color: var(--muted); }
 .login { min-height: 100vh; display: grid; place-items: center; padding: 16px; }
 .login__box { width: min(100%, 380px); display: grid; gap: 12px; }
 .login__title { font-size: 1.15rem; margin: 0; }
+.login__brand .btn { margin-inline-start: auto; }
 .login__box form { display: grid; gap: 8px; }
 .mailbox { display: flex; flex-wrap: wrap; gap: 8px 12px; align-items: center; }
 .mailbox__status { flex: 1 1 240px; margin: 0; }

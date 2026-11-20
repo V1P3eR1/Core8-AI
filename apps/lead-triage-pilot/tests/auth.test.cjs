@@ -71,6 +71,7 @@ test('server mode: everything needs a session; login sets a hardened cookie; log
   assert.match(login.headers['strict-transport-security'], /max-age=31536000/);
   assert.equal(login.headers['x-frame-options'], 'DENY');
   assert.equal((await get('/login.js')).status, 200);
+  assert.equal((await get('/i18n.js')).status, 200, 'the sign-in page needs its translations');
 
   assert.equal((await post('/api/login', { password: 'wrong password!' })).status, 401);
   assert.equal((await post('/api/login', { password: PASSWORD }, { Origin: 'https://evil.example' })).status, 403);

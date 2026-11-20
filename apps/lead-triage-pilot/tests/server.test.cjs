@@ -126,12 +126,16 @@ test('report endpoint is redacted', async () => {
 
 test('source has no sending capability and only one outbound URL', () => {
   const root = path.resolve(__dirname, '..');
-  const files = ['server.cjs', 'lib/store.cjs', 'lib/triage.cjs', 'lib/metrics.cjs', 'lib/intake.cjs', 'lib/slots.cjs', 'public/app.js', 'public/index.html', 'public/styles.css'];
+  const files = ['server.cjs', 'lib/store.cjs', 'lib/triage.cjs', 'lib/metrics.cjs', 'lib/intake.cjs', 'lib/slots.cjs', 'public/app.js', 'public/index.html', 'public/styles.css', 'public/login.js', 'public/login.html', 'public/i18n.js'];
   const src = Object.fromEntries(files.map((f) => [f, fs.readFileSync(path.join(root, f), 'utf8')]));
   const urls = [];
   for (const [f, text] of Object.entries(src)) for (const m of text.matchAll(/https?:\/\/[^\s'"<>)]+/g)) urls.push(f + ' ' + m[0]);
   const external = urls.filter((u) => !/http:\/\/(127\.0\.0\.1|localhost)\b/.test(u) && !u.includes("'http://' + h"));
   assert.deepEqual(external, ['lib/triage.cjs https://api.anthropic.com/v1/messages']);
+  // i18n.js may keep one thing in the browser: the chosen language. Nothing else may use storage.
+  const i18n = src['public/i18n.js'];
+  assert.deepEqual(i18n.match(/localStorage\.\w+\([^)]*\)/g), ['localStorage.getItem(KEY)', 'localStorage.setItem(KEY, lang)']);
+  src['public/i18n.js'] = i18n.replace(/localStorage\.(?:getItem\(KEY\)|setItem\(KEY, lang\))/g, '');
   const all = Object.values(src).join('\n');
   for (const re of [/nodemailer|smtp|sendmail|twilio|whatsapp\.com|graph\.facebook|gmail\.googleapis/i, /child_process|\beval\s*\(|new Function\b/, /innerHTML|document\.write|localStorage|sessionStorage|document\.cookie/]) {
     assert.ok(!re.test(all), String(re));

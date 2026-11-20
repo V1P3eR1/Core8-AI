@@ -1,7 +1,8 @@
 /*
  * Core8-AI lead-triage pilot - review UI.
  * Talks only to its own 127.0.0.1 server. Renders with textContent; no HTML
- * strings, no storage, no third-party requests.
+ * strings, no third-party requests. Interface text comes from i18n.js; the
+ * only thing kept in the browser is the chosen language.
  */
 (function () {
   'use strict';
@@ -23,6 +24,10 @@
   var SOURCE = { manual: 'Typed in', form_email: 'Website form' };
   var VERIFIED = { verified: 'signature verified', unsigned: 'unsigned', 'null': '' };
 
+  var t = window.I18N.t;
+  // Look a server code up in one of the maps above, then translate the English label.
+  function L(map, k) { return t(map[k] || k); }
+
   function $(id) { return document.getElementById(id); }
   function el(tag, attrs, kids) {
     var n = document.createElement(tag);
@@ -37,7 +42,7 @@
   function clear(n) { while (n.firstChild) n.removeChild(n.firstChild); }
   function when(iso) {
     if (!iso) return '—';
-    return new Intl.DateTimeFormat('en-GB', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' }).format(new Date(iso));
+    return new Intl.DateTimeFormat(window.I18N.locale(), { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' }).format(new Date(iso));
   }
   function num(v, unit) { return v === null || v === undefined ? '—' : String(v) + (unit || ''); }
   function pct(v) { return v === null || v === undefined ? '—' : Math.round(v * 100) + '%'; }
@@ -50,7 +55,7 @@
     }).then(function (res) {
       if (res.status === 401) { window.location.replace('/login.html'); return new Promise(function () {}); }
       return res.json().then(function (data) {
-        if (!res.ok) throw new Error(data.error || 'Request failed');
+        if (!res.ok) throw new Error(t(data.error || 'Request failed'));
         return data;
       });
     });
@@ -65,13 +70,13 @@
   function renderChrome() {
     var c = state.config;
     $('engine').textContent = c.engine === 'anthropic'
-      ? 'Engine: live model (' + c.model + ') — inquiry text is sent to the model API'
-      : 'Engine: offline rules — nothing leaves this computer';
+      ? t('Engine: live model ({model}) — inquiry text is sent to the model API', { model: c.model })
+      : t('Engine: offline rules — nothing leaves this computer');
     $('engine').setAttribute('data-engine', c.engine);
     var chain = $('chain');
     chain.textContent = state.integrity.ok
-      ? 'Audit log intact · ' + state.integrity.events + ' events'
-      : 'AUDIT LOG BROKEN at event ' + state.integrity.brokenAt;
+      ? t('Audit log intact · {n} events', { n: state.integrity.events })
+      : t('AUDIT LOG BROKEN at event {n}', { n: state.integrity.brokenAt });
     chain.className = 'chain ' + (state.integrity.ok ? 'chain--ok' : 'chain--bad');
 
     $('logout').hidden = !c.loginRequired;
@@ -80,19 +85,20 @@
     if (mb.enabled) {
       var r = mb.lastResult;
       $('mailbox-status').textContent = mb.lastError
-        ? 'Mailbox check failed at ' + when(mb.lastCheckAt) + ': ' + mb.lastError
-        : !mb.lastCheckAt ? 'Mailbox reading is on (read-only). Not checked yet.'
-        : 'Mailbox checked ' + when(mb.lastCheckAt) + ' (read-only): ' + r.created + ' new, ' + r.duplicates + ' already imported, ' + r.rejected + ' rejected.';
+        ? t('Mailbox check failed at {when}: {error}', { when: when(mb.lastCheckAt), error: t(mb.lastError) })
+        : !mb.lastCheckAt ? t('Mailbox reading is on (read-only). Not checked yet.')
+        : t('Mailbox checked {when} (read-only): {created} new, {duplicates} already imported, {rejected} rejected.', { when: when(mb.lastCheckAt), created: r.created, duplicates: r.duplicates, rejected: r.rejected });
     }
 
     $('intake-mode').textContent = c.signedIntake
-      ? 'Only e-mails signed by the website form handler are accepted.'
-      : 'No shared secret is set, so unsigned e-mails are accepted and marked as such.';
+      ? t('Only e-mails signed by the website form handler are accepted.')
+      : t('No shared secret is set, so unsigned e-mails are accepted and marked as such.');
 
     var sel = $('f-channel');
-    if (!sel.options.length) {
-      c.channels.forEach(function (ch) { sel.appendChild(el('option', { value: ch, text: CHANNEL[ch] || ch })); });
-    }
+    var chosen = sel.value; // rebuilt every time so the labels follow the language
+    clear(sel);
+    c.channels.forEach(function (ch) { sel.appendChild(el('option', { value: ch, text: L(CHANNEL, ch) })); });
+    if (chosen) sel.value = chosen;
   }
 
   function renderMetrics() {
@@ -100,13 +106,13 @@
     var root = $('metrics');
     clear(root);
     [
-      ['Inquiries', num(m.leads), 'leads'],
-      ['Awaiting review', num(m.awaitingReview), 'awaiting'],
-      ['Approved as drafted', pct(m.approvedAsIsShare), 'asis'],
-      ['Approved after edit', pct(m.editedShare), 'edited'],
-      ['Rejected', pct(m.rejectedShare), 'rejected'],
-      ['Median review time', num(m.medianReviewMinutes, ' min'), 'review'],
-      ['Median received → sent', num(m.medianReceivedToSentMinutes, ' min'), 'sent']
+      [t('Inquiries'), num(m.leads), 'leads'],
+      [t('Awaiting review'), num(m.awaitingReview), 'awaiting'],
+      [t('Approved as drafted'), pct(m.approvedAsIsShare), 'asis'],
+      [t('Approved after edit'), pct(m.editedShare), 'edited'],
+      [t('Rejected'), pct(m.rejectedShare), 'rejected'],
+      [t('Median review time'), num(m.medianReviewMinutes, t(' min')), 'review'],
+      [t('Median received → sent'), num(m.medianReceivedToSentMinutes, t(' min')), 'sent']
     ].forEach(function (row) {
       root.appendChild(el('div', { 'class': 'metric', 'data-metric': row[2] }, [
         el('span', { 'class': 'metric__value', text: row[1] }),
@@ -121,14 +127,14 @@
     [['needs_review', 'Needs review'], ['approved', 'Approved'], ['sent', 'Sent'], ['rejected', 'Rejected'], ['all', 'All']].forEach(function (f) {
       var count = f[0] === 'all' ? state.leads.length : state.leads.filter(function (l) { return l.status === f[0]; }).length;
       filters.appendChild(el('button', {
-        type: 'button', 'class': 'chip', 'data-filter': f[0], 'aria-pressed': String(filter === f[0]), text: f[1] + ' (' + count + ')'
+        type: 'button', 'class': 'chip', 'data-filter': f[0], 'aria-pressed': String(filter === f[0]), text: t(f[1]) + ' (' + count + ')'
       }));
     });
 
     var root = $('queue');
     clear(root);
     var list = state.leads.filter(function (l) { return filter === 'all' || l.status === filter; });
-    if (!list.length) { root.appendChild(el('li', { 'class': 'empty', text: 'Nothing here.' })); return; }
+    if (!list.length) { root.appendChild(el('li', { 'class': 'empty', text: t('Nothing here.') })); return; }
     list.forEach(function (l) {
       var btn = el('button', {
         type: 'button', 'class': 'queue__item' + (l.id === selectedId ? ' is-selected' : ''), 'data-lead': l.id,
@@ -136,11 +142,11 @@
       }, [
         el('span', { 'class': 'queue__top' }, [
           el('span', { 'class': 'queue__id', text: l.id }),
-          l.triage ? el('span', { 'class': 'tag', text: CATEGORY[l.triage.category] }) : null,
-          l.triage && l.triage.urgency === 'high' ? el('span', { 'class': 'tag tag--warn', text: 'Urgent' }) : null
+          l.triage ? el('span', { 'class': 'tag', text: L(CATEGORY, l.triage.category) }) : null,
+          l.triage && l.triage.urgency === 'high' ? el('span', { 'class': 'tag tag--warn', text: t('Urgent') }) : null
         ]),
         el('span', { 'class': 'queue__text', dir: 'auto', text: (l.label ? l.label + ' — ' : '') + l.text.slice(0, 90) }),
-        el('span', { 'class': 'queue__meta', text: STATUS[l.status] + ' · ' + (CHANNEL[l.channel] || l.channel) + ' · ' + when(l.addedAt) })
+        el('span', { 'class': 'queue__meta', text: L(STATUS, l.status) + ' · ' + L(CHANNEL, l.channel) + ' · ' + when(l.addedAt) })
       ]);
       root.appendChild(el('li', {}, [btn]));
     });
@@ -150,10 +156,17 @@
     return el('div', { 'class': 'kv' }, [el('dt', { text: label }), el('dd', { 'data-testid': testid || '' }, [el('bdi', { text: value })])]);
   }
 
-  function slotLabel(s) {
+  // A slot goes into the reply, so it is written in the reply's language, not the interface's.
+  function slotLabel(s, language) {
     var p = s.date.split('-').map(Number);
     var d = new Date(p[0], p[1] - 1, p[2], 12);
-    return new Intl.DateTimeFormat('en-GB', { weekday: 'long', day: 'numeric', month: 'long' }).format(d) + ', ' + s.time;
+    return new Intl.DateTimeFormat(language === 'he' ? 'he-IL' : 'en-GB', { weekday: 'long', day: 'numeric', month: 'long' }).format(d) + ', ' + s.time;
+  }
+
+  // The offline engine writes its reason in English; the model writes its own.
+  function rationale(r) {
+    var head = 'Matched keywords: ';
+    return r.indexOf(head) === 0 ? t(head) + r.slice(head.length) : t(r);
   }
 
   function contactLine(l) {
@@ -165,7 +178,7 @@
     var body = $('crm-body');
     clear(body);
     if (!state.leads.length) {
-      body.appendChild(el('tr', {}, [el('td', { colspan: '8', 'class': 'empty', text: 'No leads yet.' })]));
+      body.appendChild(el('tr', {}, [el('td', { colspan: '8', 'class': 'empty', text: t('No leads yet.') })]));
       return;
     }
     state.leads.forEach(function (l) {
@@ -176,9 +189,9 @@
         cell(l.contact ? l.contact.name : (l.label || '—')),
         cell(l.contact && l.contact.company ? l.contact.company : '—'),
         cell(contactLine(l)),
-        cell(l.triage ? CATEGORY[l.triage.category] : '—'),
-        cell(STATUS[l.status]),
-        cell(SOURCE[l.source] + (l.verified ? ' (' + VERIFIED[l.verified] + ')' : ''))
+        cell(l.triage ? L(CATEGORY, l.triage.category) : '—'),
+        cell(L(STATUS, l.status)),
+        cell(L(SOURCE, l.source) + (l.verified ? ' (' + L(VERIFIED, l.verified) + ')' : ''))
       ]);
       body.appendChild(row);
     });
@@ -214,58 +227,58 @@
     var keepFor = root.getAttribute('data-lead');
     var typed = keepDraft && keepFor === selectedId ? keepDraft.value : null;
     clear(root);
-    root.appendChild(el('h2', { id: 'h-detail', text: 'Review' }));
+    root.appendChild(el('h2', { id: 'h-detail', text: t('Review') }));
     var l = state.leads.filter(function (x) { return x.id === selectedId; })[0];
     root.setAttribute('data-lead', l ? l.id : '');
-    if (!l) { root.appendChild(el('p', { 'class': 'empty', text: 'Select an inquiry from the queue.' })); return; }
+    if (!l) { root.appendChild(el('p', { 'class': 'empty', text: t('Select an inquiry from the queue.') })); return; }
 
     root.appendChild(el('dl', { 'class': 'kvs' }, [
-      field('Reference', l.id, 'd-id'),
-      field('Status', STATUS[l.status], 'd-status'),
-      field('Channel', CHANNEL[l.channel] || l.channel),
-      field('Received', when(l.receivedAt)),
-      field('Category', l.triage ? CATEGORY[l.triage.category] : '—', 'd-category'),
-      field('Urgency', l.triage ? l.triage.urgency : '—', 'd-urgency'),
-      field('Drafted by', l.triage ? (l.triage.engine === 'anthropic' ? 'Live model (' + l.triage.model + ')' : 'Offline rules') : '—', 'd-engine'),
-      field('Why', l.triage ? l.triage.rationale : '—'),
-      field('Source', SOURCE[l.source] + (l.verified ? ' — ' + VERIFIED[l.verified] : ''), 'd-source')
+      field(t('Reference'), l.id, 'd-id'),
+      field(t('Status'), L(STATUS, l.status), 'd-status'),
+      field(t('Channel'), L(CHANNEL, l.channel)),
+      field(t('Received'), when(l.receivedAt)),
+      field(t('Category'), l.triage ? L(CATEGORY, l.triage.category) : '—', 'd-category'),
+      field(t('Urgency'), l.triage ? t(l.triage.urgency) : '—', 'd-urgency'),
+      field(t('Drafted by'), l.triage ? (l.triage.engine === 'anthropic' ? t('Live model ({model})', { model: l.triage.model }) : t('Offline rules')) : '—', 'd-engine'),
+      field(t('Why'), l.triage ? rationale(l.triage.rationale) : '—'),
+      field(t('Source'), L(SOURCE, l.source) + (l.verified ? ' — ' + L(VERIFIED, l.verified) : ''), 'd-source')
     ]));
 
     if (l.contact) {
-      root.appendChild(el('h3', { text: 'Contact (from the form)' }));
+      root.appendChild(el('h3', { text: t('Contact (from the form)') }));
       root.appendChild(el('dl', { 'class': 'kvs', 'data-testid': 'd-contact' }, [
-        field('Name', l.contact.name, 'd-name'),
-        field('Business', l.contact.company || '—'),
-        field('E-mail', l.contact.email || '—', 'd-email'),
-        field('Phone', l.contact.phone || '—'),
-        field('Consent', l.consent && l.consent.given ? 'Given' + (l.consent.textId ? ' (text ' + l.consent.textId + ')' : '') : '—', 'd-consent')
+        field(t('Name'), l.contact.name, 'd-name'),
+        field(t('Business'), l.contact.company || '—'),
+        field(t('E-mail'), l.contact.email || '—', 'd-email'),
+        field(t('Phone'), l.contact.phone || '—'),
+        field(t('Consent'), l.consent && l.consent.given ? (l.consent.textId ? t('Given (text {id})', { id: l.consent.textId }) : t('Given')) : '—', 'd-consent')
       ]));
     }
 
-    root.appendChild(el('h3', { text: 'Inquiry' }));
+    root.appendChild(el('h3', { text: t('Inquiry') }));
     root.appendChild(el('p', { 'class': 'quote', dir: 'auto', 'data-testid': 'd-text', text: l.text }));
 
     if (l.triage && l.triage.fallbackReason) {
-      root.appendChild(el('p', { 'class': 'warn', 'data-testid': 'd-fallback', text: 'The live model was not used for this draft (' + l.triage.fallbackReason + '). Offline rules drafted it instead.' }));
+      root.appendChild(el('p', { 'class': 'warn', 'data-testid': 'd-fallback', text: t('The live model was not used for this draft ({reason}). Offline rules drafted it instead.', { reason: l.triage.fallbackReason }) }));
     }
     var flags = l.triage ? (l.triage.flags || []) : [];
     if (flags.length) {
-      root.appendChild(el('ul', { 'class': 'flags', 'data-testid': 'd-flags' }, flags.map(function (f) { return el('li', { text: FLAG[f] || f }); })));
+      root.appendChild(el('ul', { 'class': 'flags', 'data-testid': 'd-flags' }, flags.map(function (f) { return el('li', { text: L(FLAG, f) }); })));
     }
 
     var slots = l.triage ? (l.triage.proposedSlots || []) : [];
     var decided = !!l.decision;
     if (slots.length && !decided) {
-      root.appendChild(el('h3', { text: 'Suggested meeting times' }));
+      root.appendChild(el('h3', { text: t('Suggested meeting times') }));
       root.appendChild(el('ul', { 'class': 'slotlist', 'data-testid': 'd-slots' }, slots.map(function (s, i) {
         return el('li', {}, [
-          el('span', { text: slotLabel(s) }),
-          el('button', { type: 'button', 'class': 'btn btn--tiny', 'data-act': 'slot', 'data-slot': String(i), text: 'Add to reply' })
+          el('span', { text: slotLabel(s, l.triage.language) }),
+          el('button', { type: 'button', 'class': 'btn btn--tiny', 'data-act': 'slot', 'data-slot': String(i), text: t('Add to reply') })
         ]);
       })));
-      root.appendChild(el('p', { 'class': 'note', text: 'Built from fixed working hours only. This tool cannot see your calendar: check you are free before offering a time.' }));
+      root.appendChild(el('p', { 'class': 'note', text: t('Built from fixed working hours only. This tool cannot see your calendar: check you are free before offering a time.') }));
     }
-    root.appendChild(el('label', { 'for': 'd-draft', text: decided ? (l.decision.action === 'reject' ? 'Draft (rejected)' : 'Approved reply') : 'Draft reply — edit freely before approving' }));
+    root.appendChild(el('label', { 'for': 'd-draft', text: decided ? (l.decision.action === 'reject' ? t('Draft (rejected)') : t('Approved reply')) : t('Draft reply — edit freely before approving') }));
     var ta = el('textarea', { id: 'd-draft', rows: '10', maxlength: '1500', dir: 'auto', 'data-testid': 'd-draft' });
     ta.value = decided ? (l.decision.finalText || l.triage.draft) : (typed !== null ? typed : (l.triage ? l.triage.draft : ''));
     if (decided) ta.setAttribute('readonly', '');
@@ -273,22 +286,22 @@
 
     var actions = el('div', { 'class': 'actions' });
     if (!decided) {
-      actions.appendChild(el('button', { type: 'button', 'class': 'btn btn--primary', 'data-act': 'approve', text: 'Approve reply' }));
-      actions.appendChild(el('button', { type: 'button', 'class': 'btn', 'data-act': 'retriage', text: 'Draft again' }));
+      actions.appendChild(el('button', { type: 'button', 'class': 'btn btn--primary', 'data-act': 'approve', text: t('Approve reply') }));
+      actions.appendChild(el('button', { type: 'button', 'class': 'btn', 'data-act': 'retriage', text: t('Draft again') }));
       root.appendChild(actions);
       root.appendChild(el('div', { 'class': 'reject' }, [
-        el('label', { 'for': 'd-reason', text: 'Reject instead — reason (required)' }),
+        el('label', { 'for': 'd-reason', text: t('Reject instead — reason (required)') }),
         el('input', { id: 'd-reason', type: 'text', maxlength: '300', dir: 'auto', 'data-testid': 'd-reason' }),
-        el('button', { type: 'button', 'class': 'btn btn--danger', 'data-act': 'reject', text: 'Reject draft' })
+        el('button', { type: 'button', 'class': 'btn btn--danger', 'data-act': 'reject', text: t('Reject draft') })
       ]));
     } else {
       if (l.decision.action === 'reject') {
-        root.appendChild(el('p', { 'class': 'note', 'data-testid': 'd-decision', text: 'Rejected ' + when(l.decision.at) + ' — ' + l.decision.reason }));
+        root.appendChild(el('p', { 'class': 'note', 'data-testid': 'd-decision', text: t('Rejected {when} — {reason}', { when: when(l.decision.at), reason: l.decision.reason }) }));
       } else {
-        root.appendChild(el('p', { 'class': 'note', 'data-testid': 'd-decision', text: (l.decision.action === 'edit' ? 'Approved after your edits ' : 'Approved as drafted ') + when(l.decision.at) + '.' }));
-        actions.appendChild(el('button', { type: 'button', 'class': 'btn btn--primary', 'data-act': 'copy', text: 'Copy reply' }));
-        if (l.status === 'approved') actions.appendChild(el('button', { type: 'button', 'class': 'btn', 'data-act': 'sent', text: 'I sent it myself' }));
-        if (l.sentAt) actions.appendChild(el('span', { 'class': 'note', 'data-testid': 'd-sent', text: 'You marked this as sent ' + when(l.sentAt) + '.' }));
+        root.appendChild(el('p', { 'class': 'note', 'data-testid': 'd-decision', text: l.decision.action === 'edit' ? t('Approved after your edits {when}.', { when: when(l.decision.at) }) : t('Approved as drafted {when}.', { when: when(l.decision.at) }) }));
+        actions.appendChild(el('button', { type: 'button', 'class': 'btn btn--primary', 'data-act': 'copy', text: t('Copy reply') }));
+        if (l.status === 'approved') actions.appendChild(el('button', { type: 'button', 'class': 'btn', 'data-act': 'sent', text: t('I sent it myself') }));
+        if (l.sentAt) actions.appendChild(el('span', { 'class': 'note', 'data-testid': 'd-sent', text: t('You marked this as sent {when}.', { when: when(l.sentAt) }) }));
         root.appendChild(actions);
       }
     }
@@ -344,16 +357,16 @@
       var lead = state.leads.filter(function (x) { return x.id === selectedId; })[0];
       var s = lead.triage.proposedSlots[Number(b.getAttribute('data-slot'))];
       var box = $('d-draft');
-      box.value = box.value.replace(/\s+$/, '') + '\n' + slotLabel(s);
+      box.value = box.value.replace(/\s+$/, '') + '\n' + slotLabel(s, lead.triage.language);
       box.focus();
       return;
     }
     else if (act === 'copy') {
       var ta = $('d-draft');
       ta.focus(); ta.select();
-      var done = function () { b.textContent = 'Copied'; };
-      if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(ta.value).then(done, function () { b.textContent = 'Select and copy manually'; });
-      else b.textContent = 'Press Ctrl+C to copy';
+      var done = function () { b.textContent = t('Copied'); };
+      if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(ta.value).then(done, function () { b.textContent = t('Select and copy manually'); });
+      else b.textContent = t('Press Ctrl+C to copy');
       return;
     }
     if (!p) return;
@@ -371,7 +384,7 @@
     e.preventDefault();
     $('intake-error').textContent = '';
     call('POST', '/api/intake/email', { raw: $('i-raw').value }).then(function (r) {
-      if (r.duplicate) { $('intake-error').textContent = 'This submission was already imported.'; return null; }
+      if (r.duplicate) { $('intake-error').textContent = t('This submission was already imported.'); return null; }
       $('i-raw').value = '';
       selectedId = r.lead.id; filter = 'needs_review';
       return refresh();
@@ -400,6 +413,8 @@
     renderQueue(); renderDetail();
     $('detail').scrollIntoView({ block: 'start' });
   });
+
+  window.I18N.onChange = function () { if (state.config) render(); };
 
   refresh();
 })();

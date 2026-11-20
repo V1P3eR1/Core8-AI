@@ -1,4 +1,4 @@
-/* Core8-AI lead-triage pilot - sign-in page. No storage; the session is an HttpOnly cookie set by the server. */
+/* Core8-AI lead-triage pilot - sign-in page. The session is an HttpOnly cookie set by the server. */
 (function () {
   'use strict';
   var form = document.getElementById('login-form');
@@ -15,8 +15,8 @@
         if (res.ok) { window.location.replace('/'); return; }
         input.value = '';
         input.focus();
-        error.textContent = data.error || 'Sign-in failed';
+        error.textContent = window.I18N.t(data.error || 'Sign-in failed');
       });
-    }).catch(function () { error.textContent = 'Could not reach the server'; });
+    }).catch(function () { error.textContent = window.I18N.t('Could not reach the server'); });
   });
 })();
