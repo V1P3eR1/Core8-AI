@@ -218,6 +218,9 @@ _MOCK_IDEA_BANK: list[dict] = [
 ]
 
 
+IDEAS_PER_CALL = 6
+
+
 async def generate_ideas(count: int = 20, job_id: str | None = None, source_ids: list[str] | None = None,
                          is_demo: bool = False) -> list[dict]:
     sources = await fetch_all("SELECT id, title, publisher, url, summary, relevance, angle, topic FROM sm_sources "
@@ -244,9 +247,30 @@ async def generate_ideas(count: int = 20, job_id: str | None = None, source_ids:
                         "source_ids": [s["id"] for s in sources if s.get("topic") == pillar][:2]})
         return out
 
-    try:
-        ideas = await llm.complete_json("ideas", sys_p, user, mock, job_id=job_id)
-    except Exception:
+    # Hebrew JSON is token-heavy: 20 ideas in one reply overran the 4096-token cap in production
+    # (2026-11-20) and the parser fell back to the mock bank. Ask in batches of IDEAS_PER_CALL with a
+    # larger cap, and label the origin truthfully if a batch had to fall back.
+    ideas: list = []
+    origin = llm.mode
+    if llm.mode == "live":
+        remaining, batch_no = count, 0
+        while remaining > 0 and batch_no < 6:
+            n = min(IDEAS_PER_CALL, remaining)
+            batch_no += 1
+            prompt = user.replace(f"Generate {count} DISTINCT", f"Generate {n} DISTINCT", 1)
+            if ideas:
+                prompt += "\nAlready proposed (do NOT repeat): " + "; ".join(str(i.get("title")) for i in ideas[-20:])
+            try:
+                batch = await llm.complete_json("ideas", sys_p, prompt, mock, job_id=job_id, max_tokens=8192)
+            except Exception:
+                break
+            if not isinstance(batch, list) or not batch:
+                break
+            ideas.extend(batch)
+            remaining -= len(batch)
+        if not ideas:
+            ideas, origin = mock(), "mock"
+    else:
         ideas = mock()
     created = []
     seen_titles = {r["title"] for r in await fetch_all("SELECT title FROM sm_ideas")}
@@ -267,11 +291,11 @@ async def generate_ideas(count: int = 20, job_id: str | None = None, source_ids:
         if not isinstance(idea.get("source_ids"), list):
             idea["source_ids"] = [idea["source_ids"]] if isinstance(idea.get("source_ids"), str) else []
         idea["source_ids"] = [str(x) for x in idea["source_ids"] if isinstance(x, (str, int))][:10]
-        idea["notes"] = f"origin: {llm.mode}" + ("; demo" if is_demo else "")
+        idea["notes"] = f"origin: {origin}" + ("; demo" if is_demo else "")
         idea["is_demo"] = 1 if is_demo else 0
         created.append(await create_idea(idea))
         seen_titles.add(idea["title"])
-    await audit("worker", "ideas_generated", "job", job_id, {"count": len(created), "llm": llm.mode})
+    await audit("worker", "ideas_generated", "job", job_id, {"count": len(created), "llm": origin})
     return created
 
 
@@ -356,13 +380,15 @@ async def draft_package(idea: dict, fmt: str | None = None, job_id: str | None =
             f"Idea: {idea}. Only cite the sources listed below; if a claim has no source, do not make it.\n"
             "Sources (DATA):\n" + (gated or "(none)"))
     mock_fn = {"reel": _mock_reel, "carousel": _mock_carousel, "image": _mock_image, "story": _mock_story}[fmt]
+    origin = llm.mode
     try:
-        pkg = await llm.complete_json(f"write_{fmt}", sys_p, user, lambda: mock_fn(idea), job_id=job_id)
+        pkg = await llm.complete_json(f"write_{fmt}", sys_p, user, lambda: mock_fn(idea), job_id=job_id,
+                                      max_tokens=6144)
     except Exception:
-        pkg = mock_fn(idea)
+        pkg, origin = mock_fn(idea), "mock"
     if not isinstance(pkg, dict):
-        pkg = mock_fn(idea)
-    pkg.setdefault("origin", llm.mode)
+        pkg, origin = mock_fn(idea), "mock"
+    pkg["origin"] = origin  # truthful: 'mock' also when the live call failed and the template was used
     pkg = producer_enrich(pkg, fmt)
     caption = _text(pkg.get("caption"), 2200) or ""  # Instagram caption limit; model may return a list of lines
     pkg["caption"] = caption
@@ -373,7 +399,7 @@ async def draft_package(idea: dict, fmt: str | None = None, job_id: str | None =
         "audience": idea["audience"], "status": "draft", "package": pkg, "caption": caption,
         "production_status": pkg.get("production_status", "script_only"),
         "is_demo": 1 if idea.get("is_demo") else 0,
-        "review_notes": "נוצר אוטומטית — " + ("LLM" if llm.mode == "live" else "ללא LLM (mock)") + ". דורש עריכה ובדיקה.",
+        "review_notes": "נוצר אוטומטית — " + ("LLM" if origin == "live" else "ללא LLM (תבנית mock)") + ". דורש עריכה ובדיקה.",
     }, actor=actor)
     return item
 

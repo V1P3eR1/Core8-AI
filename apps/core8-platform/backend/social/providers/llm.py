@@ -80,7 +80,7 @@ class LLMProvider:
         return "live"
 
     async def complete_json(self, task: str, system: str, user: str,
-                            mock_result, job_id: str | None = None):
+                            mock_result, job_id: str | None = None, max_tokens: int | None = None):
         """Return a JSON-decoded object. In mock mode returns `mock_result`
         (callable or value) and records zero usage, so the pipeline works
         end-to-end without credentials."""
@@ -99,7 +99,7 @@ class LLMProvider:
         client = anthropic.AsyncAnthropic(api_key=self._api_key())
         resp = await client.messages.create(
             model=self.model,
-            max_tokens=scfg.ai_max_tokens_per_call,
+            max_tokens=max_tokens or scfg.ai_max_tokens_per_call,
             system=system,
             messages=[{"role": "user", "content": user}],
         )
@@ -111,7 +111,11 @@ class LLMProvider:
         try:
             return _extract_json(text)
         except ValueError:
-            logger.warning("LLM returned non-JSON for task %s: %s", task, redact(text, 200))
+            if getattr(resp, "stop_reason", None) == "max_tokens":
+                logger.warning("LLM reply for task %s was truncated at max_tokens=%s — ask for less per call",
+                               task, max_tokens or scfg.ai_max_tokens_per_call)
+            else:
+                logger.warning("LLM returned non-JSON for task %s: %s", task, redact(text, 200))
             raise
 
 

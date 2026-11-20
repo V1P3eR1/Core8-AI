@@ -638,7 +638,7 @@ def test_live_model_outputs_with_lists_are_coerced_before_storage(client, monkey
     from social import agents
     from social.providers.llm import llm
 
-    async def fake_complete(task, system, user, mock_result, job_id=None):
+    async def fake_complete(task, system, user, mock_result, job_id=None, max_tokens=None):
         if task == "research_analyse":
             return {"summary": ["שורה א", "שורה ב"], "relevance": {"smb": "גבוה"}, "unknowns": ["מחיר", "זמינות"],
                     "angle": "להסביר", "topic": "ai_plain", "source_type": "official", "confidence": "high"}
@@ -678,7 +678,7 @@ def test_research_rerun_does_not_reanalyse_known_sources(client, monkeypatch):
     from social.providers.research import research
     calls = {"n": 0}
 
-    async def fake_complete(task, system, user, mock_result, job_id=None):
+    async def fake_complete(task, system, user, mock_result, job_id=None, max_tokens=None):
         calls["n"] += 1
         return mock_result() if callable(mock_result) else mock_result
 
@@ -692,3 +692,34 @@ def test_research_rerun_does_not_reanalyse_known_sources(client, monkeypatch):
     assert r1["stored"] == 2 and calls["n"] == 2
     r2 = asyncio.run(agents.run_research())
     assert r2["stored"] == 0 and r2["duplicates"] == 2 and calls["n"] == 2  # no new LLM calls
+
+
+def test_ideas_are_batched_and_fallback_is_labelled_mock(client, monkeypatch):
+    """20 Hebrew ideas overran the token cap in production and the mock bank was stored as 'origin: live'.
+    Now: batches of IDEAS_PER_CALL with max_tokens=8192, and a failed live call is labelled origin: mock."""
+    from social import agents
+    from social.providers.llm import llm
+    monkeypatch.setattr(type(llm), "mode", property(lambda self: "live"))
+    seen = []
+
+    async def ok_batches(task, system, user, mock_result, job_id=None, max_tokens=None):
+        seen.append((task, max_tokens))
+        n = int(re.search(r"Generate (\d+) DISTINCT", user).group(1))
+        k = len(seen)
+        return [{"title": f"רעיון {k}-{i}", "pillar": "ai_plain", "audience": "smb", "problem": "p", "core_message": "m",
+                 "desired_action": "a", "format": "image", "business_goal": "g", "measurement": "x", "source_ids": []}
+                for i in range(n)]
+
+    monkeypatch.setattr(llm, "complete_json", ok_batches)
+    ideas = asyncio.run(agents.generate_ideas(count=14))
+    assert len(ideas) == 14 and all(i["notes"].startswith("origin: live") for i in ideas)
+    assert [m for _, m in seen] == [8192, 8192, 8192]  # 6 + 6 + 2
+
+    async def broken(task, system, user, mock_result, job_id=None, max_tokens=None):
+        raise ValueError("Model reply did not contain valid JSON")
+
+    monkeypatch.setattr(llm, "complete_json", broken)
+    ideas2 = asyncio.run(agents.generate_ideas(count=3))
+    assert ideas2 and all(i["notes"].startswith("origin: mock") for i in ideas2)
+    item = asyncio.run(agents.draft_package(ideas2[0], ideas2[0]["format"], actor="test"))
+    assert item["package"]["origin"] == "mock" and "mock" in item["review_notes"]
