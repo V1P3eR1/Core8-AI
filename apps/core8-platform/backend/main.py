@@ -3,22 +3,22 @@ import os
 sys.path.insert(0, os.path.dirname(__file__))
 
 import asyncio
-import json
+import hmac
 import logging
 import uuid
 from contextlib import asynccontextmanager
 
 import aiosqlite
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect, Depends, HTTPException
+from fastapi import FastAPI, WebSocket, WebSocketDisconnect, Depends, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
 from config import cfg
 from database import init_db, get_db
-from security.auth import _verify_token
+from security.auth import _verify_token, _check_auth_rate, _record_auth_fail, client_ip
 from security.headers import SecurityHeadersMiddleware
-from security.approval import is_blocklisted, needs_approval, risk_level
+from security.approval import risk_level
 from security.jwt_auth import (
     require_jwt, require_admin,
     create_access_token, create_refresh_token,
@@ -41,7 +41,9 @@ from media_routes import router as media_router
 from scheduler import start_scheduler
 from business_brain.schema import init_brain_schema
 from business_brain.routes import router as business_brain_router
-from business_brain.access import resolve_access
+from lead_capture import init_lead_capture_schema, router as lead_capture_router
+from business_brain.access import TenantAccess, query_tenant, resolve_access
+from tenancy import INTERNAL_TENANT_ID, use_tenant
 from business_brain.context import get_agent_context, render_context_block
 from token_refresher import start_token_refresher
 from social.schema import init_social_schema
@@ -98,6 +100,7 @@ async def lifespan(app: FastAPI):
     await ensure_schedules()
     if (await _sm_get("publishing")).get("demo_mode", True) and os.getenv("SOCIAL_SEED_DEMO", "true").lower() in ("1", "true", "yes"):
         await _sm_seed()
+    await init_lead_capture_schema()
     async with get_db() as db:
         db.row_factory = aiosqlite.Row
         async with db.execute("SELECT * FROM agents") as cursor:
@@ -124,12 +127,17 @@ async def lifespan(app: FastAPI):
             pass
 
 
-app = FastAPI(title="Core8-AI", version="0.1.0", lifespan=lifespan)
+# A pending approval that gets no answer is denied after this long (fail closed).
+APPROVAL_TIMEOUT_SECONDS = 120.0
+
+# Interactive API docs describe every endpoint; outside dev mode they are not served.
+_docs = {} if cfg.dev_mode else {"docs_url": None, "redoc_url": None, "openapi_url": None}
+app = FastAPI(title="Core8-AI", version="0.1.0", lifespan=lifespan, **_docs)
 
 app.add_middleware(SecurityHeadersMiddleware)
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000"],
+    allow_origins=["http://localhost:3000", *cfg.cors_extra_origins],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -141,6 +149,7 @@ app.include_router(media_router)
 app.include_router(business_brain_router)
 app.include_router(social_router)
 app.include_router(social_public_router)
+app.include_router(lead_capture_router)
 app.mount("/media", StaticFiles(directory=MEDIA_DIR), name="media")
 
 
@@ -168,11 +177,34 @@ class RefreshRequest(BaseModel):
     refresh_token: str
 
 
+def _login_throttle(request: Request) -> str:
+    """Per-IP lockout for password guessing (10 failures / 5 min -> 15 min lockout)."""
+    ip = client_ip(request)
+    allowed, retry_after = _check_auth_rate(ip)
+    if not allowed:
+        raise HTTPException(status_code=429, detail="Too many failed attempts",
+                            headers={"Retry-After": str(int(retry_after))})
+    return ip
+
+
+async def admin_only(payload: dict = Depends(require_jwt)) -> dict:
+    require_admin(payload)
+    return payload
+
+
 @app.post("/api/auth/setup")
-async def setup_first_user(req: RegisterRequest):
-    """One-time endpoint to create the first admin. Disabled once any user exists."""
+async def setup_first_user(req: RegisterRequest, request: Request):
+    """One-time endpoint to create the first admin. Disabled once any user exists.
+
+    Outside dev mode the caller must present SETUP_KEY, so whoever reaches a fresh
+    deployment first cannot claim the admin account."""
     if await user_count() > 0:
         raise HTTPException(status_code=403, detail="Setup already complete")
+    if not cfg.dev_mode:
+        ip = _login_throttle(request)
+        if not cfg.setup_key or not hmac.compare_digest(req.setup_key.encode(), cfg.setup_key.encode()):
+            _record_auth_fail(ip)
+            raise HTTPException(status_code=403, detail="Valid setup key required")
     if len(req.password) < 8:
         raise HTTPException(status_code=400, detail="Password must be at least 8 characters")
     user = await create_user(req.email, req.password, role="admin")
@@ -183,9 +215,11 @@ async def setup_first_user(req: RegisterRequest):
 
 
 @app.post("/api/auth/login")
-async def login(req: LoginRequest):
+async def login(req: LoginRequest, request: Request):
+    ip = _login_throttle(request)
     user = await get_user_by_email(req.email)
     if not user or not verify_password(req.password, user["password_hash"]):
+        _record_auth_fail(ip)
         raise HTTPException(status_code=401, detail="Invalid credentials")
     await touch_last_login(user["id"])
     access = create_access_token(user["id"], user["email"], user["role"])
@@ -238,7 +272,7 @@ class KillSwitchRequest(BaseModel):
     active: bool
 
 
-@app.post("/api/admin/kill-switch", dependencies=[Depends(require_jwt)])
+@app.post("/api/admin/kill-switch", dependencies=[Depends(admin_only)])
 async def set_kill_switch(req: KillSwitchRequest):
     global _kill_switch_active
     _kill_switch_active = req.active
@@ -246,7 +280,7 @@ async def set_kill_switch(req: KillSwitchRequest):
     return {"kill_switch": _kill_switch_active}
 
 
-@app.get("/api/admin/security-status", dependencies=[Depends(require_jwt)])
+@app.get("/api/admin/security-status", dependencies=[Depends(admin_only)])
 async def security_status():
     return {
         "kill_switch": _kill_switch_active,
@@ -272,7 +306,8 @@ class CreateAgentRequest(BaseModel):
     model: str = "claude-sonnet-4-6"
 
 
-@app.post("/api/agents", dependencies=[Depends(require_jwt)])
+# Agents are global (shared by every tenant), so only platform admins create them.
+@app.post("/api/agents", dependencies=[Depends(admin_only)])
 async def create_agent(req: CreateAgentRequest):
     agent_id = req.name.lower().replace(" ", "-") + "-" + uuid.uuid4().hex[:6]
     async with get_db() as db:
@@ -289,7 +324,7 @@ async def create_agent(req: CreateAgentRequest):
 
 
 @app.get("/api/agents/{agent_id}/conversations", dependencies=[Depends(require_jwt)])
-async def get_agent_conversations(agent_id: str):
+async def get_agent_conversations(agent_id: str, access: TenantAccess = Depends(query_tenant("viewer"))):
     async with get_db() as db:
         db.row_factory = aiosqlite.Row
         # Return conversations that have at least one message, most recent first
@@ -302,26 +337,26 @@ async def get_agent_conversations(agent_id: str):
                     WHERE conversation_id = c.id AND role = 'user'
                     ORDER BY created_at ASC LIMIT 1) as preview
             FROM conversations c
-            LEFT JOIN messages m ON m.conversation_id = c.id
-            WHERE c.agent_id = ?
+            LEFT JOIN messages m ON m.conversation_id = c.id AND m.tenant_id = c.tenant_id
+            WHERE c.tenant_id = ? AND c.agent_id = ?
             GROUP BY c.id
             HAVING message_count > 0
             ORDER BY last_message_at DESC
             LIMIT 50
             """,
-            (agent_id,),
+            (access.tenant_id, agent_id),
         ) as cur:
             rows = await cur.fetchall()
     return [dict(r) for r in rows]
 
 
 @app.get("/api/conversations/{conversation_id}/messages", dependencies=[Depends(require_jwt)])
-async def get_messages(conversation_id: str):
+async def get_messages(conversation_id: str, access: TenantAccess = Depends(query_tenant("viewer"))):
     async with get_db() as db:
         db.row_factory = aiosqlite.Row
         async with db.execute(
-            "SELECT * FROM messages WHERE conversation_id=? ORDER BY created_at",
-            (conversation_id,),
+            "SELECT * FROM messages WHERE tenant_id=? AND conversation_id=? ORDER BY created_at",
+            (access.tenant_id, conversation_id),
         ) as cur:
             rows = await cur.fetchall()
     return [dict(r) for r in rows]
@@ -338,22 +373,34 @@ async def websocket_endpoint(websocket: WebSocket, agent_id: str):
         from security.jwt_auth import decode_access_token
         ws_user = decode_access_token(token)
     except Exception:
-        # Fall back to legacy bearer token for local dev convenience
-        if not _verify_token(token):
+        # Legacy shared bearer token: local development only (DEV_MODE), never in production.
+        if not cfg.dev_mode or not _verify_token(token):
             await websocket.close(code=4001)
             return
 
-    # Optional Business Brain context: requires a JWT user who has access to the tenant.
+    # Every session runs in exactly one tenant (CORE8-005): the named one, or the Core8
+    # internal tenant. JWT users need access to it; the legacy dev bearer token may only use
+    # the internal tenant. Business Brain context is injected only when a tenant is named.
     tenant_id = websocket.query_params.get("tenant_id")
+    op_tenant_id = tenant_id or INTERNAL_TENANT_ID
     tenant_access = None
-    if tenant_id:
-        if ws_user is None or ws_user.get("type") != "access":
+    if ws_user is not None:
+        if ws_user.get("type") != "access":
             await websocket.close(code=4001)
             return
-        tenant_access = await resolve_access(tenant_id, ws_user)
-        if tenant_access is None:
+        op_access = await resolve_access(op_tenant_id, ws_user)
+        if op_access is None:
             await websocket.close(code=4004)
             return
+        # Chat executes tools and writes conversation data. Read-only members
+        # may inspect history through REST, but cannot start an agent session.
+        if op_access.role not in {"editor", "owner"}:
+            await websocket.close(code=4003)
+            return
+        tenant_access = op_access if tenant_id else None
+    elif tenant_id:
+        await websocket.close(code=4001)
+        return
 
     await websocket.accept()
 
@@ -371,8 +418,8 @@ async def websocket_endpoint(websocket: WebSocket, agent_id: str):
     conversation_id = str(uuid.uuid4())
     async with get_db() as db:
         await db.execute(
-            "INSERT INTO conversations (id, agent_id) VALUES (?,?)",
-            (conversation_id, agent_id),
+            "INSERT INTO conversations (tenant_id, id, agent_id) VALUES (?,?,?)",
+            (op_tenant_id, conversation_id, agent_id),
         )
         await db.commit()
 
@@ -387,10 +434,17 @@ async def websocket_endpoint(websocket: WebSocket, agent_id: str):
     approval_futures: dict[str, asyncio.Future] = {}
 
     async def receiver():
-        """Pump all incoming WS frames into the queue; None signals disconnect."""
+        """Pump incoming WS frames; None signals disconnect. Approval responses are resolved
+        here, not in the main loop: the main loop is blocked inside agent.run() while a tool
+        waits for approval, so routing them through the queue would never deliver them."""
         try:
             while True:
                 data = await websocket.receive_json()
+                if isinstance(data, dict) and data.get("type") == "tool_approval_response":
+                    fut = approval_futures.get(data.get("request_id", ""))
+                    if fut and not fut.done():
+                        fut.set_result(data.get("approved") is True)
+                    continue
                 await incoming.put(data)
         except WebSocketDisconnect:
             await incoming.put(None)
@@ -410,7 +464,7 @@ async def websocket_endpoint(websocket: WebSocket, agent_id: str):
         fut: asyncio.Future = loop.create_future()
         approval_futures[request_id] = fut
         try:
-            return await asyncio.wait_for(asyncio.shield(fut), timeout=120.0)
+            return await asyncio.wait_for(asyncio.shield(fut), timeout=APPROVAL_TIMEOUT_SECONDS)
         except asyncio.TimeoutError:
             logger.warning("Approval timeout for tool %s — denying", tool_name)
             return False
@@ -425,14 +479,6 @@ async def websocket_endpoint(websocket: WebSocket, agent_id: str):
             if data is None:
                 break  # client disconnected
 
-            # Route approval responses to waiting futures
-            if data.get("type") == "tool_approval_response":
-                req_id = data.get("request_id", "")
-                fut = approval_futures.get(req_id)
-                if fut and not fut.done():
-                    fut.set_result(data.get("approved", False))
-                continue
-
             user_message = data.get("message", "").strip()
             if not user_message:
                 continue
@@ -443,8 +489,8 @@ async def websocket_endpoint(websocket: WebSocket, agent_id: str):
 
             async with get_db() as db:
                 await db.execute(
-                    "INSERT INTO messages (id, conversation_id, role, content) VALUES (?,?,?,?)",
-                    (str(uuid.uuid4()), conversation_id, "user", user_message),
+                    "INSERT INTO messages (tenant_id, id, conversation_id, role, content) VALUES (?,?,?,?,?)",
+                    (op_tenant_id, str(uuid.uuid4()), conversation_id, "user", user_message),
                 )
                 await db.commit()
 
@@ -457,29 +503,33 @@ async def websocket_endpoint(websocket: WebSocket, agent_id: str):
                     full_response += event["text"]
                 await websocket.send_json(event)
 
-            gate = approval_gate if cfg.approval_mode != "off" else None
+            # Always connect the approver: even with APPROVAL_MODE=off, external actions need approval.
+            gate = approval_gate
             system_context = None
             if tenant_access is not None:
                 # Re-read each turn so Brain updates and scope changes apply immediately.
                 ctx = await get_agent_context(tenant_access.repo, agent_id)
                 system_context = render_context_block(ctx)
-            await agent.run(history, on_event=on_event, approval_gate=gate, system_context=system_context)
+            with use_tenant(op_tenant_id):
+                await agent.run(history, on_event=on_event, approval_gate=gate, system_context=system_context)
 
             if full_response:
                 history.append({"role": "assistant", "content": full_response})
                 async with get_db() as db:
                     await db.execute(
-                        "INSERT INTO messages (id, conversation_id, role, content) VALUES (?,?,?,?)",
-                        (str(uuid.uuid4()), conversation_id, "assistant", full_response),
+                        "INSERT INTO messages (tenant_id, id, conversation_id, role, content) VALUES (?,?,?,?,?)",
+                        (op_tenant_id, str(uuid.uuid4()), conversation_id, "assistant", full_response),
                     )
                     await db.commit()
 
     except Exception as e:
         logger.error("WebSocket error: %s", e)
         try:
-            await websocket.send_json({"type": "error", "message": str(e)})
+            # Details stay in the server log; exception text can carry internals.
+            await websocket.send_json({"type": "error", "message": "Internal error"})
         except Exception:
             pass
     finally:
         receiver_task.cancel()
         logger.info("WebSocket disconnected: conv=%s", conversation_id)
+

@@ -1,8 +1,8 @@
-"""Instagram account storage — the single connected account (ig_accounts).
+"""Instagram account storage — one connected account per tenant (ig_accounts).
 
-Core8-AI connects ONE Instagram Business account per instance, stored as a
-singleton row keyed 'primary'. The access token is Fernet-encrypted at rest
-and decrypted only transiently when a Graph API call needs it.
+Each tenant connects at most ONE Instagram Business account, stored in a row whose
+id is the tenant_id (CORE8-005). The access token is Fernet-encrypted at rest and
+decrypted only transiently when a Graph API call needs it.
 
 The connect_instagram / list_ig_accounts registry tools are added in
 register_instagram_account_tools().
@@ -11,23 +11,22 @@ register_instagram_account_tools().
 import aiosqlite
 
 from database import get_db
+from tenancy import current_tenant
 from security.token_crypto import encrypt_token, decrypt_token
 from tools import instagram_api
 from tools.instagram_api import build_oauth_url, GraphAPIError
 from tools.registry import ToolDef, registry
 
-_PRIMARY = "primary"
-
-
 async def save_ig_account(ig_user_id: str, fb_page_id: str, username: str,
                           access_token: str, token_expires_at: str | None) -> dict:
-    """Upsert the single connected account. Encrypts the token before storing."""
+    """Upsert the current tenant's connected account. Encrypts the token before storing."""
     enc = encrypt_token(access_token)
+    tenant_id = current_tenant()
     async with get_db() as db:
         await db.execute(
             """INSERT INTO ig_accounts
-                   (id, ig_user_id, fb_page_id, username, access_token, token_expires_at)
-               VALUES (?, ?, ?, ?, ?, ?)
+                   (id, tenant_id, ig_user_id, fb_page_id, username, access_token, token_expires_at)
+               VALUES (?, ?, ?, ?, ?, ?, ?)
                ON CONFLICT(id) DO UPDATE SET
                  ig_user_id=excluded.ig_user_id,
                  fb_page_id=excluded.fb_page_id,
@@ -35,10 +34,19 @@ async def save_ig_account(ig_user_id: str, fb_page_id: str, username: str,
                  access_token=excluded.access_token,
                  token_expires_at=excluded.token_expires_at,
                  updated_at=datetime('now')""",
-            (_PRIMARY, ig_user_id, fb_page_id, username, enc, token_expires_at),
+            (tenant_id, tenant_id, ig_user_id, fb_page_id, username, enc, token_expires_at),
         )
         await db.commit()
     return {"ig_user_id": ig_user_id, "username": username, "fb_page_id": fb_page_id}
+
+
+async def list_accounts_for_refresh() -> list[dict]:
+    """All tenants' accounts (tenant_id + expiry only, no tokens) for the token refresher.
+    A deliberately cross-tenant read; never exposed as a tool."""
+    async with get_db() as db:
+        db.row_factory = aiosqlite.Row
+        async with db.execute("SELECT tenant_id, token_expires_at FROM ig_accounts") as cur:
+            return [dict(r) for r in await cur.fetchall()]
 
 
 async def get_ig_account() -> dict | None:
@@ -47,7 +55,7 @@ async def get_ig_account() -> dict | None:
     async with get_db() as db:
         db.row_factory = aiosqlite.Row
         async with db.execute(
-            "SELECT * FROM ig_accounts WHERE id=?", (_PRIMARY,),
+            "SELECT * FROM ig_accounts WHERE tenant_id=? AND id=?", (current_tenant(), current_tenant()),
         ) as cur:
             row = await cur.fetchone()
     if not row:
@@ -63,8 +71,8 @@ async def get_account_summary() -> dict | None:
         db.row_factory = aiosqlite.Row
         async with db.execute(
             """SELECT ig_user_id, username, fb_page_id, token_expires_at, connected_at
-               FROM ig_accounts WHERE id=?""",
-            (_PRIMARY,),
+               FROM ig_accounts WHERE tenant_id=? AND id=?""",
+            (current_tenant(), current_tenant()),
         ) as cur:
             row = await cur.fetchone()
     return dict(row) if row else None
@@ -75,7 +83,7 @@ async def get_account_summary() -> dict | None:
 async def connect_instagram() -> dict:
     """Build the Meta OAuth consent URL the user opens to connect their account."""
     try:
-        url = build_oauth_url()
+        url = build_oauth_url(current_tenant())
     except GraphAPIError as e:
         return {
             "error": str(e),

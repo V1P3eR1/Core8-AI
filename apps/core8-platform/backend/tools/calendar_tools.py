@@ -4,6 +4,7 @@ import uuid
 import datetime
 import aiosqlite
 from database import get_db
+from tenancy import current_tenant
 from tools.registry import ToolDef, registry
 
 
@@ -23,9 +24,9 @@ async def create_event(title: str, start_time: str, end_time: str,
     event_id = str(uuid.uuid4())
     async with get_db() as db:
         await db.execute(
-            """INSERT INTO events (id, title, start_time, end_time, description, attendees)
-               VALUES (?, ?, ?, ?, ?, ?)""",
-            (event_id, title, start_time, end_time, description, attendees),
+            """INSERT INTO events (tenant_id, id, title, start_time, end_time, description, attendees)
+               VALUES (?, ?, ?, ?, ?, ?, ?)""",
+            (current_tenant(), event_id, title, start_time, end_time, description, attendees),
         )
         await db.commit()
     return {"id": event_id, "title": title, "start_time": start_time, "end_time": end_time}
@@ -36,20 +37,21 @@ async def list_events(from_date: str = "", to_date: str = "", limit: int = 50) -
         db.row_factory = aiosqlite.Row
         if from_date and to_date:
             async with db.execute(
-                "SELECT * FROM events WHERE start_time >= ? AND start_time <= ? ORDER BY start_time LIMIT ?",
-                (from_date, to_date, min(limit, 200)),
+                "SELECT * FROM events WHERE tenant_id=? AND start_time >= ? AND start_time <= ? "
+                "ORDER BY start_time LIMIT ?",
+                (current_tenant(), from_date, to_date, min(limit, 200)),
             ) as cur:
                 rows = await cur.fetchall()
         elif from_date:
             async with db.execute(
-                "SELECT * FROM events WHERE start_time >= ? ORDER BY start_time LIMIT ?",
-                (from_date, min(limit, 200)),
+                "SELECT * FROM events WHERE tenant_id=? AND start_time >= ? ORDER BY start_time LIMIT ?",
+                (current_tenant(), from_date, min(limit, 200)),
             ) as cur:
                 rows = await cur.fetchall()
         else:
             async with db.execute(
-                "SELECT * FROM events ORDER BY start_time LIMIT ?",
-                (min(limit, 200),),
+                "SELECT * FROM events WHERE tenant_id=? ORDER BY start_time LIMIT ?",
+                (current_tenant(), min(limit, 200)),
             ) as cur:
                 rows = await cur.fetchall()
     return [dict(r) for r in rows]
@@ -73,8 +75,9 @@ async def find_free_slot(date: str, duration_minutes: int = 30,
     async with get_db() as db:
         db.row_factory = aiosqlite.Row
         async with db.execute(
-            "SELECT start_time, end_time FROM events WHERE start_time >= ? AND start_time < ? ORDER BY start_time",
-            (day_start.isoformat(), day_end.isoformat()),
+            "SELECT start_time, end_time FROM events WHERE tenant_id=? AND start_time >= ? "
+            "AND start_time < ? ORDER BY start_time",
+            (current_tenant(), day_start.isoformat(), day_end.isoformat()),
         ) as cur:
             rows = await cur.fetchall()
 
@@ -104,17 +107,21 @@ async def update_event(event_id: str, title: str = "", start_time: str = "",
     if attendees:   updates.append("attendees=?");   params.append(attendees)
     if not updates:
         return {"error": "No fields to update"}
-    params.append(event_id)
+    params += [current_tenant(), event_id]
     async with get_db() as db:
-        await db.execute(f"UPDATE events SET {', '.join(updates)} WHERE id=?", params)
+        cur = await db.execute(f"UPDATE events SET {', '.join(updates)} WHERE tenant_id=? AND id=?", params)
         await db.commit()
+    if cur.rowcount == 0:
+        return {"error": f"Event {event_id} not found"}
     return {"updated": event_id}
 
 
 async def delete_event(event_id: str) -> dict:
     async with get_db() as db:
-        await db.execute("DELETE FROM events WHERE id=?", (event_id,))
+        cur = await db.execute("DELETE FROM events WHERE tenant_id=? AND id=?", (current_tenant(), event_id))
         await db.commit()
+    if cur.rowcount == 0:
+        return {"error": f"Event {event_id} not found"}
     return {"deleted": event_id}
 
 

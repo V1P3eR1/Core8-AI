@@ -19,6 +19,8 @@ class Config:
     jwt_secret: str = os.getenv("JWT_SECRET", "")
     jwt_access_ttl_minutes: int = int(os.getenv("JWT_ACCESS_TTL_MINUTES", "15"))
     jwt_refresh_ttl_days: int = int(os.getenv("JWT_REFRESH_TTL_DAYS", "7"))
+    # Required by POST /api/auth/setup outside dev mode (first admin account).
+    setup_key: str = os.getenv("SETUP_KEY", "")
 
     # off = run all tools freely; smart = auto-approve low-risk, gate high-risk; manual = gate every tool
     approval_mode: str = os.getenv("APPROVAL_MODE", "smart").lower()
@@ -38,6 +40,15 @@ class Config:
     media_base_url: str = os.getenv("MEDIA_BASE_URL") or "http://localhost:8000/media"
     # Gemini API key (Google AI Studio) — post-media image generation
     gemini_api_key: str = os.getenv("GEMINI_API_KEY", "")
+
+    # Public lead capture (issue #10)
+    # Only trust CF-Connecting-IP / X-Forwarded-For when a reverse proxy you control sets them.
+    trust_proxy_headers: bool = os.getenv("TRUST_PROXY_HEADERS", "false").lower() in ("true", "1", "yes")
+    # Extra CORS origins allowed to call the API from a browser, e.g. the marketing site that
+    # hosts a lead form: "https://core8-ai.com,https://www.core8-ai.com"
+    cors_extra_origins: list[str] = [
+        o.strip() for o in os.getenv("CORS_EXTRA_ORIGINS", "").split(",") if o.strip()
+    ]
 
 
 cfg = Config()

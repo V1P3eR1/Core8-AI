@@ -38,9 +38,9 @@ OAUTH_SCOPES = [
     "business_management",
 ]
 
-# Pending CSRF states: state token -> created (monotonic) timestamp. In-memory
+# Pending CSRF states: state token -> (created monotonic timestamp, tenant_id). In-memory
 # is fine — the connect flow completes within seconds.
-_PENDING_STATES: dict[str, float] = {}
+_PENDING_STATES: dict[str, tuple[float, str]] = {}
 _STATE_TTL = 600.0  # seconds
 
 
@@ -50,17 +50,17 @@ class GraphAPIError(RuntimeError):
 
 def _prune_states() -> None:
     now = time.monotonic()
-    for s in [s for s, ts in _PENDING_STATES.items() if now - ts > _STATE_TTL]:
+    for s in [s for s, (ts, _) in _PENDING_STATES.items() if now - ts > _STATE_TTL]:
         _PENDING_STATES.pop(s, None)
 
 
-def build_oauth_url() -> str:
-    """Generate a CSRF state and return the Meta OAuth consent URL."""
+def build_oauth_url(tenant_id: str) -> str:
+    """Generate a CSRF state bound to `tenant_id` and return the Meta OAuth consent URL."""
     if not _meta_app_id():
         raise GraphAPIError("META_APP_ID is not set — create a Meta app first (dashboard → אינסטגרם וחיבורים → מפתחות).")
     _prune_states()
     state = secrets.token_urlsafe(24)
-    _PENDING_STATES[state] = time.monotonic()
+    _PENDING_STATES[state] = (time.monotonic(), tenant_id)
     params = {
         "client_id": _meta_app_id(),
         "redirect_uri": cfg.meta_redirect_uri,
@@ -71,10 +71,11 @@ def build_oauth_url() -> str:
     return f"{_DIALOG}?{urllib.parse.urlencode(params)}"
 
 
-def consume_oauth_state(state: str) -> bool:
-    """True if `state` is a valid, unexpired, pending state. Removes it (one-shot)."""
+def consume_oauth_state(state: str) -> str | None:
+    """The tenant_id bound to a valid, unexpired, pending state; None otherwise. One-shot."""
     _prune_states()
-    return _PENDING_STATES.pop(state, None) is not None
+    entry = _PENDING_STATES.pop(state, None)
+    return entry[1] if entry else None
 
 
 def _parse_graph(resp) -> dict:
