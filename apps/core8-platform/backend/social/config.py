@@ -47,7 +47,10 @@ class SocialConfig:
     research_feeds: list[str] = [
         u.strip() for u in os.getenv(
             "SOCIAL_RESEARCH_FEEDS",
-            "https://www.anthropic.com/rss.xml,"
+            # Anthropic publishes no official RSS (anthropic.com/rss.xml → 404). These are maintained mirrors
+            # of anthropic.com/news and /engineering (github.com/Olshansk/rss-feeds); items link to anthropic.com.
+            "https://raw.githubusercontent.com/Olshansk/rss-feeds/main/feeds/feed_anthropic_news.xml,"
+            "https://raw.githubusercontent.com/Olshansk/rss-feeds/main/feeds/feed_anthropic_engineering.xml,"
             "https://openai.com/news/rss.xml,"
             "https://blog.google/technology/ai/rss/,"
             "https://about.fb.com/news/feed/,"
