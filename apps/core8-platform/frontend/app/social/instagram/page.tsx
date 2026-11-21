@@ -4,6 +4,7 @@ import { useState } from "react";
 import Link from "next/link";
 import { ExternalLink, Link2, Plus } from "lucide-react";
 import { useLoad } from "@/components/social/hooks";
+import { SecretsPanel } from "@/components/social/SecretsPanel";
 import { useToast } from "@/components/social/toast";
 import { Badge, Banner, Button, Card, ConfirmButton, DemoBadge, EmptyState, ErrorBox, Field, Input, KV, Loading, Modal, PageHeader, Select, StatusBadge, Table, Tabs, Td, Textarea, Th } from "@/components/social/ui";
 import { FORMAT_LABELS, PUB_STATE_LABELS, api, fmtLocal, fmtUtc, isDemo, type Inbound, type Publication } from "@/lib/social-api";
@@ -19,12 +20,13 @@ const SCOPE_HELP: Record<string, string> = {
 const REPLY_LABELS: Record<string, string> = { draft_only: "טיוטה בלבד", approved_not_sent: "אושר — לא נשלח", sent: "נשלח", dismissed: "נדחה" };
 
 export default function InstagramPage() {
-  const [tab, setTab] = useState<"status" | "history" | "publications" | "inbound">("status");
+  const [tab, setTab] = useState<"status" | "keys" | "history" | "publications" | "inbound">("status");
   return (
     <>
       <PageHeader title="אינסטגרם וחיבורים" subtitle="מצב החיבור, היסטוריית פרסומים, תור הפרסומים והודעות נכנסות (טיוטות בלבד)." />
-      <div className="mb-4"><Tabs value={tab} onChange={setTab} options={[{ value: "status", label: "חיבור" }, { value: "history", label: "היסטוריה" }, { value: "publications", label: "פרסומים" }, { value: "inbound", label: "הודעות נכנסות" }]} /></div>
+      <div className="mb-4"><Tabs value={tab} onChange={setTab} options={[{ value: "status", label: "חיבור" }, { value: "keys", label: "מפתחות" }, { value: "history", label: "היסטוריה" }, { value: "publications", label: "פרסומים" }, { value: "inbound", label: "הודעות נכנסות" }]} /></div>
       {tab === "status" && <StatusTab />}
+      {tab === "keys" && <SecretsPanel />}
       {tab === "history" && <HistoryTab />}
       {tab === "publications" && <PublicationsTab />}
       {tab === "inbound" && <InboundTab />}
@@ -51,7 +53,7 @@ function StatusTab() {
           <Badge className={live ? "border-emerald-400/40 bg-emerald-500/15 text-emerald-200" : "border-yellow-400/50 bg-yellow-400/15 text-yellow-200"}>{live ? "LIVE — חשבון אמיתי" : `MOCK — סימולציה (${data.provider_mode})`}</Badge>
           {data.demo_mode && <Badge className="border-yellow-400/50 bg-yellow-400/15 text-yellow-200">מצב DEMO — פרסום אמיתי חסום</Badge>}
         </div>
-        {!live && <div className="mb-3"><Banner kind="warning">הספק בסימולציה: אין חיבור לאינסטגרם, לא נשלח דבר ל-Meta, ואין נתונים אמיתיים. להפעלה: Meta App + SOCIAL_INSTAGRAM_MODE=live.</Banner></div>}
+        {!live && <div className="mb-3"><Banner kind="warning">הספק בסימולציה: אין חיבור לאינסטגרם, לא נשלח דבר ל-Meta, ואין נתונים אמיתיים. להפעלה: Meta App (לשונית ״מפתחות״) + SOCIAL_INSTAGRAM_MODE=live בשרת.</Banner></div>}
         <dl className="grid grid-cols-2 gap-3">
           <KV label="חשבון">{data.account?.username ? `@${data.account.username}` : "אין חשבון מחובר"}</KV>
           <KV label="ig_user_id"><span dir="ltr">{data.account?.ig_user_id ?? "חסר"}</span></KV>
@@ -66,7 +68,7 @@ function StatusTab() {
         </dl>
         <div className="mt-4">
           <Button variant="primary" loading={connecting} disabled={!data.app_configured} onClick={connect}><Link2 size={14} /> התחבר לאינסטגרם</Button>
-          {!data.app_configured && <p className="mt-2 text-xs text-muted-foreground">הכפתור מושבת: META_APP_ID לא מוגדר בשרת. הגדר Meta App (ראה docs/social-manager/META_SETUP) כדי לאפשר התחברות.</p>}
+          {!data.app_configured && <p className="mt-2 text-xs text-muted-foreground">הכפתור מושבת: META_APP_ID לא מוגדר בשרת. הזן Meta App ID ו-Secret בלשונית ״מפתחות״ (מדריך: docs/social-manager/META_SETUP) כדי לאפשר התחברות.</p>}
         </div>
       </Card>
       <div className="space-y-4">

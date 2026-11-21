@@ -1,6 +1,6 @@
 import { apiFetch, getAccessToken } from "@/lib/auth";
 
-const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
 
 export async function fetchAgents() {
   const res = await apiFetch(`${API_BASE}/api/agents`);
@@ -57,7 +57,9 @@ export async function fetchMessages(conversationId: string): Promise<Message[]> 
 }
 
 export function createWebSocket(agentId: string): WebSocket {
-  const wsBase = API_BASE.replace(/^http/, "ws");
+  // Same-origin build: derive ws(s):// from the page's own origin.
+  const base = API_BASE || (typeof window !== "undefined" ? window.location.origin : "");
+  const wsBase = base.replace(/^http/, "ws");
   // JWT only. No shared secret ever ships in the browser bundle (issue #11).
   const token = getAccessToken() || "";
   return new WebSocket(`${wsBase}/ws/${agentId}?token=${encodeURIComponent(token)}`);

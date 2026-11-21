@@ -29,6 +29,14 @@ What is *not* acceptable: `SOCIAL_WORKER_INPROCESS=true` on a laptop and hoping 
 
 ## 2. Backups
 
+**VPS (Hostinger KVM, Docker Compose project `deploy`)**: `deploy/backup.sh` copies the SQLite volume (`deploy_db_data`) with `sqlite3 .backup` and tars the media volume into `/opt/core8-backups/`, keeping 14 days. Installed in root's crontab on 2026-11-19: `30 2 * * * /opt/core8/apps/core8-platform/deploy/backup.sh >> /var/log/core8-backup.log 2>&1`. A full VM snapshot can also be taken from hPanel (one slot, overwritten each time). `.env.production` (JWT secret, Fernet key, signing keys) is **not** inside any volume — copy it off the machine once and keep it with the backups.
+
+**Redeploy without SSH**: hPanel → VPS → Docker Manager can run a one-off `core8-ops` project (image `docker:27-cli`, mounts `/var/run/docker.sock` and `/opt/core8`) whose command is `git pull` + `docker compose -p deploy -f deploy/docker-compose.vps.yml up -d --build`. Its logs show the build and the health check. Same effect as `bash /root/install.sh` from the web terminal.
+
+**Hostnames**: Caddy serves `DOMAIN` plus any space-separated `EXTRA_DOMAINS`, each with its own automatic certificate. The frontend is built with an empty `NEXT_PUBLIC_API_URL`, so it calls the API on whatever hostname it was loaded from — no rebuild per domain, no CORS. To move to a custom domain without breaking the old address: (1) add a DNS A record for the new name → `2.25.15.153` (at Cloudflare: **DNS only**, grey cloud — proxied mode breaks large media uploads and certificate issuance); (2) redeploy with `DOMAIN=<new> EXTRA_DOMAINS=srv2179387.hstgr.cloud`. `DOMAIN` is the canonical name used for `MEDIA_BASE_URL` and the Meta OAuth redirect, so update the Meta app's redirect URI at the same time. Only add a hostname after its DNS record resolves, or Caddy retries its certificate in a loop.
+
+**LLM health**: when a live call fails with a blocking error (account usage cap, rejected key, missing permission) the dashboard header shows **LLM: חסום** with the reason, and a banner points to the keys tab. It clears on the next successful call, on "בדוק חיבור" success, or when a new key is saved. Agents keep working on templates (labelled `mock`) meanwhile.
+
 - Data = one SQLite file + the media directory (`SOCIAL_MEDIA_DIR`, default `backend/media/social`).
 - Backup: stop nothing; use `sqlite3 core8.db ".backup 'core8-$(date +%F).db'"` (online, consistent) + `rsync` the media dir. Daily, keep 14.
 - Restore: stop API + worker, replace the file + media dir, start. Approval/publication state is in the DB, so a restore from before a publish could re-queue it: check אינסטגרם וחיבורים → publications after a restore and cancel anything already live.
@@ -40,12 +48,16 @@ What is *not* acceptable: `SOCIAL_WORKER_INPROCESS=true` on a laptop and hoping 
 |---|---|---|
 | Instagram long-lived token | Reconnect from the dashboard (new consent) or let `token_refresher` refresh | Old token invalid; publications re-check the `token` gate at run time |
 | `IG_TOKEN_ENC_KEY` | Generate new key, reconnect the account (old ciphertext cannot be migrated) | Stored token unusable until reconnected |
-| `META_APP_SECRET` | Reset in the Meta app dashboard, update `.env`, restart | Existing user tokens stay valid |
-| `ANTHROPIC_API_KEY` | New key in console, update `.env`, restart API + worker | — |
+| `META_APP_SECRET` | Reset in the Meta app dashboard, paste the new value in **אינסטגרם וחיבורים → מפתחות** (or update `.env` and restart) | Existing user tokens stay valid |
+| `ANTHROPIC_API_KEY` | New key in console.anthropic.com → paste in **אינסטגרם וחיבורים → מפתחות** ("בדוק לפני שמירה" runs an 8-token live check). No restart: API and worker reload within ~20 s. `.env` remains the fallback | — |
 | `JWT_SECRET` | Change + restart | All dashboard sessions log out; signed media URLs issued before become invalid (fine) |
 | `SOCIAL_MEDIA_SIGNING_KEY` | Change + restart | Outstanding media URLs invalid — don't rotate while a publication is between `container_created` and `published` |
 
 **Credential exposure** (a key shown in chat, a log, a screenshot): revoke/regenerate it *first*, then rotate as above, then search logs (`redact()` masks known shapes but assume the worst). The previously exposed API key from an earlier conversation must be revoked and regenerated; it is not stored anywhere in this repository.
+
+### Dashboard-managed credentials (`social/keystore.py`)
+
+The Anthropic key and the Meta App ID/Secret can be entered in the dashboard instead of `.env.production`. They are Fernet-encrypted with `IG_TOKEN_ENC_KEY` and stored in `sm_settings` as `secret:<name>`; the API never returns a value (only the last 4 characters), audit rows carry the hint only, and `security/log_redact.py` masks the shapes in logs. Precedence: dashboard value → environment variable → mock mode. Admin role required (`GET/PUT/DELETE /api/social/secrets/{name}`, `POST /api/social/secrets/anthropic_api_key/test`). Because the ciphertext depends on `IG_TOKEN_ENC_KEY`, rotating that key invalidates stored credentials as well as the Instagram token — re-enter them.
 
 ## 4. Monitoring
 

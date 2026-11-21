@@ -10,6 +10,9 @@ services:
       BIND_HOST: 0.0.0.0
       BIND_PORT: "8000"
       DEV_MODE: "false"
+      # Caddy is the only way in (backend is not published), so its X-Forwarded-For is trusted.
+      # Without this every visitor shares one IP for login lockout and lead-form limits.
+      TRUST_PROXY_HEADERS: "true"
       DB_PATH: /data/core8.db
       SOCIAL_MEDIA_DIR: /data/media-social
       SOCIAL_WORKER_INPROCESS: "false"
@@ -48,7 +51,8 @@ services:
     build:
       context: ../frontend
       args:
-        NEXT_PUBLIC_API_URL: https://${DOMAIN}
+        # Empty = same origin, so the dashboard works on every hostname Caddy serves (DOMAIN + EXTRA_DOMAINS).
+        NEXT_PUBLIC_API_URL: ""
     restart: unless-stopped
     expose: ["3000"]
     depends_on: [backend]
@@ -60,12 +64,16 @@ services:
     ports: ["80:80", "443:443"]
     environment:
       DOMAIN: ${DOMAIN}
+      # Optional extra hostnames (space-separated), e.g. "app.core8-ai.com". Each needs a DNS A record to this VPS
+      # before it is added, or Caddy keeps retrying its certificate.
+      EXTRA_DOMAINS: ${EXTRA_DOMAINS:-}
     volumes:
       - ./Caddyfile:/etc/caddy/Caddyfile:ro
       - caddy_data:/data
       - caddy_config:/config
     depends_on: [backend, frontend]
-    networks: [internal]
+    # core8-edge is shared with other stacks on this VPS (core8-lead-agent). install.sh creates it if missing.
+    networks: [internal, core8-edge]
 
 volumes:
   db_data:
@@ -76,3 +84,5 @@ volumes:
 networks:
   internal:
     driver: bridge
+  core8-edge:
+    external: true
