@@ -19,7 +19,7 @@
     // preview mode and sends nothing. On PHP hosting use 'server/lead.php', and
     // set consentTextId to the version of the approved consent wording (e.g. 'v1').
     // The page sends '<language>-<version>', e.g. 'he-v1'; the handler must list both.
-    config: { formEndpoint: '', consentTextId: '', email: 'office.core8ai@gmail.com' },
+    config: { formEndpoint: '/api/public/lead', consentTextId: 'v1', email: 'office.core8ai@gmail.com' },
     strings: {
       he: {
         'meta.title': 'Core8-AI — פחות עבודה חוזרת. יותר זמן לעסק שלך.',

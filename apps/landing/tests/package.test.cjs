@@ -29,8 +29,14 @@ test('preview build copies the site and keeps the draft banner and noindex', () 
 });
 
 test('launch build is refused while the page is unfinished, and writes nothing', () => {
+  // An unfinished copy: endpoint and consent version empty, legal pages with placeholders.
+  const src = tmp();
+  copyTree(src);
+  const edit = (f, fn) => fs.writeFileSync(path.join(src, f), fn(fs.readFileSync(path.join(src, f), 'utf8')));
+  edit('content.js', (s) => s.replace(/formEndpoint: '[^']*'/, "formEndpoint: ''").replace(/consentTextId: '[^']*'/, "consentTextId: ''"));
+  for (const f of ['privacy.html', 'accessibility.html']) edit(f, (s) => s.replace('</main>', '<p>[להשלים]</p></main>'));
   const out = tmp();
-  const r = build({ out: path.join(out, 'site'), launch: true });
+  const r = build({ root: src, out: path.join(out, 'site'), launch: true });
   assert.equal(r.ok, false);
   assert.ok(r.problems.some((p) => /formEndpoint/.test(p)));
   assert.ok(r.problems.some((p) => /consentTextId/.test(p)));
@@ -43,7 +49,7 @@ test('once everything is completed, the launch build strips the draft banner and
   const src = tmp();
   copyTree(src);
   const edit = (f, fn) => fs.writeFileSync(path.join(src, f), fn(fs.readFileSync(path.join(src, f), 'utf8')));
-  edit('content.js', (s) => s.replace("formEndpoint: ''", "formEndpoint: 'server/lead.php'").replace("consentTextId: ''", "consentTextId: 'v1'"));
+  edit('content.js', (s) => s.replace(/formEndpoint: '[^']*'/, "formEndpoint: 'server/lead.php'").replace(/consentTextId: '[^']*'/, "consentTextId: 'v1'"));
   for (const f of ['privacy.html', 'accessibility.html']) edit(f, (s) => s.replace(/\[[^\]]*\]/g, 'done'));
   assert.deepEqual(launchProblems(src), []);
   const out = path.join(src, 'out', 'site');
@@ -76,4 +82,24 @@ test('built index.html carries the Hebrew text without JavaScript, for crawlers 
   // Text is escaped, and unknown keys stop the build instead of shipping blanks.
   assert.equal(prerender('<p data-i18n="k"></p>', { k: '<b>&"', 'meta.title': 't' }), '<p data-i18n="k">&lt;b&gt;&amp;&quot;</p>');
   assert.throws(() => prerender('<p data-i18n="nope"></p>', { 'meta.title': 't' }), /unknown text keys: nope/);
+});
+
+test('the committed page is ready to launch', () => {
+  assert.deepEqual(launchProblems(ROOT), []);
+});
+
+test('VPS build: no PHP handler is shipped, and --noindex keeps the search-engine block', () => {
+  const out = tmp();
+  const r = build({ out, launch: true, staticOnly: true, noindex: true });
+  assert.equal(r.ok, true);
+  assert.ok(!fs.existsSync(path.join(out, 'server')), 'no server folder at all');
+  assert.ok(r.files.every((f) => !f.startsWith('server/')));
+  for (const f of ['index.html', 'privacy.html', 'accessibility.html']) {
+    const html = fs.readFileSync(path.join(out, f), 'utf8');
+    assert.match(html, /name="robots" content="noindex, nofollow"/, f + ' stays out of search engines');
+    assert.ok(!/class="draft"/.test(html), f + ' has no draft banner');
+  }
+  const indexable = tmp();
+  build({ out: indexable, launch: true, staticOnly: true });
+  assert.ok(!/noindex/.test(fs.readFileSync(path.join(indexable, 'index.html'), 'utf8')));
 });

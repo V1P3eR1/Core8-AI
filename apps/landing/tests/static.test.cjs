@@ -91,7 +91,7 @@ test('privacy and accessibility pages are static drafts, bilingual, linked from 
   assert.match(index, /<a href="accessibility\.html" data-i18n="footer\.accessibility">/);
 });
 
-test('no contact details or credentials are committed; form endpoint is unset', () => {
+test('no contact details or credentials are committed; the form posts to the same-origin lead agent route', () => {
   const all = FILES.map(read).join('\n');
   // Exactly one contact address, the business mailbox Lev supplied; no phone yet.
   const emails = [...new Set(all.match(/[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}/g) || [])];
@@ -99,8 +99,8 @@ test('no contact details or credentials are committed; form endpoint is unset', 
   assert.equal(C.config.email, 'office.core8ai@gmail.com');
   assert.ok(!/\+?\d[\d\s().-]{7,}\d/.test(read('content.js') + read('index.html').replace(/content="[^"]*"/g, '')), 'no phone number');
   assert.ok(!/sk-ant-|AKIA[0-9A-Z]{16}|api[_-]?key\s*[:=]/i.test(all));
-  assert.equal(C.config.formEndpoint, '', 'ships in preview mode');
-  assert.equal(C.config.consentTextId, '');
+  assert.equal(C.config.formEndpoint, '/api/public/lead', 'same origin: no other host is contacted');
+  assert.equal(C.config.consentTextId, 'v1');
   assert.ok(!fs.existsSync(path.join(ROOT, 'server', 'lead-config.php')), 'real handler config is never committed');
   assert.match(fs.readFileSync(path.join(ROOT, 'server', '.gitignore'), 'utf8'), /lead-config\.php/);
 });

@@ -54,6 +54,8 @@ async function check(name, fn) { try { await fn(); results.push('PASS  ' + name)
   });
 
   await check('form validates name, contact and consent, then reports preview mode without sending', async () => {
+    // The committed page posts to the lead agent; this check covers preview mode, so switch it off here.
+    await page.evaluate(() => { window.Core8Landing.config.formEndpoint = ''; });
     await page.click('[data-testid="submit"]');
     assert.equal(await status(), 'נא למלא שם.');
     await page.fill('#f-name', 'דנה לדוגמה');

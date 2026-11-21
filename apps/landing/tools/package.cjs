@@ -4,6 +4,11 @@
  *
  *   node tools/package.cjs            preview build: draft banner and noindex stay
  *   node tools/package.cjs --launch   launch build: refuses unless the page is ready
+ *   options for a launch build:
+ *     --static-only   leave out the PHP form handler (the form posts to the lead
+ *                     agent instead, through the reverse proxy on the same server)
+ *     --noindex       keep the search-engine block (for an interim domain)
+ *     --out <dir>     write somewhere other than out/site
  *
  * The launch build removes the draft banners and the search-engine block. It
  * refuses to run while required items are missing, so an unfinished page
@@ -14,6 +19,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 
 const ROOT = path.resolve(__dirname, '..');
+const PHP_FILES = ['server/lead.php', 'server/.htaccess'];
 const SITE_FILES = ['index.html', 'privacy.html', 'accessibility.html', 'styles.css', 'app.js', 'content.js',
   'assets/logo-mark.svg', 'assets/favicon.svg', 'server/lead.php', 'server/.htaccess'];
 
@@ -57,7 +63,8 @@ function build(opts) {
     if (problems.length) return { ok: false, problems };
   }
   fs.rmSync(out, { recursive: true, force: true });
-  for (const f of SITE_FILES) {
+  const files = opts.staticOnly ? SITE_FILES.filter((f) => !PHP_FILES.includes(f)) : SITE_FILES;
+  for (const f of files) {
     const dest = path.join(out, f);
     fs.mkdirSync(path.dirname(dest), { recursive: true });
     let data = fs.readFileSync(path.join(root, f));
@@ -68,22 +75,27 @@ function build(opts) {
     if (opts.launch && f.endsWith('.html')) {
       data = Buffer.from(data.toString('utf8')
         .replace(/^\s*<!-- Prototype:[^\n]*-->\n/m, '')
-        .replace(/^\s*<meta name="robots" content="noindex, nofollow">\n/m, '')
+        .replace(opts.noindex ? /(?!)/ : /^\s*<meta name="robots" content="noindex, nofollow">\n/m, '')
         .replace(/^\s*<div class="draft"[^\n]*<\/div>\n/m, ''), 'utf8');
     }
     fs.writeFileSync(dest, data);
   }
-  // Keep the handler's real config out of the web-readable bundle by default.
-  fs.writeFileSync(path.join(out, 'server', 'README.txt'),
-    'Create lead-config.php in this folder on the host (see lead-config.example.php in the repository). Never commit it.\n');
-  return { ok: true, out, files: SITE_FILES, launch: !!opts.launch };
+  if (!opts.staticOnly) {
+    // Keep the handler's real config out of the web-readable bundle by default.
+    fs.writeFileSync(path.join(out, 'server', 'README.txt'),
+      'Create lead-config.php in this folder on the host (see lead-config.example.php in the repository). Never commit it.\n');
+  }
+  return { ok: true, out, files, launch: !!opts.launch };
 }
 
 module.exports = { build, launchProblems, prerender, SITE_FILES };
 
 if (require.main === module) {
-  const launch = process.argv.includes('--launch');
-  const r = build({ launch });
+  const a = process.argv;
+  const launch = a.includes('--launch');
+  const outAt = a.indexOf('--out');
+  const r = build({ launch, staticOnly: a.includes('--static-only'), noindex: a.includes('--noindex'),
+    out: outAt !== -1 && a[outAt + 1] ? path.resolve(a[outAt + 1]) : undefined });
   if (!r.ok) {
     console.error('Not ready to launch:\n- ' + r.problems.join('\n- '));
     process.exit(1);
