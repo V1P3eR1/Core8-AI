@@ -28,7 +28,25 @@ agent.core8-ai.io {
 	reverse_proxy lead-agent:4180
 }
 
-# core8-ai.io is the old domain: send it to the main site (launch plan, 2026-11-20).
+# core8-ai.io serves the new landing page until core8-ai.com is transferred to Lev
+# (decision 2026-11-21; replaces the redirect to the old ETX site on core8-ai.com).
+# The page is the core8-landing project; its form posts to the lead agent, which on
+# these hosts answers only POST /api/public/lead (everything else there is 404).
 core8-ai.io, www.core8-ai.io {
-	redir https://core8-ai.com{uri} permanent
+	encode zstd gzip
+	header {
+		Strict-Transport-Security "max-age=31536000"
+		X-Content-Type-Options nosniff
+		X-Frame-Options DENY
+		Referrer-Policy strict-origin-when-cross-origin
+	}
+	request_body {
+		max_size 16KB
+	}
+	handle /api/public/lead {
+		reverse_proxy lead-agent:4180
+	}
+	handle {
+		reverse_proxy core8-landing:8080
+	}
 }
