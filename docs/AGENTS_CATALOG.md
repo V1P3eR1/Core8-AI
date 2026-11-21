@@ -65,7 +65,9 @@ Full design: `apps/core8-platform/docs/instagram-bot.md`.
 `save_plan_artifact`, `search_leads`, `update_content_plan`, `update_event`, `update_lead`,
 `write_design_doc`.
 
-## B. My Goddess Orchestra (`apps/my-goddess-orchestra/master-control`)
+## B. My Goddess Orchestra (moved to the private repo `V1P3eR1/My-Goddess-Orchestra-AI`, `master-control/`)
+
+> Since 2026-11-20 this product no longer lives in this repository. Paths below are relative to the private repo.
 
 | Role | Description |
 |---|---|

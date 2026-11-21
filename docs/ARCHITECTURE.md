@@ -13,7 +13,7 @@ Core8-AI/
 │   │   ├── nginx/               #   Reverse proxy config
 │   │   ├── docs/instagram-bot.md
 │   │   └── docker-compose.yml
-│   └── my-goddess-orchestra/    # Internal/flagship: voice CEO-AI over 274 personas
+│   (my-goddess-orchestra moved 2026-11-20 to private repo V1P3eR1/My-Goddess-Orchestra-AI)
 │       ├── master-control/      #   server.py + static HUD + census + plans
 │       └── agency-agents-main/  #   LICENSE/README/index only (persona library is external)
 ├── tools/setup/                 # Windows laptop/Claude Desktop bootstrap

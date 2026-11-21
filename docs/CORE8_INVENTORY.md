@@ -33,7 +33,7 @@ Nothing at any source was modified, moved or deleted.
 - **Status:** working locally on Windows (`start-backend.ps1`, `start-frontend.ps1`); production compose file exists, no evidence of a live deployment.
 - See [AGENTS_CATALOG.md](AGENTS_CATALOG.md), [ARCHITECTURE.md](ARCHITECTURE.md).
 
-### 2.2 My Goddess Orchestra ("Yelena" / master-control) — `apps/my-goddess-orchestra/` ✅ imported (minus persona library)
+### 2.2 My Goddess Orchestra ("Yelena" / master-control) — moved 2026-11-20 to the private repo `V1P3eR1/My-Goddess-Orchestra-AI`
 - **Origin:** Google Drive `My-Goddess-Orchestra-AI/` (PLAN 2026-07-28, INTEGRATIONS + QA-REPORT 2026-07-29).
 - **What it is:** a local voice (Hebrew/English) + "mission control" GUI CEO-AI that delegates to **274 specialist personas** via a `delegate_to_agent(slug, task)` tool, with an autonomy loop (step cap, kill switch).
 - **Stack:** single-file FastAPI `server.py` (622 lines) · single-page `static/index.html` · Browser Web Speech API · DuckDuckGo search / trafilatura / youtube-transcript tools.

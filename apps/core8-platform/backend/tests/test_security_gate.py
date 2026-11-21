@@ -262,14 +262,6 @@ def test_legacy_bearer_token_rejected_outside_dev_mode(api, monkeypatch):
     assert e.value.code == 4001
 
 
-def test_my_goddess_binds_to_localhost_only():
-    server = os.path.join(REPO, "apps", "my-goddess-orchestra", "master-control", "server.py")
-    src = open(server, encoding="utf-8").read()
-    runs = re.findall(r"uvicorn\.run\([^)]*\)", src)
-    assert runs and all('host="127.0.0.1"' in r for r in runs)
-    assert "0.0.0.0" not in src
-
-
 # ── End to end over the WebSocket (PR #13 review gate 4) ─────────────────────
 
 def _ws_agent(monkeypatch, tool):

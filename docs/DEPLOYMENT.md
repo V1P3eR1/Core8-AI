@@ -55,7 +55,8 @@ Steps on a VPS:
 ## 4. My Goddess — local
 
 ```bash
-cd apps/my-goddess-orchestra/master-control
+# private repo V1P3eR1/My-Goddess-Orchestra-AI
+cd master-control
 pip install -r requirements.txt
 # persona library is NOT in this repo — clone agency-agents next to master-control
 # or set AGENCY_DIR=/path/to/agency-agents

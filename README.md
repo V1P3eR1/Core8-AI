@@ -5,7 +5,7 @@ Canonical repository for Core8-AI — AI agents that run business operations.
 | Path | What |
 |---|---|
 | `apps/core8-platform/` | Multi-agent business automation platform (FastAPI + Next.js): CRM leads, calendar, design, Instagram growth & publishing |
-| `apps/my-goddess-orchestra/` | Voice "CEO" orchestrator over 274 specialist personas (local, HE/EN) |
+| ~~`apps/my-goddess-orchestra/`~~ | Moved 2026-11-20 to the private repo `V1P3eR1/My-Goddess-Orchestra-AI` |
 | `tools/setup/` | Windows / Claude Desktop bootstrap |
 | `docs/` | Inventory, agents catalog, architecture, integrations, tech debt, deployment |
 
