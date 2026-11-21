@@ -1,0 +1,16 @@
+name: release preflight (offline)
+on:
+  pull_request:
+    paths:
+      - "apps/core8-platform/deploy/release-preflight.sh"
+      - "apps/core8-platform/deploy/tests/**"
+      - ".github/workflows/release-preflight.yml"
+permissions:
+  contents: read
+jobs:
+  offline-tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: bash -n apps/core8-platform/deploy/release-preflight.sh
+      - run: python -m unittest discover -s apps/core8-platform/deploy/tests -p 'test_*.py' -v
