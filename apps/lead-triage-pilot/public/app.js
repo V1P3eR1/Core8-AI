@@ -21,7 +21,7 @@
     has_placeholder_to_fill: 'Draft has a placeholder to fill in'
   };
 
-  var SOURCE = { manual: 'Typed in', form_email: 'Website form' };
+  var SOURCE = { manual: 'Typed in', form_email: 'Website form (e-mail)', form_direct: 'Website form' };
   var VERIFIED = { verified: 'signature verified', unsigned: 'unsigned', 'null': '' };
 
   var t = window.I18N.t;

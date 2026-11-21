@@ -26,6 +26,11 @@
  *   CORE8_PILOT_PASSWORD_HASH_FILE  alternative: a file holding the hash, written by
  *                               `node tools/set-password.cjs`. Until it exists the tool
  *                               runs locked: it serves the sign-in page and refuses every login.
+ *   CORE8_PILOT_FORM_HOSTS      comma-separated host names of the public website (e.g.
+ *                               core8-ai.io,www.core8-ai.io). Requests for those hosts can
+ *                               reach exactly one route, POST /api/public/lead, with no
+ *                               login; everything else on them is 404.
+ *   CORE8_PILOT_CONSENT_IDS     accepted consent text versions (default he-v1,en-v1)
  *   CORE8_PILOT_BIND            127.0.0.1 (default) or 0.0.0.0. The second is only for
  *                               running inside a container with no published port, and
  *                               is refused unless the public host and password are set.
@@ -36,6 +41,7 @@
  *   CORE8_PILOT_IMAP_MINUTES    how often to check (default 5)
  */
 const http = require('node:http');
+const crypto = require('node:crypto');
 const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
@@ -46,11 +52,14 @@ const { parseLeadEmail } = require('./lib/intake.cjs');
 const { proposeSlots } = require('./lib/slots.cjs');
 const { createAuth, readCookie } = require('./lib/auth.cjs');
 const { fetchLeadMessages } = require('./lib/mailbox.cjs');
+const { validatePublicLead, createLimiter, createDeduper, visitorKey, DEFAULT_CONSENT_IDS } = require('./lib/publicform.cjs');
 
 const PUBLIC = path.join(__dirname, 'public');
 const TYPES = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8' };
 const CHANNELS = ['website_form', 'email', 'whatsapp', 'phone_note', 'social', 'other'];
 const MAX_BODY = 64 * 1024;
+const MAX_FORM_BODY = 8 * 1024;
+const FORM_PATH = '/api/public/lead';
 const COOKIE = 'c8s';
 const PUBLIC_PATHS = ['/login.html', '/login.js', '/i18n.js', '/styles.css'];
 const CSP = "default-src 'none'; script-src 'self'; style-src 'self'; connect-src 'self'; img-src 'self' data:; form-action 'none'; base-uri 'none'; frame-ancestors 'none'";
@@ -74,6 +83,11 @@ function createApp(opts) {
   if (bindHost !== '127.0.0.1' && !publicHost) {
     throw new Error('Refusing to listen beyond this machine without CORE8_PILOT_PUBLIC_HOST and a password.');
   }
+  const formHosts = (opts.formHosts || []).map((h) => String(h).trim().toLowerCase()).filter(Boolean);
+  if (formHosts.some((h) => !/^[a-z0-9.-]+$/.test(h) || h === publicHost)) throw new Error('CORE8_PILOT_FORM_HOSTS must be plain host names, different from the tool\'s own host');
+  const consentIds = opts.consentIds && opts.consentIds.length ? opts.consentIds : DEFAULT_CONSENT_IDS;
+  const limiter = createLimiter(Object.assign({ clock }, opts.formLimits || {}));
+  const deduper = createDeduper({ clock });
   const auth = createAuth({ passwordHash: authOpts.passwordHash, passwordHashFile: authOpts.passwordHashFile, clock });
   const mailCfg = opts.mailbox && opts.mailbox.user && opts.mailbox.pass ? opts.mailbox : null;
   const fetchMail = (opts.mailbox && opts.mailbox.fetchImpl) || fetchLeadMessages;
@@ -81,7 +95,7 @@ function createApp(opts) {
   const mailStateFile = path.join(store.dir, 'mailbox-state.json');
   const config = {
     engine: triage.engine, model: triage.model, channels: CHANNELS, dataDir: store.dir, signedIntake: !!leadSecret,
-    loginRequired: auth.enabled, publicHost: publicHost || null, mailbox: mailState
+    loginRequired: auth.enabled, publicHost: publicHost || null, mailbox: mailState, formHosts
   };
 
   function send(res, status, body, type, extra) {
@@ -94,7 +108,8 @@ function createApp(opts) {
     res.end(data);
   }
 
-  function readJson(req) {
+  function readJson(req, limit) {
+    const MAX = limit || MAX_BODY;
     return new Promise((resolve, reject) => {
       if (!/^application\/json\b/i.test(req.headers['content-type'] || '')) {
         reject(new HttpError(415, 'Content-Type must be application/json')); return;
@@ -102,11 +117,11 @@ function createApp(opts) {
       let size = 0; let tooLarge = false; const chunks = [];
       req.on('data', (c) => {
         size += c.length;
-        if (size > MAX_BODY) {
+        if (size > MAX) {
           // Stop buffering but keep draining so the client can read the 413;
           // give up on anything absurdly large.
           tooLarge = true; chunks.length = 0;
-          if (size > 16 * MAX_BODY) req.destroy();
+          if (size > 16 * MAX) req.destroy();
           return;
         }
         chunks.push(c);
@@ -202,6 +217,29 @@ function createApp(opts) {
     return mailState;
   }
 
+  // The website form. Reached only on a form host, never with a session.
+  async function publicForm(req, res, host) {
+    const origin = req.headers.origin;
+    if (!origin || !formHosts.map((h) => 'https://' + h).includes(origin)) throw new HttpError(403, 'Forbidden origin');
+    const wait = limiter.take(visitorKey(req));
+    if (wait) return send(res, 429, { error: 'Too many requests' }, null, { 'Retry-After': String(wait) });
+    const body = await readJson(req, MAX_FORM_BODY);
+    const v = validatePublicLead(body, consentIds);
+    if (!v.ok) throw new HttpError(v.status, v.error);
+    if (v.honeypot) return send(res, 202, { ok: true });
+    const L = v.lead;
+    if (deduper.isRepeat(L)) return send(res, 202, { ok: true });
+    const id = store.nextLeadId();
+    const text = L.message || 'Discovery call request from the website form (no message).';
+    store.append('lead_added', id, {
+      text, channel: 'website_form', receivedAt: clock().toISOString(), label: null,
+      contact: L.contact, consent: L.consent, submissionId: crypto.randomBytes(16).toString('hex'),
+      source: 'form_direct', verified: null, lang: L.lang, formHost: host
+    });
+    await runTriage(id, text);
+    return send(res, 202, { ok: true });
+  }
+
   async function api(req, res, url) {
     const parts = url.pathname.split('/').filter(Boolean); // ['api', ...]
     const m = req.method;
@@ -281,6 +319,12 @@ function createApp(opts) {
   const server = http.createServer(async (req, res) => {
     try {
       const port = server.address().port;
+      const host = String(req.headers.host || '').toLowerCase();
+      if (formHosts.includes(host)) {
+        const p = new URL(req.url, 'http://127.0.0.1').pathname;
+        if (req.method === 'POST' && p === FORM_PATH) return await publicForm(req, res, host);
+        throw new HttpError(404, 'Not found');
+      }
       guard(req, port);
       const url = new URL(req.url, 'http://127.0.0.1:' + port);
       const token = readCookie(req.headers.cookie, COOKIE);
@@ -340,6 +384,8 @@ if (require.main === module) {
       fetchImpl: globalThis.fetch
     },
     leadSecret: process.env.CORE8_LEAD_SECRET || '',
+    formHosts: (process.env.CORE8_PILOT_FORM_HOSTS || '').split(','),
+    consentIds: (process.env.CORE8_PILOT_CONSENT_IDS || '').split(',').map((s) => s.trim()).filter(Boolean),
     bindHost: process.env.CORE8_PILOT_BIND || '127.0.0.1',
     auth: { publicHost: process.env.CORE8_PILOT_PUBLIC_HOST || '', passwordHash: process.env.CORE8_PILOT_PASSWORD_HASH || '', passwordHashFile: process.env.CORE8_PILOT_PASSWORD_HASH_FILE || '' },
     mailbox: {
@@ -355,6 +401,7 @@ if (require.main === module) {
     }
     console.log('Intake: ' + (app.config.signedIntake ? 'signed lead e-mails only' : 'unsigned lead e-mails accepted (set CORE8_LEAD_SECRET to require a signature)'));
     console.log('Login:  ' + (app.config.loginRequired ? (app.auth.passwordSet() ? 'password required' : 'LOCKED - no password set yet (run: node tools/set-password.cjs)') : 'OFF (local use only; never expose this port)'));
+    if (app.config.formHosts.length) console.log('Form:   website form accepted from ' + app.config.formHosts.join(', ') + ' (POST /api/public/lead, no login)');
     if (app.config.publicHost) console.log('Public: https://' + app.config.publicHost + ' (through a TLS reverse proxy on this machine)');
     if (app.config.mailbox.enabled) {
       const minutes = Math.max(1, Number(process.env.CORE8_PILOT_IMAP_MINUTES) || 5);

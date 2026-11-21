@@ -160,7 +160,7 @@ const waitId = (page, id, pattern) => waitText(page, `[data-testid="${id}"]`, pa
     assert.equal(await T(page, 'd-name').innerText(), 'דנה לדוגמה');
     assert.equal(await T(page, 'd-email').innerText(), 'dana@example.invalid');
     assert.match(await T(page, 'd-consent').innerText(), /Given \(text he-v1\)/);
-    assert.match(await T(page, 'd-source').innerText(), /Website form — unsigned/);
+    assert.match(await T(page, 'd-source').innerText(), /Website form \(e-mail\) — unsigned/);
     assert.equal(await page.locator('[data-testid="d-slots"] li').count(), 3);
     const before = await T(page, 'd-draft').inputValue();
     await page.locator('[data-act="slot"]').first().click();

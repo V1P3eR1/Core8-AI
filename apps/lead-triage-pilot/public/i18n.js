@@ -63,6 +63,7 @@
     'Not a lead': 'לא ליד',
     'Other': 'אחר',
     'Website form': 'טופס האתר',
+    'Website form (e-mail)': 'טופס האתר (דרך אימייל)',
     'Email': 'אימייל',
     'WhatsApp': 'WhatsApp',
     'Phone note': 'רישום שיחת טלפון',

@@ -48,6 +48,8 @@ test('user-facing server errors are translated', () => {
   assert.ok(msgs.length >= 20);
   // Protocol-level refusals the interface itself never triggers stay in English.
   const internal = ['Invalid JSON', 'Unknown decision', 'Content-Type must be application/json', 'Forbidden host',
-    'Forbidden origin', 'Cross-site request refused', 'Not found', 'Method not allowed'];
+    'Forbidden origin', 'Cross-site request refused', 'Not found', 'Method not allowed',
+    // The public website form shows its own messages; the review interface never calls it.
+    'Too many requests'];
   assert.deepEqual(msgs.filter((k) => !internal.includes(k) && !Object.prototype.hasOwnProperty.call(HE, k)), []);
 });

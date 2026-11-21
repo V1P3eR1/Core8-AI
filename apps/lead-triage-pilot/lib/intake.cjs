@@ -91,4 +91,4 @@ function parseLeadEmail(raw, opts) {
   };
 }
 
-module.exports = { encodeLeadEmail, parseLeadEmail, BEGIN, END, SUBJECT_TAG };
+module.exports = { encodeLeadEmail, parseLeadEmail, clean, validEmail, validPhone, BEGIN, END, SUBJECT_TAG };
