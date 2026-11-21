@@ -1,0 +1,101 @@
+<!doctype html>
+<html lang="en" dir="ltr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="robots" content="noindex, nofollow">
+  <title data-i18n>Core8-AI — lead-triage pilot (local)</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <div class="banner" role="note" data-testid="banner">
+    <strong data-i18n>PILOT · DRAFTS ONLY</strong>
+    <span data-i18n>This tool cannot send anything. You copy an approved reply and send it yourself.</span>
+    <span class="banner__engine" id="engine" data-testid="engine"></span>
+  </div>
+
+  <header class="top">
+    <div class="brand"><span class="brand__mark" aria-hidden="true">8</span><span>Core8-AI</span><span class="brand__tag" data-i18n>Lead-triage pilot · local</span></div>
+    <div class="top__right">
+      <span class="chain" id="chain" data-testid="chain" role="status"></span>
+      <button type="button" class="btn" id="report" data-testid="report" data-i18n>Download evidence report</button>
+      <button type="button" class="btn" id="lang" data-testid="lang"></button>
+      <button type="button" class="btn" id="logout" data-testid="logout" hidden data-i18n>Sign out</button>
+    </div>
+  </header>
+
+  <main>
+    <section class="metrics" aria-label="Pilot metrics" data-i18n-aria id="metrics" data-testid="metrics"></section>
+
+    <div class="cols">
+      <div class="col">
+        <section class="card" aria-labelledby="h-add">
+          <h2 id="h-add" data-i18n>Add an inquiry</h2>
+          <form id="add-form" novalidate>
+            <label for="f-text" data-i18n>Inquiry text, as received</label>
+            <textarea id="f-text" rows="6" maxlength="4000" dir="auto" required data-testid="f-text"></textarea>
+            <div class="row">
+              <div>
+                <label for="f-channel" data-i18n>Channel</label>
+                <select id="f-channel" data-testid="f-channel"></select>
+              </div>
+              <div>
+                <label for="f-received" data-i18n>Received at</label>
+                <input id="f-received" type="datetime-local" data-testid="f-received">
+              </div>
+            </div>
+            <label for="f-label" data-i18n>Your own short label (optional, stays local)</label>
+            <input id="f-label" type="text" maxlength="80" dir="auto" data-testid="f-label">
+            <p class="hint" data-i18n>Stored only in a file on this computer. With the offline engine nothing leaves it.</p>
+            <button type="submit" class="btn btn--primary" data-testid="add" data-i18n>Add and draft a reply</button>
+            <p class="error" id="add-error" role="alert"></p>
+          </form>
+        </section>
+
+        <section class="card" aria-labelledby="h-intake">
+          <h2 id="h-intake" data-i18n>Add a website-form e-mail</h2>
+          <form id="intake-form" novalidate>
+            <label for="i-raw" data-i18n>Paste the full text of a [CORE8-LEAD] e-mail</label>
+            <textarea id="i-raw" rows="4" dir="ltr" spellcheck="false" data-testid="i-raw"></textarea>
+            <p class="hint" id="intake-mode" data-testid="intake-mode"></p>
+            <button type="submit" class="btn" data-testid="intake" data-i18n>Import lead</button>
+            <p class="error" id="intake-error" role="alert" data-testid="intake-error"></p>
+          </form>
+          <div class="mailbox" id="mailbox" data-testid="mailbox" hidden>
+            <p class="hint mailbox__status" id="mailbox-status" role="status" data-testid="mailbox-status"></p>
+            <button type="button" class="btn" id="mailbox-check" data-testid="mailbox-check" data-i18n>Check mailbox now</button>
+          </div>
+        </section>
+
+        <section class="card" aria-labelledby="h-queue">
+          <h2 id="h-queue" data-i18n>Queue</h2>
+          <div class="filters" role="group" aria-label="Filter by status" data-i18n-aria id="filters"></div>
+          <ul class="queue" id="queue" data-testid="queue"></ul>
+        </section>
+      </div>
+
+      <section class="card detail" aria-labelledby="h-detail" id="detail" data-testid="detail">
+        <h2 id="h-detail" data-i18n>Review</h2>
+        <p class="empty" data-i18n>Select an inquiry from the queue.</p>
+      </section>
+    </div>
+
+    <section class="card" aria-labelledby="h-crm">
+      <div class="crm__head">
+        <h2 id="h-crm" data-i18n>Leads table</h2>
+        <button type="button" class="btn" id="crm-csv" data-testid="crm-csv" data-i18n>Download table (CSV)</button>
+      </div>
+      <p class="hint" data-i18n>Stays on this computer. The CSV contains names and contact details: treat it as personal data.</p>
+      <div class="crm__wrap" tabindex="0" role="region" aria-labelledby="h-crm">
+        <table class="crm" data-testid="crm"><thead><tr>
+          <th scope="col" data-i18n>Ref</th><th scope="col" data-i18n>Received</th><th scope="col" data-i18n>Name</th><th scope="col" data-i18n>Business</th>
+          <th scope="col" data-i18n>Contact</th><th scope="col" data-i18n>Category</th><th scope="col" data-i18n>Status</th><th scope="col" data-i18n>Source</th>
+        </tr></thead><tbody id="crm-body"></tbody></table>
+      </div>
+    </section>
+  </main>
+
+  <script src="i18n.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
