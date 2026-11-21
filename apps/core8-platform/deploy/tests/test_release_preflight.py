@@ -57,6 +57,25 @@ class ReleasePreflightTests(unittest.TestCase):
         (self.checkout / "README").write_text("modified\n")
         self.assertNotEqual(self.preflight(self.sha).returncode, 0)
 
+    def test_untracked_build_input_fails_closed(self):
+        (self.checkout / "unexpected-build-context").write_text("unreviewed\\n")
+        result = self.preflight(self.sha)
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("untracked", result.stderr)
+
+    def test_ignored_runtime_file_does_not_break_preflight(self):
+        # A deliberately ignored secret/config file is not read or echoed.
+        (self.checkout / ".gitignore").write_text(".env.production\\n")
+        git(self.checkout, "add", ".gitignore")
+        git(self.checkout, "commit", "-m", "Ignore runtime config")
+        self.sha = git(self.checkout, "rev-parse", "HEAD")
+        git(self.checkout, "push", "origin", "main")
+        git(self.checkout, "fetch", "origin", "main")
+        (self.checkout / ".env.production").write_text("FAKE_TEST_VALUE=redacted\\n")
+        result = self.preflight(self.sha)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertNotIn("FAKE_TEST_VALUE", result.stdout)
+
     def test_unmerged_commit_fails_closed(self):
         git(self.checkout, "checkout", "-b", "feature")
         (self.checkout / "README").write_text("feature\n")
