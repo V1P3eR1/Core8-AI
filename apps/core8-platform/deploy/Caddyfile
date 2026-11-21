@@ -24,3 +24,8 @@ agent.core8-ai.io {
 	encode gzip
 	reverse_proxy lead-agent:4180
 }
+
+# core8-ai.io is the old domain: send it to the main site (launch plan, 2026-11-20).
+core8-ai.io, www.core8-ai.io {
+	redir https://core8-ai.com{uri} permanent
+}
