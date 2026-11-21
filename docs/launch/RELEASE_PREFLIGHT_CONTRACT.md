@@ -17,7 +17,7 @@ Replace the illustrative SHA with the **real reviewed full 40-character commit S
 - Absent, shortened or malformed SHA.
 - Missing checkout or missing local candidate commit.
 - Candidate not an ancestor of local `origin/main`.
-- Modified tracked checkout files.
+- Modified tracked checkout files **or untracked files** that could change an unreviewed Docker build context. Git-ignored runtime configuration (for example `.env.production`) is neither read nor printed.
 
 It prints candidate/current/main SHAs and reports **PRECHECK_ONLY**, without checking out a branch, fetching, deploying, opening ports, reading environment values or altering files. The script uses locally cached remote refs, which may be stale: validating the authentic remote fetch and signed release provenance belongs to a separate gate.
 
