@@ -117,10 +117,14 @@ PILLARS: list[dict] = [
     {"key": "invitation", "label": "הזמנה לשיחה על צורך עסקי"},
 ]
 
+# Where posts send people, and the campaign name used in tracked links (social/links.py).
+DEFAULT_TRACKING: dict = {"landing_url": "", "campaign": ""}
+
 DEFAULTS = {
     "brand": DEFAULT_BRAND,
     "publishing": DEFAULT_PUBLISHING,
     "content_mix": DEFAULT_CONTENT_MIX,
+    "tracking": DEFAULT_TRACKING,
 }
 
 

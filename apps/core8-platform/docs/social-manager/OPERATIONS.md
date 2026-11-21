@@ -95,3 +95,16 @@ The Anthropic key and the Meta App ID/Secret can be entered in the dashboard ins
 - `automatic` — requires `confirm_automatic: true` in the request **and** `auto.allowed_categories` + `auto.allowed_account_id`. Boundaries: `max_posts_per_day`, `window_start/end` (local), `review_topics` (fact-check flags that force a human). Items with any sensitive flag, items not in an allowed category, items outside the window or over the cap stay in `needs_review`. The system records the approval as `worker:auto` so it is auditable. Emergency pause overrides everything.
 
 Demo mode (`demo_mode`) is a separate switch: while on, live publishing is impossible and demo records are visible. Turn it off (and clear demo data) before the first real post.
+
+## Tracked links (sales attribution)
+
+Set where posts send people and the campaign name, once per instance:
+
+```
+PUT /api/social/settings/tracking   {"value": {"landing_url": "https://<site>/", "campaign": "<name>"}}
+GET /api/social/items/{id}/tracked-links
+```
+
+The second call returns one link per channel (`instagram`, `facebook`) and placement (`post`, `story`, `reel`, `bio`), with `utm_source`, `utm_medium=social-<placement>`, `utm_campaign` and `utm_content=<item id>`. Links are derived on request: nothing is stored on the item and the caption is not changed, so an approval stays valid.
+
+Instagram feed captions do not make links clickable. Use the links in the bio, Story link stickers and Facebook Page posts. Attribution is complete only when the landing site records `utm_content` with each order or lead; this module does not do that part.
