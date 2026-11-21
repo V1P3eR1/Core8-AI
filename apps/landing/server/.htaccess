@@ -1,0 +1,8 @@
+# Block direct web access to the handler's configuration (Apache / LiteSpeed).
+# The handler only ever includes this file, so nothing legitimate requests it.
+<Files "lead-config.php">
+  Require all denied
+</Files>
+<Files "README.txt">
+  Require all denied
+</Files>
