@@ -17,6 +17,6 @@ release="$(git -C "$ROOT" rev-parse --verify "$RELEASE_SHA^{commit}" 2>/dev/null
 [[ "$release" == "$RELEASE_SHA" ]] || die "candidate does not resolve exactly to RELEASE_SHA"
 main="$(git -C "$ROOT" rev-parse --verify "refs/remotes/origin/main^{commit}" 2>/dev/null)" || die "origin/main missing; fetch it manually before preflight"
 git -C "$ROOT" merge-base --is-ancestor "$RELEASE_SHA" "$main" || die "release candidate is not reachable from origin/main"
-[[ -z "$(git -C "$ROOT" status --porcelain --untracked-files=no)" ]] || die "tracked working-tree changes exist; refuse release"
+[[ -z "$(git -C "$ROOT" status --porcelain --untracked-files=normal)" ]] || die "working tree has tracked or untracked files; refuse release"
 printf 'PRECHECK_ONLY=PASS\nROOT=%s\nCURRENT_SHA=%s\nCANDIDATE_SHA=%s\nORIGIN_MAIN_SHA=%s\n' "$ROOT" "$actual" "$release" "$main"
 printf 'No deployment performed. Independent owner approval, backup, rollback and deploy checks are still required.\n'
