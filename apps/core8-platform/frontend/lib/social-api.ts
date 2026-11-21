@@ -6,7 +6,7 @@
  */
 import { apiFetch } from "@/lib/auth";
 
-export const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+export const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
 const S = `${API_BASE}/api/social`;
 
 // ── Error handling ───────────────────────────────────────────────────────────
@@ -169,8 +169,11 @@ export interface PublishingSettings {
   demo_mode: boolean;
 }
 
+export interface LlmHealth { state: "ok" | "blocked" | "degraded" | "unknown" | "n/a" | string; code?: string | null; message?: string | null; at?: string | null }
+
 export interface Overview {
   modes: { instagram: ProviderMode; llm: ProviderMode; research: ProviderMode; notify: ProviderMode };
+  llm_health?: LlmHealth;
   publishing: PublishingSettings;
   account: Account | null;
   token: TokenStatus;
@@ -273,6 +276,14 @@ export interface InstagramStatus {
   publishing_limit: Record<string, unknown> | null; publishing_limit_error?: string;
   published_24h: number | null; app_configured: boolean; media_base_url: string; media_url_ttl_seconds: number;
 }
+
+export interface SecretStatus {
+  label: string; help: string; testable: boolean; configured: boolean; source: "db" | "env" | null;
+  hint: string | null; updated_at: string | null; updated_by: string | null;
+}
+export type SecretName = "anthropic_api_key" | "meta_app_id" | "meta_app_secret";
+export interface SecretsResponse { items: Record<SecretName, SecretStatus>; llm_mode: ProviderMode; llm_health?: LlmHealth; encryption_ready: boolean }
+export interface SecretTestResult { ok: boolean; model?: string; reply?: string; error?: string; status_code?: number | null; message?: string }
 
 export interface HistoryRow {
   id: string; mode: string; state: string; container_id: string | null; provider_media_id: string | null;
@@ -428,6 +439,15 @@ export const api = {
     status: () => apiJson<InstagramStatus>("/instagram/status"),
     connectUrl: () => apiJson<{ connect_url: string }>("/instagram/connect-url", { method: "POST" }),
     history: () => apiJson<{ items: HistoryRow[] }>("/instagram/history"),
+  },
+
+  secrets: {
+    status: () => apiJson<SecretsResponse>("/secrets"),
+    set: (name: SecretName, value: string) =>
+      apiJson<{ item: SecretStatus; llm_mode: ProviderMode }>(`/secrets/${name}`, { method: "PUT", body: JSON.stringify({ value }) }),
+    remove: (name: SecretName) => apiJson<{ item: SecretStatus; llm_mode: ProviderMode }>(`/secrets/${name}`, { method: "DELETE" }),
+    testAnthropic: (value?: string) =>
+      apiJson<SecretTestResult>("/secrets/anthropic_api_key/test", { method: "POST", body: JSON.stringify({ value: value || null }) }),
   },
 
   inbound: {

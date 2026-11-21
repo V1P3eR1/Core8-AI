@@ -5,7 +5,7 @@
  */
 
 const REFRESH_KEY = "core8_refresh_token";
-const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
 
 let _accessToken: string | null = null;
 

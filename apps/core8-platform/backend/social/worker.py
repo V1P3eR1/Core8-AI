@@ -23,6 +23,8 @@ async def main() -> None:
 
     await init_db()
     await init_social_schema()
+    from social import keystore as _secrets
+    await _secrets.refresh(force=True)
     stop = {"flag": False}
 
     def _stop(*_):
