@@ -19,7 +19,7 @@ from config import cfg as platform_cfg
 from security.jwt_auth import require_admin, require_jwt
 from tools.instagram_api import GraphAPIError, OAUTH_SCOPES, build_oauth_url
 
-from . import agents, carousel_render, content, jobs, leads, metrics, publishing, reports, keystore as secret_store
+from . import agents, carousel_render, content, jobs, leads, links, metrics, publishing, reports, keystore as secret_store
 from .config import scfg
 from .db import audit, execute, fetch_all, fetch_one, utc_to_local_iso, utc_str
 from .demo_data import clear_demo, seed_demo
@@ -74,6 +74,7 @@ def _local(row: dict, *keys: str) -> dict:
 @router.get("/overview")
 async def overview():
     await secret_store.refresh()
+    llm_mode, llm_health = await llm.display_mode()
     pub = await get_setting("publishing")
     provider = get_provider()
     acct = await provider.account()
@@ -96,8 +97,9 @@ async def overview():
         "SELECT id, title, format, status, scheduled_for, is_demo FROM sm_content_items WHERE status IN ('scheduled','approved') "
         "ORDER BY scheduled_for LIMIT 8")]
     return {
-        "modes": {"instagram": provider.mode, "llm": llm.mode, "research": research.mode,
+        "modes": {"instagram": provider.mode, "llm": llm_mode, "research": research.mode,
                   "notify": notifier.mode},
+        "llm_health": llm_health,
         "publishing": pub, "account": acct, "token": publishing.token_status(acct) if provider.mode == "live" else
         {"ok": bool(acct), "label": "mock — אין טוקן אמיתי"},
         "worker": await jobs.worker_status(), "counts": counts, "upcoming": upcoming,
@@ -107,7 +109,7 @@ async def overview():
 
 # ── Settings ───────────────────────────────────────────────────────────────
 
-SETTING_KEYS = ("brand", "publishing", "content_mix")
+SETTING_KEYS = ("brand", "publishing", "content_mix", "tracking")
 
 
 @router.get("/settings")
@@ -147,6 +149,11 @@ async def settings_put(key: str, body: SettingBody, payload: dict = Depends(requ
         value = {**DEFAULT_PUBLISHING, **value, "auto": {**DEFAULT_PUBLISHING["auto"], **(value.get("auto") or {})}}
         await audit(_actor(payload), "publishing_settings", "settings", None,
                     {"mode": value["mode"], "demo_mode": value.get("demo_mode")})
+    if key == "tracking":
+        try:
+            value = links.validate_tracking(value)
+        except links.TrackedLinkError as e:
+            raise HTTPException(400, str(e))
     out = await set_setting(key, value)
     await audit(_actor(payload), f"settings_updated:{key}", "settings")
     return out
@@ -170,7 +177,8 @@ class SecretBody(BaseModel):
 @router.get("/secrets")
 async def secrets_status(payload: dict = Depends(require_jwt)):
     require_admin(payload)
-    return {"items": await secret_store.status(), "llm_mode": llm.mode,
+    llm_mode, llm_health = await llm.display_mode()
+    return {"items": await secret_store.status(), "llm_mode": llm_mode, "llm_health": llm_health,
             "encryption_ready": bool(platform_cfg.ig_token_enc_key)}
 
 
@@ -427,6 +435,28 @@ async def items_status(item_id: str, body: StatusIn, payload: dict = Depends(req
         for p in await fetch_all("SELECT id FROM sm_publications WHERE content_item_id=? AND state IN ('queued','claimed')", (item_id,)):
             await publishing.cancel_publication(p["id"], _actor(payload))
     return await content.set_status(item_id, body.status, _actor(payload), body.note)
+
+
+@router.get("/items/{item_id}/tracked-links")
+async def items_tracked_links(item_id: str):
+    """Tracked links for one item, per channel and placement. Read-only: nothing is stored and
+    the caption is not touched, so an existing approval stays valid."""
+    item = await content.get_item(item_id)
+    if not item:
+        raise HTTPException(404)
+    tracking = await get_setting("tracking")
+    if not tracking.get("landing_url"):
+        return {"configured": False, "links": {}}
+    out: dict[str, dict[str, str]] = {}
+    for channel in links.CHANNELS:
+        out[channel] = {
+            placement: links.tracked_url(tracking["landing_url"], channel=channel,
+                                         campaign=tracking["campaign"], content_id=item_id,
+                                         placement=placement)
+            for placement in links.PLACEMENTS
+        }
+    return {"configured": True, "campaign": tracking["campaign"], "utm_content": links.slug(item_id),
+            "links": out}
 
 
 @router.get("/items/{item_id}/gates")

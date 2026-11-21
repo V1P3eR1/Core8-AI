@@ -148,6 +148,9 @@ async def set_value(name: str, value: str, actor: str) -> dict:
         "ON CONFLICT(key) DO UPDATE SET value=excluded.value, updated_at=datetime('now')",
         (_PREFIX + name, jdump(record)))
     await refresh(force=True)
+    if name == "anthropic_api_key":
+        from .providers.llm import set_health
+        await set_health("unknown")  # new key: forget the old key's failure until the next call
     return (await status())[name]
 
 
@@ -164,6 +167,7 @@ async def test_anthropic(value: str | None = None) -> dict:
     key = _normalise("anthropic_api_key", value) if value else await get("anthropic_api_key")
     if not key:
         return {"ok": False, "error": "no_key", "message": "אין מפתח מוגדר"}
+    from .providers.llm import classify_error, set_health
     try:
         import anthropic
         from .config import scfg
@@ -171,22 +175,13 @@ async def test_anthropic(value: str | None = None) -> dict:
         resp = await client.messages.create(model=scfg.llm_model, max_tokens=8,
                                             messages=[{"role": "user", "content": "Reply with the single word OK"}])
         text = "".join(getattr(b, "text", "") for b in resp.content).strip()
+        if not value:  # testing the stored key: its result is the provider's health
+            await set_health("ok")
         return {"ok": True, "model": scfg.llm_model, "reply": text[:20]}
     except Exception as e:  # noqa: BLE001 — classify, never echo the exception body (may contain headers)
-        kind = type(e).__name__
-        status_code = getattr(e, "status_code", None)
-        raw = str(e)
-        if "usage limits" in raw or "spend limit" in raw or "credit balance" in raw:
-            # Anthropic returns 400 for an account-level monthly cap; the key itself is valid.
-            message = ("המפתח תקין, אבל חשבון Anthropic הגיע למגבלת השימוש החודשית שהוגדרה בו — "
-                       "הגדל את המגבלה או הוסף קרדיט ב-console.anthropic.com → Settings → Limits/Billing. "
-                       "עד אז הסוכנים עובדים בתבניות (mock).")
-            return {"ok": False, "error": "usage_limit", "status_code": status_code, "message": message}
-        message = {
-            400: "Anthropic דחה את הבקשה (400) — בדוק את המודל (SOCIAL_LLM_MODEL) והגדרות החשבון",
-            401: "המפתח נדחה על-ידי Anthropic (401) — בדוק שהעתקת מפתח API תקין",
-            403: "אין הרשאה (403) — בדוק חיוב/הרשאות בחשבון Anthropic",
-            404: "המודל לא נמצא (404) — בדוק SOCIAL_LLM_MODEL",
-            429: "חריגה ממגבלת קצב (429) — נסה שוב בעוד דקה",
-        }.get(status_code, f"שגיאת חיבור: {kind}")
-        return {"ok": False, "error": kind, "status_code": status_code, "message": message}
+        code, message = classify_error(e)
+        if not value:
+            await set_health("blocked" if code in ("usage_limit", "auth", "permission") else "degraded", code, message)
+        if code == "usage_limit":
+            message = "המפתח תקין, אבל " + message
+        return {"ok": False, "error": code, "status_code": getattr(e, "status_code", None), "message": message}

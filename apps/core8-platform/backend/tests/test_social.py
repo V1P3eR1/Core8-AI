@@ -723,3 +723,23 @@ def test_ideas_are_batched_and_fallback_is_labelled_mock(client, monkeypatch):
     assert ideas2 and all(i["notes"].startswith("origin: mock") for i in ideas2)
     item = asyncio.run(agents.draft_package(ideas2[0], ideas2[0]["format"], actor="test"))
     assert item["package"]["origin"] == "mock" and "mock" in item["review_notes"]
+
+
+def test_idea_prompt_lists_existing_ideas_to_avoid_repeats(client, monkeypatch):
+    from social import agents, content
+    from social.providers.llm import llm
+    asyncio.run(content.create_idea({"title": "רעיון קיים על OpenAI", "pillar": "ai_news", "audience": "smb",
+                                     "problem": "p", "core_message": "m", "desired_action": "a",
+                                     "format": "reel", "business_goal": "g", "measurement": "x",
+                                     "source_ids": [], "is_demo": 0}))
+    monkeypatch.setattr(type(llm), "mode", property(lambda self: "live"))
+    prompts = []
+
+    async def fake(task, system, user, mock_result, job_id=None, max_tokens=None):
+        prompts.append(user)
+        return [{"title": "רעיון חדש", "pillar": "ai_plain", "audience": "smb", "problem": "p", "core_message": "m",
+                 "desired_action": "a", "format": "image", "business_goal": "g", "measurement": "x", "source_ids": []}]
+
+    monkeypatch.setattr(llm, "complete_json", fake)
+    asyncio.run(agents.generate_ideas(count=1))
+    assert "רעיון קיים על OpenAI" in prompts[0] and "do NOT repeat" in prompts[0]

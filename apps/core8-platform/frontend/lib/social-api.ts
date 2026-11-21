@@ -6,7 +6,7 @@
  */
 import { apiFetch } from "@/lib/auth";
 
-export const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+export const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
 const S = `${API_BASE}/api/social`;
 
 // ── Error handling ───────────────────────────────────────────────────────────
@@ -169,8 +169,11 @@ export interface PublishingSettings {
   demo_mode: boolean;
 }
 
+export interface LlmHealth { state: "ok" | "blocked" | "degraded" | "unknown" | "n/a" | string; code?: string | null; message?: string | null; at?: string | null }
+
 export interface Overview {
   modes: { instagram: ProviderMode; llm: ProviderMode; research: ProviderMode; notify: ProviderMode };
+  llm_health?: LlmHealth;
   publishing: PublishingSettings;
   account: Account | null;
   token: TokenStatus;
@@ -279,7 +282,7 @@ export interface SecretStatus {
   hint: string | null; updated_at: string | null; updated_by: string | null;
 }
 export type SecretName = "anthropic_api_key" | "meta_app_id" | "meta_app_secret";
-export interface SecretsResponse { items: Record<SecretName, SecretStatus>; llm_mode: ProviderMode; encryption_ready: boolean }
+export interface SecretsResponse { items: Record<SecretName, SecretStatus>; llm_mode: ProviderMode; llm_health?: LlmHealth; encryption_ready: boolean }
 export interface SecretTestResult { ok: boolean; model?: string; reply?: string; error?: string; status_code?: number | null; message?: string }
 
 export interface HistoryRow {

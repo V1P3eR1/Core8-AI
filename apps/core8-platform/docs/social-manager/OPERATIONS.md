@@ -33,6 +33,12 @@ What is *not* acceptable: `SOCIAL_WORKER_INPROCESS=true` on a laptop and hoping 
 
 **Redeploy without SSH**: hPanel → VPS → Docker Manager can run a one-off `core8-ops` project (image `docker:27-cli`, mounts `/var/run/docker.sock` and `/opt/core8`) whose command is `git pull` + `docker compose -p deploy -f deploy/docker-compose.vps.yml up -d --build`. Its logs show the build and the health check. Same effect as `bash /root/install.sh` from the web terminal.
 
+**Never edit deploy files on the VPS.** `/opt/core8` is a git checkout of `main`. A local edit to `deploy/Caddyfile` or `deploy/docker-compose.vps.yml` makes the next `git pull` abort, and the next fresh install silently drops it. Change them in a PR. If you find local edits (`git status` in `/opt/core8`), copy them to `/opt/core8-backups/local-edits/`, commit the same content via a PR, then `git checkout --` the files and pull. Two such edits from other sessions (the lead-agent route and the core8-ai.io redirect) were recovered this way on 2026-11-20/21.
+
+**Hostnames**: Caddy serves `DOMAIN` plus any space-separated `EXTRA_DOMAINS`, each with its own automatic certificate. The frontend is built with an empty `NEXT_PUBLIC_API_URL`, so it calls the API on whatever hostname it was loaded from — no rebuild per domain, no CORS. To move to a custom domain without breaking the old address: (1) add a DNS A record for the new name → `2.25.15.153` (at Cloudflare: **DNS only**, grey cloud — proxied mode breaks large media uploads and certificate issuance); (2) redeploy with `DOMAIN=<new> EXTRA_DOMAINS=srv2179387.hstgr.cloud`. `DOMAIN` is the canonical name used for `MEDIA_BASE_URL` and the Meta OAuth redirect, so update the Meta app's redirect URI at the same time. Only add a hostname after its DNS record resolves, or Caddy retries its certificate in a loop.
+
+**LLM health**: when a live call fails with a blocking error (account usage cap, rejected key, missing permission) the dashboard header shows **LLM: חסום** with the reason, and a banner points to the keys tab. It clears on the next successful call, on "בדוק חיבור" success, or when a new key is saved. Agents keep working on templates (labelled `mock`) meanwhile.
+
 - Data = one SQLite file + the media directory (`SOCIAL_MEDIA_DIR`, default `backend/media/social`).
 - Backup: stop nothing; use `sqlite3 core8.db ".backup 'core8-$(date +%F).db'"` (online, consistent) + `rsync` the media dir. Daily, keep 14.
 - Restore: stop API + worker, replace the file + media dir, start. Approval/publication state is in the DB, so a restore from before a publish could re-queue it: check אינסטגרם וחיבורים → publications after a restore and cancel anything already live.
@@ -89,3 +95,16 @@ The Anthropic key and the Meta App ID/Secret can be entered in the dashboard ins
 - `automatic` — requires `confirm_automatic: true` in the request **and** `auto.allowed_categories` + `auto.allowed_account_id`. Boundaries: `max_posts_per_day`, `window_start/end` (local), `review_topics` (fact-check flags that force a human). Items with any sensitive flag, items not in an allowed category, items outside the window or over the cap stay in `needs_review`. The system records the approval as `worker:auto` so it is auditable. Emergency pause overrides everything.
 
 Demo mode (`demo_mode`) is a separate switch: while on, live publishing is impossible and demo records are visible. Turn it off (and clear demo data) before the first real post.
+
+## Tracked links (sales attribution)
+
+Set where posts send people and the campaign name, once per instance:
+
+```
+PUT /api/social/settings/tracking   {"value": {"landing_url": "https://<site>/", "campaign": "<name>"}}
+GET /api/social/items/{id}/tracked-links
+```
+
+The second call returns one link per channel (`instagram`, `facebook`) and placement (`post`, `story`, `reel`, `bio`), with `utm_source`, `utm_medium=social-<placement>`, `utm_campaign` and `utm_content=<item id>`. Links are derived on request: nothing is stored on the item and the caption is not changed, so an approval stays valid.
+
+Instagram feed captions do not make links clickable. Use the links in the bio, Story link stickers and Facebook Page posts. Attribution is complete only when the landing site records `utm_content` with each order or lead; this module does not do that part.
