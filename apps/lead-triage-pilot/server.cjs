@@ -95,6 +95,9 @@ function createApp(opts) {
   if (mailCfg && !leadSecret) {
     throw new Error('CORE8_LEAD_SECRET is required when mailbox intake is configured');
   }
+  if (mailCfg && (publicHost || bindHost !== '127.0.0.1') && opts.mailbox.useTls === false) {
+    throw new Error('Public mailbox intake requires TLS; refusing insecure IMAP');
+  }
   const fetchMail = (opts.mailbox && opts.mailbox.fetchImpl) || fetchLeadMessages;
   const mailState = { enabled: !!mailCfg, lastCheckAt: null, lastResult: null, lastError: null, checking: false };
   const mailStateFile = path.join(store.dir, 'mailbox-state.json');
