@@ -22,6 +22,15 @@ jobs:
       - name: Compile syntax
         run: python -m compileall -q apps/finance-os
 
+  container-build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build sandbox container without deployment
+        run: docker build --tag core8-finance-os:ci ./apps/finance-os
+      - name: Verify merchant binding module exists in image
+        run: docker run --rm --entrypoint python core8-finance-os:ci -c 'import merchant_binding, event_policy, main'
+
   sandbox-postgresql:
     runs-on: ubuntu-latest
     services:
