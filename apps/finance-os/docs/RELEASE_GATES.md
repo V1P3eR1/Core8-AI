@@ -1,5 +1,7 @@
 # Finance OS release gates — human approval mandatory
 
+> **TBD policy (2026-11-22):** Every missing owner decision, private detail, unsupported fact, unverified vendor feature and incomplete engineering gate is labeled **TBD**. Canonical decision register: [OWNER_INPUTS.md](OWNER_INPUTS.md). No arbitrary substitute values, inferred business registrations, fake approvals or production claims.
+
 **Current scope (2026-11-22):** isolated Stripe sandbox event inbox and audited activity metadata. No money movement. No accounting ledger, invoicing, wages, tax filings or customer-facing UI. The successful sandbox test is evidence for **this narrow scope only**.
 
 ## Proof required before launch
