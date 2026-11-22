@@ -69,6 +69,10 @@ def validate_patch(content):
             paths.append(current)
             if len(paths) > MAX_FILES:
                 raise Rejected("too_many_files")
+        elif line.startswith(("new file mode ", "new mode ", "old mode ", "deleted file mode ")) and line != "new file mode 100644":
+            raise Rejected("unsupported_file_mode")
+        elif line.startswith("index ") and re.search(r"\s(?:100755|120000|160000)$", line):
+            raise Rejected("unsupported_file_mode")
         elif line.startswith(("rename ", "copy ", "GIT binary patch", "Binary files ",
                               "old mode", "new mode", "deleted file mode",
                               "new file mode 100755", "new file mode 120000",
