@@ -22,14 +22,14 @@
 - Financial overview returns 503 until identity and tenant policy are integrated.
 - Worker records **operational events**, never financial ledger entries.
 - Worker isolates individual row failures with PostgreSQL nested transactions, retries failed rows with exponential backoff (maximum 5 attempts), and marks exhausted rows `dead`; errors are not persisted as strings.
-- The 5 new worker unit tests passed locally (fake connection), but **updated real-PostgreSQL CI results are still required**; mock-based tests alone are not sufficient evidence for retry behavior under PostgreSQL savepoints/concurrency.
-- Previously demonstrated sandbox PostgreSQL integration CI tested one webhook delivered twice and worker reprocessing to verify one activity row; new worker code requires its own CI revalidation.
+- Updated worker unit tests and real PostgreSQL fault-injection/concurrency tests passed in [Finance OS CI #32](https://github.com/V1P3eR1/Core8-AI/actions/runs/45037658905). Scope is limited to durable inbox and activity metadata, not end-to-end financial fulfillment.
+- Latest [secret-scan #306](https://github.com/V1P3eR1/Core8-AI/actions/runs/45037658924) succeeded on commit `e28a604`. A real provider-originated Stripe delivery and external effects remain untested.
 
 ## Retry/dead-letter release gaps
-1. Add real PostgreSQL fault-injection integration tests proving savepoint rollback, continued processing, retry scheduling and dead-letter transition.
+1. **Verified in CI #23 and #32:** real PostgreSQL fault-injection covers savepoint rollback, continued processing, retry scheduling and the dead-letter transition.
 2. Add a restricted operator-only dead-letter review and replay procedure; do not automatically replay potentially harmful financial events.
 3. Add limited retry/dead-letter metrics with no customer identifiers in logs; verify external alerting and backup/restore.
-4. Test concurrent workers with `FOR UPDATE SKIP LOCKED` and document throughput limits; this prototype makes no guarantee of exactly-once external side effects.
+4. **Verified in CI #32:** real PostgreSQL tests exercise `FOR UPDATE SKIP LOCKED` with a held row lock and two concurrent workers, proving one activity row per tested event. Measure throughput and transaction contention separately before production; this prototype makes **no** exactly-once guarantee for external side effects.
 
 ## Manual local sandbox test
 1. Create a sandbox webhook signing secret through Stripe's CLI/dashboard (never use live keys).
