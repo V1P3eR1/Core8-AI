@@ -121,7 +121,11 @@ def publish(api, *, repo, base_sha, bundle_raw, bundle_hash, scope_sha, artifact
     existing = api.call("GET", "pulls?" + query)
     if existing:
         if (len(existing) == 1 and existing[0].get("draft") is True
-                and marker in (existing[0].get("body") or "")):
+                and marker in (existing[0].get("body") or "")
+                and existing[0].get("head", {}).get("ref") == branch
+                and existing[0].get("head", {}).get("repo", {}).get("full_name") == repo
+                and existing[0].get("base", {}).get("ref") == "main"
+                and existing[0].get("base", {}).get("sha") == base_sha):
             return {"status": "EXISTING_DRAFT", "url": existing[0]["html_url"], "branch": branch}
         raise PublishBlocked("conflicting_existing_pr")
     ref_path = "git/ref/heads/" + parse.quote(branch, safe="")
