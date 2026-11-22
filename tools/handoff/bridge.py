@@ -255,6 +255,20 @@ def audit(gh, number, sha, state, pr_number=None):
                 or f'Scope SHA256: {sha}' not in body_text
                 or pr.get('html_url') != f'https://github.com/{REPO}/pull/{int(pr_number)}'):
             raise Stop('unverified_draft_pr')
+        # The PR must be based on the exact current reviewed main commit.
+        # A matching title/body alone is not evidence of the underlying code.
+        head_sha = head.get('sha')
+        base_sha = base.get('sha')
+        if (not isinstance(head_sha, str) or not re.fullmatch(r'[0-9a-f]{40}', head_sha)
+                or not isinstance(base_sha, str) or not re.fullmatch(r'[0-9a-f]{40}', base_sha)):
+            raise Stop('unverified_draft_commit')
+        main_ref = gh.call('GET', PREFIX + '/git/ref/heads/main')
+        if (main_ref.get('object') or {}).get('sha') != base_sha:
+            raise Stop('stale_draft_base')
+        commit = gh.call('GET', PREFIX + f'/git/commits/{head_sha}')
+        parents = commit.get('parents') or []
+        if len(parents) != 1 or parents[0].get('sha') != base_sha:
+            raise Stop('unverified_draft_parent')
         pr_link = f' https://github.com/{REPO}/pull/{int(pr_number)}'
     elif pr_number is not None:
         raise Stop('unexpected_draft_pr_number')
