@@ -1,7 +1,7 @@
 import copy
 import unittest
 
-from github_metadata import MetadataRejected, REPO, API, validate_github_metadata
+from github_metadata import MetadataRejected, REPO, API, _NoRedirect, validate_github_metadata
 
 HASH = "a" * 64
 RUN_SHA = "b" * 40
@@ -46,6 +46,13 @@ class GithubMetadataTests(unittest.TestCase):
         return validate_github_metadata(
             run_id=123, artifact_id=456, comment_id=789,
             token="read-token", get=self.get)
+
+    def test_api_bearer_redirect_is_refused(self):
+        handler = _NoRedirect()
+        with self.assertRaisesRegex(MetadataRejected, "github_redirect_refused"):
+            handler.redirect_request(
+                req=None, fp=None, code=302, msg="Found",
+                headers={}, newurl="https://untrusted.example/steal")
 
     def test_valid_metadata(self):
         result = self.check()
