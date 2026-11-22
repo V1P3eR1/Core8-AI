@@ -74,6 +74,11 @@ def summarize_pr(pr, checks, number):
         raise SnapshotBlocked("invalid_pr_head")
     if not isinstance(checks, dict) or not isinstance(checks.get("check_runs"), list):
         raise SnapshotBlocked("checks_missing")
+    total = checks.get("total_count")
+    if type(total) is not int or total != len(checks["check_runs"]):
+        # The GitHub check-runs endpoint paginates by default. A partial page
+        # must NEVER be classified as all green.
+        raise SnapshotBlocked("incomplete_check_inventory")
     records = {}
     for c in checks["check_runs"]:
         if not isinstance(c, dict) or not isinstance(c.get("name"), str):
