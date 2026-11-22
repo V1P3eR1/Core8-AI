@@ -297,6 +297,22 @@ class AuditDraftTests(unittest.TestCase):
                          ' draft https://github.com/V1P3eR1/Core8-AI/actions/runs/120 '
                          'https://github.com/V1P3eR1/Core8-AI/pull/90')
 
+    def test_synthetic_github_draft_to_notion_status(self):
+        # A complete zero-network callback rehearsal: the protected reporter
+        # emits a fixed bot audit event, and the existing Notion bridge mirrors it.
+        provider = Fake()
+        bridge = Bridge(provider, provider, SOURCE, apply=True)
+        bridge.sync()
+        provider.writes.clear()
+        sha = digest(payload(provider.page))
+        self.gh.item['body'] = 'Scope SHA256: ' + sha
+        audit(self.gh, 1, sha, 'draft', 90)
+        provider.comments.append({'user': {'login': 'github-actions[bot]'},
+                                  'body': self.gh.calls[-1][2]['body']})
+        bridge.sync()
+        self.assertEqual(
+            provider.writes[-1][2]['properties']['Status']['select']['name'], 'Review')
+
     def test_unverified_scope_cannot_report_success(self):
         self.gh.item['body'] = 'Scope SHA256: ' + 'c' * 64
         with self.assertRaisesRegex(Stop, 'unverified_draft_pr'):
