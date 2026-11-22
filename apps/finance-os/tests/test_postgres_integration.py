@@ -24,9 +24,12 @@ class TestPostgresEventFlow(unittest.TestCase):
     def test_signature_ingest_dedup_and_worker(self):
         secret = "whsec_ci_integration_only"
         original = {key:os.environ.get(key) for key in
-                    ("APP_ENV","STRIPE_WEBHOOK_SECRET","ENABLE_STRIPE_WRITES","STRIPE_EXPECT_LIVEMODE")}
+                    ("APP_ENV","STRIPE_WEBHOOK_SECRET","ENABLE_STRIPE_WRITES","STRIPE_EXPECT_LIVEMODE",
+                     "FINANCE_WEBHOOK_ACCOUNT_ID","FINANCE_WEBHOOK_TENANT_ID")}
         os.environ.update({"APP_ENV":"test","STRIPE_WEBHOOK_SECRET":secret,
-                           "ENABLE_STRIPE_WRITES":"false","STRIPE_EXPECT_LIVEMODE":"false"})
+                           "ENABLE_STRIPE_WRITES":"false","STRIPE_EXPECT_LIVEMODE":"false",
+                           "FINANCE_WEBHOOK_ACCOUNT_ID":"acct_ci_test_only",
+                           "FINANCE_WEBHOOK_TENANT_ID":"core8"})
         eid = "evt_ci_" + uuid4().hex
         payload = json.dumps({
             "id":eid,"livemode":False,"created":int(time.time()),
