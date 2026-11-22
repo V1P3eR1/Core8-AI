@@ -1,0 +1,53 @@
+name: Core8 development loop (read-only)
+on:
+  pull_request:
+    paths:
+      - "tools/orchestration/**"
+      - ".github/workflows/dev-loop-health.yml"
+  workflow_dispatch:
+  schedule:
+    - cron: "15 * * * *"
+permissions:
+  contents: read
+concurrency:
+  group: core8-dev-loop-observe
+  cancel-in-progress: true
+jobs:
+  contract:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Deterministic orchestration contract
+        run: python -m unittest discover -s tools/orchestration -p 'test_*.py' -v
+  observe:
+    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      pull-requests: read
+      checks: read
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Read-only PR and check-run snapshot (no AI calls)
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: python tools/orchestration/dev_loop_health.py
+      - uses: actions/upload-artifact@v4
+        with:
+          name: core8-dev-loop-report
+          path: core8-dev-loop-report.json
+          retention-days: 7
+          if-no-files-found: error
