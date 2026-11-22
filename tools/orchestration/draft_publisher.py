@@ -26,6 +26,13 @@ class PublishBlocked(ValueError):
     pass
 
 
+class _NoRedirect(request.HTTPRedirectHandler):
+    """Never forward a protected GitHub writer token through HTTP redirects."""
+
+    def redirect_request(self, req, fp, code, msg, headers, newurl):
+        raise PublishBlocked("github_writer_redirect_refused")
+
+
 class HttpFailed(Exception):
     def __init__(self, status):
         self.status = status
@@ -104,8 +111,13 @@ class GitHubApi:
             headers["Content-Type"] = "application/json"
         req = request.Request(url, data=body, headers=headers, method=method)
         try:
-            with request.urlopen(req, timeout=15) as response:
-                return json.loads(response.read())
+            with request.build_opener(_NoRedirect).open(req, timeout=15) as response:
+                if response.geturl() != url:
+                    raise PublishBlocked("github_writer_redirect_refused")
+                data = response.read(1024 * 1024 + 1)
+                if len(data) > 1024 * 1024:
+                    raise PublishBlocked("github_writer_response_too_large")
+                return json.loads(data)
         except error.HTTPError as exc:
             raise HttpFailed(exc.code) from None
 
