@@ -19,7 +19,7 @@ def fake_pr(n):
 
 
 def fake_checks():
-    return {"check_runs": [
+    return {"total_count": 2, "check_runs": [
         {"name": "unit-tests", "status": "completed", "conclusion": "success"},
         {"name": "secret-scan", "status": "completed", "conclusion": "success"},
     ]}
@@ -43,7 +43,7 @@ class ContinuityTests(unittest.TestCase):
         self.assertIn("[#79]", rendered)
 
     def test_no_checks_never_green(self):
-        item = summarize_pr(fake_pr(74), {"check_runs": []}, 74)
+        item = summarize_pr(fake_pr(74), {"total_count": 0, "check_runs": []}, 74)
         self.assertEqual(item["check_state"], "no_checks")
 
     def test_pending_checks_never_green(self):
@@ -60,7 +60,14 @@ class ContinuityTests(unittest.TestCase):
     def test_duplicate_check_names_fail_closed(self):
         checks = fake_checks()
         checks["check_runs"].append(copy.deepcopy(checks["check_runs"][0]))
+        checks["total_count"] = 3
         with self.assertRaisesRegex(SnapshotBlocked, "duplicate_check_names"):
+            summarize_pr(fake_pr(74), checks, 74)
+
+    def test_partial_check_page_blocked(self):
+        checks = fake_checks()
+        checks["total_count"] = 99
+        with self.assertRaisesRegex(SnapshotBlocked, "incomplete_check_inventory"):
             summarize_pr(fake_pr(74), checks, 74)
 
     def test_wrong_repo_rejected(self):
@@ -92,8 +99,8 @@ class ContinuityTests(unittest.TestCase):
                     get_json(endpoint)
 
     def test_bearer_redirect_not_followed(self):
-        with self.assertRaises(TypeError):
-            NoRedirect().redirect_request(None, None, 302, "redirect", {}, "https://evil.test")
+        self.assertIsNone(
+            NoRedirect().redirect_request(None, None, 302, "redirect", {}, "https://evil.test"))
 
     def test_pr_private_body_not_exported(self):
         pr = fake_pr(74)
