@@ -12,6 +12,35 @@ except ImportError:
 @unittest.skipUnless(psycopg is not None and bool(os.getenv("DATABASE_URL")),
                      "requires disposable PostgreSQL sandbox DATABASE_URL")
 class TenantConsistencyTests(unittest.TestCase):
+    def test_duplicate_event_id_cannot_be_acknowledged_as_other_tenant(self):
+        from main import persist_event
+        from event_policy import EventRecord
+        marker = uuid4().hex
+        tenant_a, tenant_b = "ci_a_" + marker, "ci_b_" + marker
+        event_id = "evt_duplicate_" + marker
+        dsn = os.environ["DATABASE_URL"]
+        try:
+            with psycopg.connect(dsn) as db:
+                for tenant in (tenant_a, tenant_b):
+                    db.execute("INSERT INTO finance_organizations (id, legal_name) VALUES (%s,%s)",
+                               (tenant, "CI test tenant"))
+            first = EventRecord(event_id, "invoice.paid", "in_" + marker, 1795340000, tenant_a)
+            other = EventRecord(event_id, "invoice.paid", "in_" + marker, 1795340000, tenant_b)
+            self.assertTrue(persist_event(first))
+            self.assertFalse(persist_event(first))
+            with self.assertRaises(RuntimeError):
+                persist_event(other)
+            with psycopg.connect(dsn) as db:
+                self.assertEqual(db.execute(
+                    "SELECT organization_id FROM finance_stripe_event_inbox WHERE event_id=%s",
+                    (event_id,)).fetchone()[0], tenant_a)
+        finally:
+            with psycopg.connect(dsn) as db:
+                db.execute("DELETE FROM finance_activity WHERE stripe_event_id=%s", (event_id,))
+                db.execute("DELETE FROM finance_stripe_event_inbox WHERE event_id=%s", (event_id,))
+                db.execute("DELETE FROM finance_organizations WHERE id IN (%s,%s)",
+                           (tenant_a, tenant_b))
+
     def test_activity_cannot_relabel_another_tenants_event(self):
         marker = uuid4().hex
         tenant_a, tenant_b = "ci_a_" + marker, "ci_b_" + marker
