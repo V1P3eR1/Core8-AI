@@ -39,8 +39,11 @@ class FakeApi:
         if path.startswith("pulls?"):
             if not self.existing:
                 return []
+            idem = sha((BASE + ":" + ARTIFACT + ":" + SCOPE).encode())
             return [{"draft": True, "html_url": "https://github.com/owner/repo/pull/9",
-                     "body": "<!-- core8-review:" + sha((BASE + ":" + ARTIFACT + ":" + SCOPE).encode()) + " -->"}]
+                     "body": "<!-- core8-review:" + idem + " -->",
+                     "head": {"ref": "core8-review/" + idem[:24], "repo": {"full_name": REPO}},
+                     "base": {"ref": "main", "sha": BASE}}]
         if path == "git/ref/heads/main":
             return {"object": {"sha": self.main_sha}}
         if path.startswith("git/ref/heads/"):
@@ -129,6 +132,34 @@ class DraftPublisherTests(unittest.TestCase):
             return result
 
         api.call = fail_non_draft
+        with self.assertRaisesRegex(PublishBlocked, "conflicting_existing_pr"):
+            call_publish(api)
+
+    def test_forged_existing_draft_wrong_head_is_blocked(self):
+        api = FakeApi(existing=True)
+        original = api.call
+
+        def forged(method, path, payload=None):
+            response = original(method, path, payload)
+            if path.startswith("pulls?"):
+                response[0]["head"]["ref"] = "unrelated"
+            return response
+
+        api.call = forged
+        with self.assertRaisesRegex(PublishBlocked, "conflicting_existing_pr"):
+            call_publish(api)
+
+    def test_existing_draft_wrong_base_sha_is_blocked(self):
+        api = FakeApi(existing=True)
+        original = api.call
+
+        def stale(method, path, payload=None):
+            response = original(method, path, payload)
+            if path.startswith("pulls?"):
+                response[0]["base"]["sha"] = "f" * 40
+            return response
+
+        api.call = stale
         with self.assertRaisesRegex(PublishBlocked, "conflicting_existing_pr"):
             call_publish(api)
 
