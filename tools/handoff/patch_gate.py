@@ -49,14 +49,18 @@ def validate_patch(payload: bytes, expected_sha256: str) -> dict:
     actual = hashlib.sha256(payload).hexdigest()
     if actual != expected_sha256:
         raise RejectedPatch("digest_mismatch")
-    if b"\x00" in payload or any(p.search(payload) for p in SECRET_PATTERNS):
-        raise RejectedPatch("binary_or_possible_secret")
+    if b"\x00" in payload or b"GIT binary patch" in payload or b"Binary files " in payload:
+        raise RejectedPatch("binary_patch")
+    if any(p.search(payload) for p in SECRET_PATTERNS):
+        raise RejectedPatch("possible_secret")
     try:
         text = payload.decode("utf-8")
     except UnicodeDecodeError:
         raise RejectedPatch("not_utf8") from None
     if "\r" in text:
         raise RejectedPatch("invalid_line_ending")
+    if any(line.startswith(("rename from ", "rename to ", "copy from ", "copy to ", "Submodule ")) for line in text.splitlines()):
+        raise RejectedPatch("rename_copy_or_submodule")
     lines = text.splitlines()
     index_line = re.compile(r"^index [0-9a-f]{7,64}\.\.[0-9a-f]{7,64}(?: 100644)?$")
     hunk_line = re.compile(r"^@@ -(\d+)(?:,(\d+))? \+(\d+)(?:,(\d+))? @@(?: .*)?$")
@@ -64,8 +68,10 @@ def validate_patch(payload: bytes, expected_sha256: str) -> dict:
     i = 0
     while i < len(lines):
         m = HEADER.fullmatch(lines[i])
-        if not m or m.group(1) != m.group(2):
+        if not m:
             raise RejectedPatch("invalid_diff_header")
+        if m.group(1) != m.group(2):
+            raise RejectedPatch("rename_not_allowed")
         path = m.group(1)
         validate_path(path)
         if path in paths or len(paths) >= 20:
@@ -76,7 +82,7 @@ def validate_patch(payload: bytes, expected_sha256: str) -> dict:
         creating = False
         if i < len(lines) and lines[i].startswith(("new file mode ", "deleted file mode ")):
             if lines[i] != "new file mode 100644":
-                raise RejectedPatch("unsafe_mode_or_deletion")
+                raise RejectedPatch("nonregular_mode")
             creating = True
             i += 1
         if i >= len(lines) or not index_line.fullmatch(lines[i]):
@@ -90,7 +96,7 @@ def validate_patch(payload: bytes, expected_sha256: str) -> dict:
         while i < len(lines) and not lines[i].startswith("diff --git "):
             match = hunk_line.fullmatch(lines[i])
             if not match:
-                raise RejectedPatch("invalid_hunk_header")
+                raise RejectedPatch("missing_diff_hunks")
             before = int(match.group(2) or 1)
             after = int(match.group(4) or 1)
             if before + after > 100000:
