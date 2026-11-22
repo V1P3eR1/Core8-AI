@@ -65,6 +65,22 @@ class TestFinanceWebhookHTTP(unittest.TestCase):
     def test_oversized_webhook_denied(self):
         data=b"x"*256001
         self.assertEqual(self.client.post("/webhooks/stripe",content=data).status_code,413)
+    def test_oversized_webhook_without_content_length_denied(self):
+        # Chunked transfer must not bypass the 256 KB cap.
+        def stream():
+            yield b"x" * 150000
+            yield b"y" * 110001
+        response = self.client.post("/webhooks/stripe", content=stream(),
+                                    headers={"Transfer-Encoding": "chunked"})
+        self.assertEqual(response.status_code, 413)
+
+    def test_signed_webhook_with_missing_merchant_binding_denied(self):
+        payload = self.payload()
+        with patch.dict(os.environ, {"FINANCE_WEBHOOK_TENANT_ID": ""}):
+            response = self.client.post("/webhooks/stripe", content=payload,
+                                        headers=self.signed(payload))
+        self.assertEqual(response.status_code, 400)
+
     def test_missing_database_is_retryable(self):
         with patch("main.persist_event", side_effect=RuntimeError("db unavailable")):
             response=self.client.post("/webhooks/stripe",content=self.payload(),
