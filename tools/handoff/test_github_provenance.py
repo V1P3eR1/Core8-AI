@@ -36,7 +36,7 @@ class ProvenanceTests(unittest.TestCase):
         self.run = dict(id=123, repository=dict(full_name=REPO, id=REPO_ID),
                         event="issue_comment", head_branch="main", head_sha=self.sha,
                         path=WORKFLOW_PATH, status="completed", conclusion="success",
-                        run_attempt=1)
+                        run_attempt=1, actor={"id": 999}, triggering_actor={"id": 999})
         self.artifact = dict(id=456, name=ARTIFACT_NAME, expired=False,
                              digest="sha256:" + "b" * 64,
                              created_at="2026-11-22T10:00:00Z",
@@ -46,7 +46,8 @@ class ProvenanceTests(unittest.TestCase):
 
     def check(self, run=None, artifact=None):
         return validate_run_artifact(run or self.run, artifact or self.artifact,
-                                     run_id=123, artifact_id=456, head_sha=self.sha)
+                                     run_id=123, artifact_id=456, head_sha=self.sha,
+                                     expected_actor_id=999)
 
     def test_valid_metadata(self):
         self.assertEqual(self.check()["archive_sha256"], "b" * 64)
@@ -61,11 +62,33 @@ class ProvenanceTests(unittest.TestCase):
     def test_get_only_fixed_endpoints(self):
         opener = FakeOpener(self.run, self.artifact)
         result = GitHubReadOnly("placeholder-read-token", opener=opener).fetch_verified(
-            run_id=123, artifact_id=456, head_sha=self.sha)
+            run_id=123, artifact_id=456, head_sha=self.sha,
+            expected_actor_id=999)
         self.assertEqual(result["artifact_id"], 456)
         self.assertEqual([x.get_method() for x in opener.requests], ["GET", "GET"])
         self.assertTrue(all(x.full_url.startswith("https://api.github.com/repos/" + REPO + "/")
                             for x in opener.requests))
+
+    def test_forged_run_actor_rejected(self):
+        self.run["actor"]["id"] = 111
+        with self.assertRaises(EvidenceBlocked): self.check()
+
+    def test_forged_triggering_actor_rejected(self):
+        self.run["triggering_actor"]["id"] = 111
+        with self.assertRaises(EvidenceBlocked): self.check()
+
+    def test_missing_actor_rejected(self):
+        del self.run["actor"]
+        with self.assertRaises(EvidenceBlocked): self.check()
+
+    def test_wrong_trusted_approver_rejected(self):
+        with self.assertRaises(EvidenceBlocked):
+            validate_run_artifact(self.run, self.artifact, run_id=123,
+                                  artifact_id=456, head_sha=self.sha, expected_actor_id=1000)
+
+    def test_bool_actor_rejected(self):
+        self.run["actor"]["id"] = True
+        with self.assertRaises(EvidenceBlocked): self.check()
 
     def test_other_repo_rejected(self):
         self.run["repository"]["full_name"] = "attacker/repo"
@@ -117,7 +140,8 @@ class ProvenanceTests(unittest.TestCase):
 
     def test_invalid_run_id_rejected(self):
         with self.assertRaises(EvidenceBlocked):
-            GitHubReadOnly("fake").fetch_verified(run_id=True, artifact_id=456, head_sha=self.sha)
+            GitHubReadOnly("fake").fetch_verified(run_id=True, artifact_id=456, head_sha=self.sha,
+                                                         expected_actor_id=999)
 
     def test_missing_token_rejected(self):
         with self.assertRaises(EvidenceBlocked): GitHubReadOnly("")
