@@ -1,0 +1,20 @@
+name: cloud-continuity-synthetic-contract
+
+# Review-only proposal. This is not an always-on orchestrator.
+# No secrets, external API calls, deployment or paid AI use.
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  synthetic-contract:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Run synthetic offline continuity tests
+        run: python3 -m unittest discover -s tests -p 'test_cloud_continuity.py' -v
