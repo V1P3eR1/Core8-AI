@@ -151,6 +151,34 @@ class ContractTests(unittest.TestCase):
         self.b.sync()
         self.assertEqual(self.f.writes[-1][2]['properties']['Status']['select']['name'], 'Review')
 
+    def test_revoked_between_query_and_live_read_never_exports(self):
+        class RevokedAfterQuery(Fake):
+            def call(self, method, path, data=None):
+                if method == 'GET' and path == '/pages/' + TASK:
+                    current = copy.deepcopy(self.page)
+                    current['properties']['Public export']['checkbox'] = False
+                    return current
+                return super().call(method, path, data)
+
+        fake = RevokedAfterQuery()
+        Bridge(fake, fake, SOURCE, apply=True).sync()
+        self.assertEqual(fake.issues, [])
+        self.assertFalse(any(method == 'POST' and path == PREFIX + '/issues'
+                             for method, path, _ in fake.writes))
+
+    def test_dryrun_revoked_between_query_and_live_read_zero_writes(self):
+        class RevokedAfterQuery(Fake):
+            def call(self, method, path, data=None):
+                if method == 'GET' and path == '/pages/' + TASK:
+                    current = copy.deepcopy(self.page)
+                    current['properties']['Decision']['select']['name'] = 'Rejected'
+                    return current
+                return super().call(method, path, data)
+
+        fake = RevokedAfterQuery()
+        Bridge(fake, fake, SOURCE, apply=False).sync()
+        self.assertEqual(fake.writes, [])
+
     def test_machine_status_with_wrong_digest_ignored(self):
         self.export()
         self.f.comments = [{'user': {'login': 'github-actions[bot]'},
