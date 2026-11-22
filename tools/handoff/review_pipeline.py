@@ -5,6 +5,7 @@ Never accept expected_record from artifact text: independently authenticate the
 approved task and GitHub run/artifact metadata before calling this function.
 """
 import os
+import re
 import subprocess
 from pathlib import Path
 from artifact_receipt import validate_artifact_receipt
@@ -24,6 +25,10 @@ def stage_review(*, receipt, expected_record, patch_bytes, now, ledger_path,
     checkout = Path(checkout_path).resolve(strict=True)
     if not checkout.is_dir():
         raise ReviewRejected("checkout_not_directory")
+    # The independently trusted base commit must match the disposable checkout.
+    trusted_base = expected_record.get("checkout_sha")
+    if not isinstance(trusted_base, str) or not re.fullmatch(r"[0-9a-f]{40}", trusted_base):
+        raise ReviewRejected("missing_trusted_checkout_sha")
     # Minimal subprocess environment: do not expose credentials from caller.
     env = {
         "PATH": os.defpath,
@@ -34,6 +39,12 @@ def stage_review(*, receipt, expected_record, patch_bytes, now, ledger_path,
         "GIT_TERMINAL_PROMPT": "0",
     }
     try:
+        head = subprocess.run(
+            ["git", "-C", str(checkout), "rev-parse", "HEAD"],
+            stdout=subprocess.PIPE, stderr=subprocess.DEVNULL,
+            timeout=10, check=False, env=env)
+        if head.returncode != 0 or head.stdout.decode("ascii", errors="replace").strip() != trusted_base:
+            raise ReviewRejected("checkout_sha_mismatch")
         result = subprocess.run(
             ["git", "-C", str(checkout), "apply", "--check", "-"],
             input=patch_bytes, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
