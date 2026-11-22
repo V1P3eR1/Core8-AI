@@ -132,6 +132,10 @@ def publish(api, *, repo, base_sha, bundle_raw, bundle_hash, scope_sha, artifact
             raise
     else:
         raise PublishBlocked("existing_branch_without_pr")
+    # A stale or unreviewed base must not be published against a newer main.
+    current = api.call("GET", "git/ref/heads/main")
+    if current.get("object", {}).get("sha") != base_sha:
+        raise PublishBlocked("base_no_longer_main")
     base = api.call("GET", "git/commits/" + base_sha)
     base_tree = base["tree"]["sha"]
     entries = []
@@ -171,6 +175,8 @@ def main():
             return 0
         if os.getenv("CORE8_PROTECTED_PUBLISH") != "1" or not os.getenv("GITHUB_TOKEN"):
             raise PublishBlocked("protected_environment_and_token_required")
+        if os.getenv("GITHUB_REPOSITORY") != args.repo:
+            raise PublishBlocked("authenticated_repository_context_mismatch")
         result = publish(GitHubApi(args.repo, os.environ["GITHUB_TOKEN"]), repo=args.repo,
                          base_sha=args.base_sha, bundle_raw=raw, bundle_hash=args.bundle_sha256,
                          scope_sha=args.scope_sha256, artifact_sha=args.artifact_sha256)
