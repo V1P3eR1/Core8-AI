@@ -21,5 +21,7 @@ jobs:
           python-version: '3.12'
       - name: Offline tests with disposable local Git fixtures
         run: python -m unittest discover -s tools/orchestration -p 'test_*.py' -v
+      - name: Existing human-gated handoff contract tests
+        run: python -m unittest discover -s tools/handoff -p 'test_*.py' -v
       - name: Compile stage scripts
         run: python -m py_compile tools/orchestration/patch_gate.py tools/orchestration/stage_patch.py tools/orchestration/draft_publisher.py
