@@ -45,6 +45,15 @@ def stage_review(*, receipt, expected_record, patch_bytes, now, ledger_path,
             timeout=10, check=False, env=env)
         if head.returncode != 0 or head.stdout.decode("ascii", errors="replace").strip() != trusted_base:
             raise ReviewRejected("checkout_sha_mismatch")
+        # A matching HEAD alone is insufficient: an untracked or modified
+        # checkout could supply unexpected context to a reviewed patch.
+        cleanliness = subprocess.run(
+            ["git", "-C", str(checkout), "status", "--porcelain",
+             "--untracked-files=all"],
+            stdout=subprocess.PIPE, stderr=subprocess.DEVNULL,
+            timeout=10, check=False, env=env)
+        if cleanliness.returncode != 0 or cleanliness.stdout:
+            raise ReviewRejected("checkout_not_clean")
         result = subprocess.run(
             ["git", "-C", str(checkout), "apply", "--check", "-"],
             input=patch_bytes, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
