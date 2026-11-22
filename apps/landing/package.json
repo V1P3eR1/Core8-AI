@@ -1,0 +1,9 @@
+{
+  "name": "core8-landing-prototype",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Static landing page prototype for Core8-AI. Draft copy; form not connected.",
+  "scripts": { "test": "node --test tests/static.test.cjs tests/handler.test.cjs tests/package.test.cjs",
+    "package": "node tools/package.cjs",
+    "package:launch": "node tools/package.cjs --launch", "test:browser": "node tests/browser.smoke.cjs" }
+}

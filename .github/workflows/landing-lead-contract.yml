@@ -1,0 +1,24 @@
+name: landing signed-lead producer contract
+on:
+  pull_request:
+    paths:
+      - "apps/landing/**"
+      - ".github/workflows/landing-lead-contract.yml"
+permissions:
+  contents: read
+jobs:
+  php-and-node:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    defaults:
+      run:
+        working-directory: apps/landing
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Confirm PHP CLI available
+        run: php --version
+      - name: Synthetic PHP dry-run signed intake, consent, rate limits and static checks
+        run: npm test
