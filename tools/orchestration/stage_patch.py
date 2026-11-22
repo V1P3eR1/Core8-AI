@@ -5,6 +5,7 @@ This is NOT an approval gate, CI runner, GitHub publisher or security sandbox.
 Trusted run metadata must be checked by the upstream human approval gate.
 """
 import argparse
+import base64
 import hashlib
 import io
 import json
@@ -41,7 +42,7 @@ def git(root, *args, data=None):
     return p.stdout
 
 
-def stage(repo, patch, artifact_hash, base_sha, approved_scope_hash):
+def stage(repo, patch, artifact_hash, base_sha, approved_scope_hash, bundle_output=None):
     if not SHA256.fullmatch(artifact_hash) or not SHA256.fullmatch(approved_scope_hash) or not SHA40.fullmatch(base_sha):
         raise StageRejected("invalid_trusted_metadata")
     if hashlib.sha256(patch).hexdigest() != artifact_hash:
@@ -99,22 +100,51 @@ def stage(repo, patch, artifact_hash, base_sha, approved_scope_hash):
         delta = git(target, "diff", "--cached", "--binary", "HEAD")
         if not delta:
             raise StageRejected("empty_effective_change")
-    key = hashlib.sha256((base_sha + ":" + artifact_hash + ":" + approved_scope_hash).encode()).hexdigest()
-    return {"schema": 1, "status": "REVIEW_ONLY", "base_sha": base_sha,
-            "approved_scope_sha256": approved_scope_hash, "artifact_sha256": artifact_hash,
-            "result_sha256": hashlib.sha256(delta).hexdigest(),
-            "idempotency_key": key, "paths": sorted(paths)}
+        key = hashlib.sha256((base_sha + ":" + artifact_hash + ":" + approved_scope_hash).encode()).hexdigest()
+        bundle_digest = None
+        if bundle_output is not None:
+            output = Path(bundle_output).absolute()
+            if output.parent.resolve() == repo or repo in output.parent.resolve().parents:
+                raise StageRejected("bundle_must_be_outside_source")
+            files = []
+            for path in sorted(paths):
+                candidate = target / path
+                if not candidate.is_file() or candidate.is_symlink():
+                    raise StageRejected("bundle_requires_regular_files_no_deletions")
+                raw = candidate.read_bytes()
+                if len(raw) > 100_000 or b"\x00" in raw:
+                    raise StageRejected("bundle_file_too_large_or_binary")
+                files.append({"path": path, "sha256": hashlib.sha256(raw).hexdigest(),
+                              "content_b64": base64.b64encode(raw).decode("ascii")})
+            bundle = {"schema": 1, "status": "REVIEW_ONLY", "base_sha": base_sha,
+                      "approved_scope_sha256": approved_scope_hash,
+                      "artifact_sha256": artifact_hash, "idempotency_key": key,
+                      "paths": sorted(paths), "files": files}
+            payload = json.dumps(bundle, sort_keys=True, separators=(",", ":")).encode()
+            if len(payload) > 2_000_000:
+                raise StageRejected("bundle_too_large")
+            with output.open("xb") as stream:
+                stream.write(payload)
+            bundle_digest = hashlib.sha256(payload).hexdigest()
+    result = {"schema": 1, "status": "REVIEW_ONLY", "base_sha": base_sha,
+              "approved_scope_sha256": approved_scope_hash, "artifact_sha256": artifact_hash,
+              "result_sha256": hashlib.sha256(delta).hexdigest(),
+              "idempotency_key": key, "paths": sorted(paths)}
+    if bundle_digest is not None:
+        result["bundle_sha256"] = bundle_digest
+    return result
 
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     for name in ("repo", "patch", "artifact_sha256", "base_sha", "approved_scope_sha256"):
         parser.add_argument("--" + name.replace("_", "-"), required=True)
+    parser.add_argument("--bundle-output", help="create reviewed evidence JSON outside source repo")
     args = parser.parse_args()
     try:
         with open(args.patch, "rb") as f:
             patch = f.read(300_001)
-        result = stage(args.repo, patch, args.artifact_sha256, args.base_sha, args.approved_scope_sha256)
+        result = stage(args.repo, patch, args.artifact_sha256, args.base_sha, args.approved_scope_sha256, bundle_output=args.bundle_output)
     except (StageRejected, OSError, tarfile.TarError) as exc:
         print("BLOCKED:", str(exc), file=sys.stderr)
         return 1
