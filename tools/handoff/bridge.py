@@ -170,9 +170,14 @@ class Bridge:
                     # Only fixed machine audit events from the configured GitHub Actions identity.
                     for comment in comments:
                         if comment.get('user', {}).get('login') == 'github-actions[bot]':
-                            match = re.fullmatch(r'core8-run ([a-f0-9]{64}) (started|review|failed) https://github.com/V1P3eR1/Core8-AI/actions/runs/\d+', comment.get('body', ''))
+                            match = re.fullmatch(
+                                r'core8-run ([a-f0-9]{64}) (started|review|draft|failed) '
+                                r'https://github.com/V1P3eR1/Core8-AI/actions/runs/[1-9][0-9]*'
+                                r'(?: https://github.com/V1P3eR1/Core8-AI/pull/[1-9][0-9]*)?',
+                                comment.get('body', ''))
                             if match and match[1] == sha:
-                                status = {'started': 'In progress', 'review': 'Review', 'failed': 'Blocked'}[match[2]]
+                                status = {'started': 'In progress', 'review': 'Review',
+                                          'draft': 'Review', 'failed': 'Blocked'}[match[2]]
                 self.update(page, status, issue=issue, sha=sha)
                 print(json.dumps({'task': data['task'], 'issue': issue['number'], 'status': status, 'apply': self.apply}))
             except Stop as error:
@@ -219,12 +224,35 @@ class Bridge:
         return number, data
 
 
-def audit(gh, number, sha, state):
+def audit(gh, number, sha, state, pr_number=None):
     run = os.environ.get('GITHUB_RUN_ID', '')
-    if not run.isdigit() or state not in ('started', 'review', 'failed') or not re.fullmatch('[a-f0-9]{64}', sha):
+    if (not re.fullmatch(r'[1-9][0-9]*', run)
+            or type(number) not in (int, str) or not re.fullmatch(r'[1-9][0-9]*', str(number))
+            or state not in ('started', 'review', 'draft', 'failed')
+            or not re.fullmatch('[a-f0-9]{64}', sha)):
         raise Stop('invalid_audit_event')
+    pr_link = ''
+    if state == 'draft':
+        if type(pr_number) not in (str, int) or not re.fullmatch(r'[1-9][0-9]*', str(pr_number)):
+            raise Stop('invalid_draft_pr_number')
+        pr = gh.call('GET', PREFIX + f'/pulls/{int(pr_number)}')
+        head = pr.get('head') or {}
+        base = pr.get('base') or {}
+        branch = head.get('ref') or ''
+        body_text = pr.get('body') or ''
+        # Draft publisher writes this exact provenance marker in the PR body.
+        if (pr.get('state') != 'open' or pr.get('draft') is not True
+                or not re.fullmatch(r'core8-review/[a-f0-9]{24}', branch)
+                or (head.get('repo') or {}).get('full_name') != REPO
+                or base.get('ref') != 'main'
+                or f'Scope SHA256: {sha}' not in body_text
+                or pr.get('html_url') != f'https://github.com/{REPO}/pull/{int(pr_number)}'):
+            raise Stop('unverified_draft_pr')
+        pr_link = f' https://github.com/{REPO}/pull/{int(pr_number)}'
+    elif pr_number is not None:
+        raise Stop('unexpected_draft_pr_number')
     gh.call('POST', PREFIX + f'/issues/{int(number)}/comments',
-            {'body': f'core8-run {sha} {state} https://github.com/{REPO}/actions/runs/{run}'})
+            {'body': f'core8-run {sha} {state} https://github.com/{REPO}/actions/runs/{run}' + pr_link})
 
 
 def main():
@@ -234,7 +262,8 @@ def main():
     args = parser.parse_args()
     gh = API('github', os.environ.get('GITHUB_TOKEN'))
     if args.command == 'report':
-        audit(gh, os.environ['ISSUE_NUMBER'], os.environ['SCOPE_DIGEST'], os.environ['RUN_STATE'])
+        audit(gh, os.environ['ISSUE_NUMBER'], os.environ['SCOPE_DIGEST'],
+              os.environ['RUN_STATE'], os.environ.get('REVIEW_PR_NUMBER'))
         return
     bridge = Bridge(gh, API('notion', os.environ.get('NOTION_TOKEN')), os.environ['NOTION_DATA_SOURCE_ID'], args.apply)
     if args.command == 'sync':
