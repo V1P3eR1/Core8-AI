@@ -7,7 +7,7 @@
 - `docs/HANDOFF.md`: existing architecture and manual activation procedure; Notion owns task scope/decisions; GitHub owns issues, approval comments, audit and patch artifacts.
 - `.github/workflows/claude-issues.yml`: existing gated Claude workflow; job gate requires `CORE8_CLAUDE_ENABLED=true`, matching numeric human `CORE8_APPROVER_ID`, exact `/core8-implement <SHA256>` comment, and a non-PR issue. Separate `core8-sync` and `core8-claude` environments.
 - Claude action currently has `--max-turns 6`, `--max-budget-usd 0.25`, model haiku and restricted Read/Edit/Write/Glob/Grep tools. **This is a per-run argument, not a verified account-level spend cap.**
-- Notion connector access from the ChatGPT session was previously unavailable. Actual Notion data-source ID, provider credentials, enabled flags, environment protections and live execution are **not verified**.
+- The personal Notion connector was verified on 2026-11-22: the Integration task queue schema and 8 rows were read. Its data-source ID is `abbb517c-da0c-4913-be23-d85bba4d135d` (non-secret schema identifier). This does **not** establish that GitHub Actions has its own Notion token, that any enabled flag is true, or that live writing works. The business connector returned no matching Core8 results.
 - No new provider account or paid action is authorized by this runbook.
 
 ## Phase A — read-only readiness (safe now)
@@ -47,9 +47,11 @@
 |---|---|---|
 | Existing Claude gate inspected | PASS (static code) | `.github/workflows/claude-issues.yml` |
 | Existing architecture inspected | PASS (static docs) | `docs/HANDOFF.md` |
-| Notion queue live read/write | UNKNOWN | Reconnect correct Notion linked account |
-| Sync workflow live readiness | UNKNOWN | Identify actual workflow and inspect |
-| Branch protection enforced | UNKNOWN | Verify in repository settings |
+| Notion queue live read | PASS | Personal Notion connection: schema + 8 rows on 2026-11-22; no write attempted |
+| Notion queue live write | NOT TESTED | Requires separately authorized safe write |
+| Sync workflow static inspection | PASS | `.github/workflows/core8-sync.yml` on main; cron every 15 minutes, default-off gate and manual dry-run |
+| Sync workflow live readiness | UNKNOWN | Separate GitHub Actions environment credentials and enabled flag unverified |
+| Branch protection enforced | UNKNOWN / BLOCKED | GitHub branch protection GET returned 403 to this integration; repository rulesets GET returned `[]` (no visible rulesets). Do not assume protection |
 | Protected environments and credentials present | UNKNOWN | Check presence only; no secret exposure |
 | Synthetic Notion/GitHub round trip | NOT RUN | Separate activation approval |
 | Paid Claude patch run | NOT AUTHORIZED | Separate owner approval required |
@@ -58,3 +60,16 @@
 ## Fail-closed rules
 
 Do not publish private Obsidian content, actual customer records, credentials, personal plans or unreviewed Notion pages into the public Core8-AI repository. Do not enable flags, change permissions, configure secrets, initiate Anthropic billing, merge, deploy or publish on the basis of this preparation authorization. A GitHub Actions green synthetic test is not proof of Notion integration or paid Claude execution.
+
+## Verified preflight update — 2026-11-22
+
+- **Exact workflow discovered:** [`.github/workflows/core8-sync.yml`](https://github.com/V1P3eR1/Core8-AI/blob/main/.github/workflows/core8-sync.yml). Runs on `workflow_dispatch` (input `apply=false` by default) or schedule `*/15 * * * *`, but its job runs only when `vars.CORE8_SYNC_ENABLED == 'true'` on `main`. It uses `core8-sync` environment, `NOTION_TOKEN` secret, `NOTION_DATA_SOURCE_ID` variable, read-only contents and issue-write permissions, with concurrency serialization.
+- **Operational warning:** Once enabled, *scheduled* sync uses `APPLY=true` automatically. Thus enabling the flag is **not** merely a harmless read-only test: eligible tasks can be exported to the public GitHub repository and Notion status can be updated. Do not enable until privacy and authorization are independently verified.
+- **No duplicate bridge needed:** Existing `tools/handoff/bridge.py` supports `sync` without `--apply` for zero-write dry-run, and `--apply` for writes. The offline contract tests are now included in PR #60's hosted synthetic workflow.
+- **Hosted test evidence:** [synthetic contract #4](https://github.com/V1P3eR1/Core8-AI/actions/runs/45016940036) and [secret-scan #179](https://github.com/V1P3eR1/Core8-AI/actions/runs/45016940072) both passed for commit `904dba5`. These are *not* live Notion sync runs.
+- **Protection visibility:** GitHub integration cannot read `main` branch protection (403), and rulesets endpoint returned an empty list. This is a governance blocker to merge/activation, not evidence of safe protection.
+- **Historical mapping:** GitHub issue #17 is closed and Notion maps it to `Closed - unverified`; #20 is open and Notion maps it to `Review`. Both rows showed last sync `2026-11-22 08:51 UTC`. No fresh cross-service write was attempted.
+
+### Owner-free next steps
+
+Continue static and hosted offline checks, review-only PR updates and evidence collection. Do **not** turn on `CORE8_SYNC_ENABLED`, even temporarily, because the scheduled trigger applies changes. Do not start paid Claude, create or expose public tasks, merge or deploy. Owner-only tasks remain branch protection, protected environments, GitHub Actions token/variable setup and explicit activation.
