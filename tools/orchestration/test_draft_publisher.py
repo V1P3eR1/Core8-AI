@@ -28,10 +28,11 @@ def bundle(path="docs/demo.md", content=b"hello"):
 class FakeApi:
     repo = REPO
 
-    def __init__(self, existing=False, blocked_ref=False):
+    def __init__(self, existing=False, blocked_ref=False, main_sha=BASE):
         self.calls = []
         self.existing = existing
         self.blocked_ref = blocked_ref
+        self.main_sha = main_sha
 
     def call(self, method, path, payload=None):
         self.calls.append((method, path, payload))
@@ -40,6 +41,8 @@ class FakeApi:
                 return []
             return [{"draft": True, "html_url": "https://github.com/owner/repo/pull/9",
                      "body": "<!-- core8-review:" + sha((BASE + ":" + ARTIFACT + ":" + SCOPE).encode()) + " -->"}]
+        if path == "git/ref/heads/main":
+            return {"object": {"sha": self.main_sha}}
         if path.startswith("git/ref/heads/"):
             if self.blocked_ref:
                 return {"ref": "existing"}
@@ -132,6 +135,12 @@ class DraftPublisherTests(unittest.TestCase):
     def test_orphan_branch_fails_closed(self):
         api = FakeApi(blocked_ref=True)
         with self.assertRaisesRegex(PublishBlocked, "existing_branch_without_pr"):
+            call_publish(api)
+        self.assertTrue(all(method == "GET" for method, _, _ in api.calls))
+
+    def test_stale_main_blocks_before_any_write(self):
+        api = FakeApi(main_sha="f" * 40)
+        with self.assertRaisesRegex(PublishBlocked, "base_no_longer_main"):
             call_publish(api)
         self.assertTrue(all(method == "GET" for method, _, _ in api.calls))
 
