@@ -41,47 +41,82 @@ def validate_path(path: str) -> None:
 
 
 def validate_patch(payload: bytes, expected_sha256: str) -> dict:
-    if not payload or len(payload) > MAX_PATCH_BYTES:
+    """Strict structural gate. Isolated git apply --check remains mandatory."""
+    if not isinstance(payload, bytes) or not payload or len(payload) > MAX_PATCH_BYTES:
         raise RejectedPatch("empty_or_oversize")
-    if not re.fullmatch(r"[0-9a-f]{64}", expected_sha256):
+    if not isinstance(expected_sha256, str) or not re.fullmatch(r"[0-9a-f]{64}", expected_sha256):
         raise RejectedPatch("invalid_digest")
     actual = hashlib.sha256(payload).hexdigest()
     if actual != expected_sha256:
         raise RejectedPatch("digest_mismatch")
-    if b"\x00" in payload or b"GIT binary patch" in payload or b"Binary files " in payload:
-        raise RejectedPatch("binary_patch")
-    if any(pattern.search(payload) for pattern in SECRET_PATTERNS):
-        raise RejectedPatch("possible_secret")
+    if b"\x00" in payload or any(p.search(payload) for p in SECRET_PATTERNS):
+        raise RejectedPatch("binary_or_possible_secret")
     try:
-        lines = payload.decode("utf-8").splitlines()
-    except UnicodeDecodeError as exc:
-        raise RejectedPatch("not_utf8") from exc
+        text = payload.decode("utf-8")
+    except UnicodeDecodeError:
+        raise RejectedPatch("not_utf8") from None
+    if "\r" in text:
+        raise RejectedPatch("invalid_line_ending")
+    lines = text.splitlines()
+    index_line = re.compile(r"^index [0-9a-f]{7,64}\.\.[0-9a-f]{7,64}(?: 100644)?$")
+    hunk_line = re.compile(r"^@@ -(\d+)(?:,(\d+))? \+(\d+)(?:,(\d+))? @@(?: .*)?$")
     paths = []
-    for line in lines:
-        match = HEADER.fullmatch(line)
-        if match:
-            a, b = match.groups()
-            if a != b:
-                raise RejectedPatch("rename_not_allowed")
-            validate_path(a)
-            if a in paths:
-                raise RejectedPatch("duplicate_file")
-            paths.append(a)
-            if len(paths) > MAX_FILES:
-                raise RejectedPatch("too_many_files")
-            continue
-        if line.startswith(("rename from ", "rename to ", "copy from ", "copy to ", "Submodule ")):
-            raise RejectedPatch("rename_copy_or_submodule")
-        if line.startswith(("new file mode ", "old mode ", "new mode ", "deleted file mode ")):
-            mode = line.split()[-1]
-            if mode != "100644":
-                raise RejectedPatch("nonregular_mode")
-        if line.startswith("--- ") and not (line == "--- /dev/null" or any(line == f"--- a/{p}" for p in paths)):
-            raise RejectedPatch("invalid_old_path")
-        if line.startswith("+++ ") and not any(line == f"+++ b/{p}" for p in paths):
-            raise RejectedPatch("invalid_new_path")
-    if not paths or not any(line.startswith("@@ ") for line in lines):
-        raise RejectedPatch("missing_diff_hunks")
+    i = 0
+    while i < len(lines):
+        m = HEADER.fullmatch(lines[i])
+        if not m or m.group(1) != m.group(2):
+            raise RejectedPatch("invalid_diff_header")
+        path = m.group(1)
+        validate_path(path)
+        if path in paths or len(paths) >= 20:
+            raise RejectedPatch("duplicate_or_too_many_files")
+        paths.append(path)
+        section_start = i
+        i += 1
+        creating = False
+        if i < len(lines) and lines[i].startswith(("new file mode ", "deleted file mode ")):
+            if lines[i] != "new file mode 100644":
+                raise RejectedPatch("unsafe_mode_or_deletion")
+            creating = True
+            i += 1
+        if i >= len(lines) or not index_line.fullmatch(lines[i]):
+            raise RejectedPatch("invalid_index")
+        i += 1
+        old_header = "--- /dev/null" if creating else f"--- a/{path}"
+        if i + 1 >= len(lines) or lines[i] != old_header or lines[i + 1] != f"+++ b/{path}":
+            raise RejectedPatch("mismatched_file_headers")
+        i += 2
+        hunks = 0
+        while i < len(lines) and not lines[i].startswith("diff --git "):
+            match = hunk_line.fullmatch(lines[i])
+            if not match:
+                raise RejectedPatch("invalid_hunk_header")
+            before = int(match.group(2) or 1)
+            after = int(match.group(4) or 1)
+            if before + after > 100000:
+                raise RejectedPatch("hunk_too_large")
+            i += 1
+            hunks += 1
+            while before or after:
+                if i >= len(lines):
+                    raise RejectedPatch("truncated_hunk")
+                line = lines[i]
+                if not line or line[0] not in (" ", "+", "-"):
+                    raise RejectedPatch("invalid_hunk_line")
+                if line[0] == " ":
+                    before -= 1
+                    after -= 1
+                elif line[0] == "-":
+                    before -= 1
+                else:
+                    after -= 1
+                if before < 0 or after < 0:
+                    raise RejectedPatch("hunk_count_mismatch")
+                i += 1
+                if i < len(lines) and lines[i] == r"\ No newline at end of file":
+                    i += 1
+        if not hunks or sum(len(s.encode("utf-8")) + 1 for s in lines[section_start:i]) > 100000:
+            raise RejectedPatch("missing_hunks_or_file_too_large")
     return {"sha256": actual, "files": paths, "bytes": len(payload)}
 
 
@@ -97,7 +132,7 @@ def main() -> int:
     except (RejectedPatch, OSError) as exc:
         print(f"BLOCKED: {exc}", file=sys.stderr)
         return 1
-    print(f"VALID: sha256={result['sha256']} files={len(result['files'])} bytes={result['bytes']}")
+    print(f"STRUCTURE_VALID: sha256={result['sha256']} files={len(result['files'])} bytes={result['bytes']}")
     return 0
 
 
