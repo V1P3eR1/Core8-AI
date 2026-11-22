@@ -16,9 +16,11 @@ class EventRecord:
     event_type: str
     source_object_id: str
     event_created: int
-    organization_id: str = "core8"
+    organization_id: str
 
-def parse_event(event: dict[str, Any]) -> EventRecord | None:
+def parse_event(event: dict[str, Any], *, organization_id: str) -> EventRecord | None:
+    if not isinstance(organization_id, str) or not organization_id or len(organization_id) > 64:
+        raise ValueError("verified organization binding required")
     if event.get("livemode") is not False:
         raise ValueError("live Stripe events forbidden")
     event_type = event.get("type")
@@ -31,4 +33,4 @@ def parse_event(event: dict[str, Any]) -> EventRecord | None:
     created = event.get("created")
     if not isinstance(created, int) or isinstance(created, bool) or created < 0:
         raise ValueError("missing or invalid timestamp")
-    return EventRecord(values[0], values[1], values[2], created)
+    return EventRecord(values[0], values[1], values[2], created, organization_id)
