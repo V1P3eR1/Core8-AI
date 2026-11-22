@@ -144,4 +144,110 @@ class TestPostgresEventFlow(unittest.TestCase):
                     os.environ[key] = val
 
 
+
+    def test_locked_event_does_not_block_other_worker(self):
+        """A second worker must SKIP LOCKED and process another due event."""
+        from concurrent.futures import ThreadPoolExecutor
+        marker = uuid4().hex
+        locked_id, free_id = "evt_lock_" + marker, "evt_free_" + marker
+        original = {key: os.environ.get(key) for key in ("APP_ENV", "ENABLE_STRIPE_WRITES")}
+        os.environ.update({"APP_ENV": "test", "ENABLE_STRIPE_WRITES": "false"})
+        with psycopg.connect(os.environ["DATABASE_URL"]) as db:
+            for eid in (locked_id, free_id):
+                db.execute("""
+                    INSERT INTO finance_stripe_event_inbox
+                    (event_id, organization_id, event_type, source_object_id, event_created)
+                    VALUES (%s, 'core8', 'invoice.paid', %s, now())
+                """, (eid, "in_" + eid))
+        try:
+            with psycopg.connect(os.environ["DATABASE_URL"]) as holding:
+                with holding.transaction():
+                    holding.execute("""
+                        SELECT event_id FROM finance_stripe_event_inbox
+                        WHERE event_id=%s FOR UPDATE
+                    """, (locked_id,)).fetchone()
+                    with ThreadPoolExecutor(max_workers=1) as pool:
+                        future = pool.submit(process_batch, 1)
+                        # The worker must finish without acquiring the locked row.
+                        self.assertEqual(future.result(timeout=10), 1)
+                    with psycopg.connect(os.environ["DATABASE_URL"]) as db:
+                        statuses = dict(db.execute("""
+                            SELECT event_id, status FROM finance_stripe_event_inbox
+                            WHERE event_id IN (%s,%s)
+                        """, (locked_id, free_id)).fetchall())
+                        self.assertEqual(statuses[locked_id], "received")
+                        self.assertEqual(statuses[free_id], "processed")
+            # Once released, the previously locked row is processed once.
+            self.assertEqual(process_batch(1), 1)
+            with psycopg.connect(os.environ["DATABASE_URL"]) as db:
+                activities = db.execute("""
+                    SELECT stripe_event_id, count(*) FROM finance_activity
+                    WHERE stripe_event_id IN (%s,%s)
+                    GROUP BY stripe_event_id
+                """, (locked_id, free_id)).fetchall()
+                self.assertEqual(dict(activities), {locked_id: 1, free_id: 1})
+        finally:
+            with psycopg.connect(os.environ["DATABASE_URL"]) as db:
+                db.execute("DELETE FROM finance_activity WHERE stripe_event_id IN (%s,%s)",
+                           (locked_id, free_id))
+                db.execute("DELETE FROM finance_stripe_event_inbox WHERE event_id IN (%s,%s)",
+                           (locked_id, free_id))
+            for key, val in original.items():
+                if val is None:
+                    os.environ.pop(key, None)
+                else:
+                    os.environ[key] = val
+
+    def test_two_concurrent_workers_process_distinct_events(self):
+        """Two simultaneously started workers cannot process an inbox row twice."""
+        from concurrent.futures import ThreadPoolExecutor
+        from threading import Barrier
+        marker = uuid4().hex
+        event_ids = ("evt_parallel_a_" + marker, "evt_parallel_b_" + marker)
+        original = {key: os.environ.get(key) for key in ("APP_ENV", "ENABLE_STRIPE_WRITES")}
+        os.environ.update({"APP_ENV": "test", "ENABLE_STRIPE_WRITES": "false"})
+        with psycopg.connect(os.environ["DATABASE_URL"]) as db:
+            for eid in event_ids:
+                db.execute("""
+                    INSERT INTO finance_stripe_event_inbox
+                    (event_id, organization_id, event_type, source_object_id, event_created)
+                    VALUES (%s, 'core8', 'invoice.paid', %s, now())
+                """, (eid, "in_" + eid))
+        try:
+            barrier = Barrier(2)
+            def work():
+                barrier.wait(timeout=10)
+                return process_batch(1)
+            with ThreadPoolExecutor(max_workers=2) as pool:
+                futures = [pool.submit(work) for _ in range(2)]
+                counts = [f.result(timeout=15) for f in futures]
+            # A second worker can occasionally skip a locked row if the first
+            # worker has not yet committed; the final sweep makes this safe.
+            self.assertLessEqual(sum(counts), 2)
+            process_batch(2)
+            with psycopg.connect(os.environ["DATABASE_URL"]) as db:
+                results = db.execute("""
+                    SELECT stripe_event_id, count(*) FROM finance_activity
+                    WHERE stripe_event_id IN (%s,%s)
+                    GROUP BY stripe_event_id
+                """, event_ids).fetchall()
+                self.assertEqual(dict(results), {eid: 1 for eid in event_ids})
+                statuses = dict(db.execute("""
+                    SELECT event_id, status FROM finance_stripe_event_inbox
+                    WHERE event_id IN (%s,%s)
+                """, event_ids).fetchall())
+                self.assertEqual(statuses, {eid: "processed" for eid in event_ids})
+        finally:
+            with psycopg.connect(os.environ["DATABASE_URL"]) as db:
+                db.execute("DELETE FROM finance_activity WHERE stripe_event_id IN (%s,%s)",
+                           event_ids)
+                db.execute("DELETE FROM finance_stripe_event_inbox WHERE event_id IN (%s,%s)",
+                           event_ids)
+            for key, val in original.items():
+                if val is None:
+                    os.environ.pop(key, None)
+                else:
+                    os.environ[key] = val
+
+
 if __name__=="__main__": unittest.main()
