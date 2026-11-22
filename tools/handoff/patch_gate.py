@@ -27,7 +27,7 @@ class RejectedPatch(ValueError):
 
 
 def validate_path(path: str) -> None:
-    if not path or len(path) > 240 or "\\" in path or "\x00" in path or path.startswith(("/", "~")):
+    if not path or len(path) > 240 or "\\" in path or ":" in path or "\x00" in path or path.startswith(("/", "~")):
         raise RejectedPatch("invalid_path")
     p = PurePosixPath(path)
     if str(p) != path or any(part in (".", "..") for part in path.split("/")):
