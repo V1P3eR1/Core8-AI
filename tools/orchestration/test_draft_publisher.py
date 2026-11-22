@@ -127,6 +127,45 @@ class DraftPublisherTests(unittest.TestCase):
         with self.assertRaisesRegex(PublishBlocked, "file_data_mismatch_or_binary"):
             inspect_bundle(corrupt, sha(corrupt), base_sha=BASE, scope_sha=SCOPE, artifact_sha=ARTIFACT)
 
+    def test_reject_duplicate_top_level_json_keys(self):
+        raw, _ = bundle()
+        duplicate = raw[:-1] + b', "schema": 1}'
+        with self.assertRaisesRegex(PublishBlocked, "duplicate_json_key"):
+            inspect_bundle(duplicate, sha(duplicate), base_sha=BASE,
+                           scope_sha=SCOPE, artifact_sha=ARTIFACT)
+
+    def test_reject_duplicate_nested_json_keys(self):
+        raw, _ = bundle()
+        obj = json.loads(raw)
+        record = obj["files"][0]
+        content = record["content_b64"]
+        encoded = json.dumps(obj)
+        duplicate = encoded.replace('"content_b64": "' + content + '"',
+                                    '"content_b64": "' + content + '", "content_b64": "' + content + '"')
+        self.assertNotEqual(duplicate, encoded)
+        payload = duplicate.encode()
+        with self.assertRaisesRegex(PublishBlocked, "duplicate_json_key"):
+            inspect_bundle(payload, sha(payload), base_sha=BASE,
+                           scope_sha=SCOPE, artifact_sha=ARTIFACT)
+
+    def test_reject_unknown_top_level_field(self):
+        raw, _ = bundle()
+        obj = json.loads(raw)
+        obj["override_scope"] = True
+        payload = json.dumps(obj).encode()
+        with self.assertRaisesRegex(PublishBlocked, "invalid_schema"):
+            inspect_bundle(payload, sha(payload), base_sha=BASE,
+                           scope_sha=SCOPE, artifact_sha=ARTIFACT)
+
+    def test_reject_bool_schema(self):
+        raw, _ = bundle()
+        obj = json.loads(raw)
+        obj["schema"] = True
+        payload = json.dumps(obj).encode()
+        with self.assertRaisesRegex(PublishBlocked, "invalid_schema"):
+            inspect_bundle(payload, sha(payload), base_sha=BASE,
+                           scope_sha=SCOPE, artifact_sha=ARTIFACT)
+
     def test_create_draft_only(self):
         api = FakeApi()
         result = call_publish(api)
