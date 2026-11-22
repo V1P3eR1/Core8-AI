@@ -66,6 +66,45 @@ Status `DONE` means acceptance evidence and owner review, **not** merely an issu
 - Do not infer Claude Code is live or paid execution is enabled from the existence of workflows.
 - No merge of different products into a single app simply to simplify task tracking.
 
+## Implemented control-plane pilot (draft PR #61; not activated)
+
+The new `tools/orchestration/dev_loop_health.py` is a deterministic **read-only observer**, not a code-writing agent. It fetches at most 60 open PR heads and their current GitHub check runs, keeps the latest result by check name and run time, identifies failures/pending checks, and emits a bounded `core8-dev-loop-report.json`. It explicitly ignores task bodies and comments as instructions and never uses customer data, API models, external write endpoints or deployment credentials. `tools/orchestration/test_dev_loop_health.py` provides offline synthetic regression coverage.
+
+`.github/workflows/dev-loop-health.yml` runs contract tests for changes to the monitor and proposes hourly reporting on `main`, **only after both** the PR is reviewed/merged **and** an authorized operator explicitly sets `CORE8_DEV_LOOP_ENABLED=true`. Scheduled CI may incur GitHub Actions costs depending on repository plan and quota; do not enable without cost review. A successful PR test does not prove that the future scheduled monitor has run.
+
+### The desired closed-loop state machine
+
+```text
+GitHub/Notion state reconciliation (existing sync, approval required)
+  → read-only inventory and CI failure detection (new observer)
+  → choose one existing scoped task or a failing PR (no duplicate issues)
+  → signed scope + budget approval (existing human gate)
+  → Claude Code bounded patch generation (existing gated workflow, usage may cost)
+  → proposed isolated patch validation + disposable tests (NOT implemented)
+  → draft PR + CI + security review (NOT automated)
+  → fix/retest up to a bounded retry count (NOT automated)
+  → evidence-based report + next task (read-only report available)
+  → merge/deploy remain separate explicit owner approvals
+```
+
+**Operational rule:** don't claim an automated repair happened merely because the monitor says `review_ci_failure`. In V1 that status is advisory and routes to the existing gated engineering lane. The missing patch-to-PR worker, retry control and automatic acceptance/replanning are implementation gaps, not features currently running.
+
+### Safe activation checklist
+
+1. Inspect this PR diff and successful `Core8 development loop (read-only)` CI, security review, codeowners and actions-policy compatibility.
+2. Obtain separate user approval for merge; do **not** merge simply to turn on scheduling.
+3. Establish whether running hourly GitHub Actions will cost money under the repository's current billing plan.
+4. Obtain separate owner approval to set `CORE8_DEV_LOOP_ENABLED=true`, initially for an observation-only pilot.
+5. Verify two successive report artifacts show current PR head SHAs, no customer data and correct priority, without duplicated issues or writing to GitHub.
+6. Only after independent approval add a worker that consumes an immutable patch with signed scope, explicit retry and dollar caps, failure isolation and draft-only PR creation; do not reuse provider secrets in jobs that execute agent-generated code.
+7. A human reviews and authorizes any merge, production deploy, API spending or public communication.
+
+### Why this approach
+
+GitHub Actions supports reusable gated pipelines, scoped token permissions and concurrency; coding agents can be called by GitHub Actions, but secret management and untrusted PR/issue input require isolation. The existing `claude-issues.yml` already handles approvals and generates patch artifacts. The observer reuses that lane rather than inventing a second, unsafe autonomous writer.
+
+References: GitHub Docs, agentic workflows (https://docs.github.com/en/actions/tutorials/develop-agentic-workflows-in-github-actions); GitHub concurrency and permissions (https://docs.github.com/en/actions/reference/workflows-and-actions/reusing-workflow-configurations); Codex CI auto-fix (https://developers.openai.com/cookbook/examples/codex/autofix-github-actions); Anthropic Claude Code Action (https://github.com/anthropics/claude-code-action/blob/main/docs/usage.md).
+
 ## Immediate handoffs (do not duplicate)
 - Demo: [#51](https://github.com/V1P3eR1/Core8-AI/issues/51) and [PR #26](https://github.com/V1P3eR1/Core8-AI/pull/26)
 - Security: [#11](https://github.com/V1P3eR1/Core8-AI/issues/11)
