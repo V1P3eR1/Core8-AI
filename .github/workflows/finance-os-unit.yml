@@ -57,7 +57,7 @@ jobs:
           import os
           from pathlib import Path
           import psycopg
-          schema = Path('apps/finance-os/sql/schema.sql').read_text()
+          schema = '\n'.join(line for line in Path('apps/finance-os/sql/schema.sql').read_text().splitlines() if not line.lstrip().startswith('--'))
           with psycopg.connect(os.environ['DATABASE_URL']) as db:
               for statement in schema.split(';'):
                   if statement.strip():
