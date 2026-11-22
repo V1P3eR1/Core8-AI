@@ -45,7 +45,7 @@ class FinanceTenantAccessTests(unittest.TestCase):
                 self.deny(candidate)
 
     def test_role_names_are_exact_not_case_insensitive(self):
-        for role in ("Operator", "admin", "root", "", None, 0):
+        for role in ("Operator", "admin", "root", "", None, 0, [], {}):
             with self.subTest(role=role):
                 self.deny(self.principal(role=role))
 
@@ -65,7 +65,7 @@ class FinanceTenantAccessTests(unittest.TestCase):
 
     def test_unknown_permissions_denied(self):
         for action in ("finance:write", "finance:delete", "finance:operate:any",
-                       "", None):
+                       "", None, [], {}):
             with self.subTest(action=action):
                 self.deny(self.principal(role="operator"), action=action)
 
