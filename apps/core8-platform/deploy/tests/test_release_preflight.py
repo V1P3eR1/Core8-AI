@@ -113,6 +113,35 @@ class ReleasePreflightTests(unittest.TestCase):
         self.assertNotEqual(result.returncode, 0)
         self.assertIn("BRANCH", result.stderr)
 
+    def test_installer_rejects_wrong_origin_before_mutation(self):
+        # The disposable fixture has a local bare origin, not Core8's pinned
+        # expected URL. Fake Docker only answers the safe version probe;
+        # any attempted runtime operation leaves a marker and fails.
+        base = pathlib.Path(self.temp.name)
+        fakebin = base / "fakebin"
+        fakebin.mkdir()
+        marker = base / "docker_mutation"
+        docker = fakebin / "docker"
+        docker.write_text(
+            "#!/bin/sh\\n"
+            "if [ \\"$1\\" = \\"compose\\" ] && [ \\"$2\\" = \\"version\\" ]; then exit 0; fi\\n"
+            "touch \\"$FAKE_DOCKER_MUTATION_MARKER\\"\\n"
+            "exit 99\\n"
+        )
+        docker.chmod(0o755)
+        before = git(self.checkout, "rev-parse", "HEAD")
+        result = self.install(
+            CORE8_DEPLOY_APPROVED="YES",
+            BACKUP_VERIFIED="YES",
+            RELEASE_SHA=self.sha,
+            PATH=str(fakebin) + os.pathsep + os.environ["PATH"],
+            FAKE_DOCKER_MUTATION_MARKER=str(marker),
+        )
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("unexpected origin URL", result.stderr)
+        self.assertEqual(git(self.checkout, "rev-parse", "HEAD"), before)
+        self.assertFalse(marker.exists())
+
     def test_unmerged_commit_fails_closed(self):
         git(self.checkout, "checkout", "-b", "feature")
         (self.checkout / "README").write_text("feature\n")
