@@ -2,7 +2,7 @@
 
 > **TBD policy (2026-11-22):** Every missing owner decision, private detail, unsupported fact, unverified vendor feature and incomplete engineering gate is labeled **TBD**. Canonical decision register: [OWNER_INPUTS.md](OWNER_INPUTS.md). No arbitrary substitute values, inferred business registrations, fake approvals or production claims.
 
-**Current scope (2026-11-22):** isolated Stripe sandbox event inbox and audited activity metadata. No money movement. No accounting ledger, invoicing, wages, tax filings or customer-facing UI. The successful sandbox test is evidence for **this narrow scope only**.
+**Current scope (2026-11-22):** isolated Stripe sandbox event inbox and operational activity metadata. No money movement. The draft balanced journal is an isolated prototype, not a finalized or integrated accounting ledger; no legal invoicing, wages, tax filings or customer-facing UI. The successful sandbox test is evidence for **this narrow scope only**.
 
 ## Proof required before launch
 1. Merge no changes before manual code review; pass security and PostgreSQL integration CI.
@@ -21,7 +21,15 @@
 - Deterministic event ID primary key prevents duplicate inbox messages.
 - Financial overview returns 503 until identity and tenant policy are integrated.
 - Worker records **operational events**, never financial ledger entries.
-- Sandbox PostgreSQL integration CI tests one webhook delivered twice and worker reprocessing to verify one activity row.
+- Worker isolates individual row failures with PostgreSQL nested transactions, retries failed rows with exponential backoff (maximum 5 attempts), and marks exhausted rows `dead`; errors are not persisted as strings.
+- The 5 new worker unit tests passed locally (fake connection), but **updated real-PostgreSQL CI results are still required**; mock-based tests alone are not sufficient evidence for retry behavior under PostgreSQL savepoints/concurrency.
+- Previously demonstrated sandbox PostgreSQL integration CI tested one webhook delivered twice and worker reprocessing to verify one activity row; new worker code requires its own CI revalidation.
+
+## Retry/dead-letter release gaps
+1. Add real PostgreSQL fault-injection integration tests proving savepoint rollback, continued processing, retry scheduling and dead-letter transition.
+2. Add a restricted operator-only dead-letter review and replay procedure; do not automatically replay potentially harmful financial events.
+3. Add limited retry/dead-letter metrics with no customer identifiers in logs; verify external alerting and backup/restore.
+4. Test concurrent workers with `FOR UPDATE SKIP LOCKED` and document throughput limits; this prototype makes no guarantee of exactly-once external side effects.
 
 ## Manual local sandbox test
 1. Create a sandbox webhook signing secret through Stripe's CLI/dashboard (never use live keys).
