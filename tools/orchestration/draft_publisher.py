@@ -120,7 +120,8 @@ def publish(api, *, repo, base_sha, bundle_raw, bundle_hash, scope_sha, artifact
     query = parse.urlencode({"head": head, "base": "main", "state": "open"})
     existing = api.call("GET", "pulls?" + query)
     if existing:
-        if len(existing) == 1 and marker in (existing[0].get("body") or ""):
+        if (len(existing) == 1 and existing[0].get("draft") is True
+                and marker in (existing[0].get("body") or "")):
             return {"status": "EXISTING_DRAFT", "url": existing[0]["html_url"], "branch": branch}
         raise PublishBlocked("conflicting_existing_pr")
     ref_path = "git/ref/heads/" + parse.quote(branch, safe="")
