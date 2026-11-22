@@ -6,7 +6,7 @@ on:
   workflow_dispatch:
   pull_request:
     paths:
-      - 'tests/test_cloud_continuity.py'
+      - 'tests/test_cloud_*.py'
       - 'tools/handoff/**'
       - '.github/workflows/cloud-continuity-synthetic.yml'
 
@@ -22,6 +22,6 @@ jobs:
         with:
           persist-credentials: false
       - name: Run synthetic offline continuity tests
-        run: python3 -m unittest discover -s tests -p 'test_cloud_continuity.py' -v
+        run: python3 -m unittest discover -s tests -p 'test_cloud_*.py' -v
       - name: Run Notion GitHub bridge contract and dry-run tests (offline)
         run: python3 -m unittest discover -s tools/handoff -p 'test_*.py' -v
