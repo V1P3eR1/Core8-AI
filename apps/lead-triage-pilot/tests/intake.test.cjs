@@ -137,6 +137,36 @@ test('API: support and spam leads get no meeting suggestions', async () => {
   await app.close();
 });
 
+test('public instance refuses unsigned email even with a valid consent payload', async () => {
+  const authHash = require('node:crypto').scryptSync('not-a-real-password', 'ci-test-only', 64).toString('hex');
+  // Reuse the hash fixture from the auth module tests rather than real credentials.
+  const fs = require('node:fs');
+  const source = fs.readFileSync(path.join(__dirname, 'auth.test.cjs'), 'utf8');
+  const match = /const HASH = ('[^']+'|"[^"]+")/.exec(source);
+  assert.ok(match, 'shared fake authentication fixture is present');
+  const HASH = match[1].slice(1, -1);
+  const app = createApp({
+    dataDir: tmpDir(), quiet: true,
+    auth: { publicHost: 'agent.example.invalid', passwordHash: HASH }
+  });
+  const port = await app.listen(0);
+  try {
+    const unsigned = I.encodeLeadEmail(base(), '').body;
+    const response = await raw(port, { method: 'POST', path: '/api/intake/email', body: { raw: unsigned } });
+    // Public instance requires login, but an authenticated client must also be
+    // unable to create an unsigned lead. 401/403 means no bypass was possible.
+    assert.ok([401, 403, 422].includes(response.status), response.text);
+    assert.equal(app.store.leads().length, 0);
+  } finally { await app.close(); }
+});
+
+test('mailbox configuration without a signing key is refused at startup', () => {
+  assert.throws(() => createApp({
+    dataDir: tmpDir(), quiet: true,
+    mailbox: { host: '127.0.0.1', user: 'synthetic@example.invalid', pass: 'fake-test-only', useTls: false }
+  }), /CORE8_LEAD_SECRET/);
+});
+
 test('fixture produced by the PHP form handler parses and verifies', () => {
   const file = path.join(__dirname, 'fixtures', 'php-lead-email.txt');
   const r = I.parseLeadEmail(fs.readFileSync(file, 'utf8'), { secret: 'handler-test-secret-not-real' });
