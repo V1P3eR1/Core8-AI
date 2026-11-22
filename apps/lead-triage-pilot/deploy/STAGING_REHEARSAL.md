@@ -24,6 +24,26 @@ The above is **NOT** evidence of a real inbox, hosted staging, production backup
 8. Run a basic outage drill: stop the **staging** process, verify restored instance boots from the approved immutable code SHA, and demonstrate rollback using an earlier staging-only snapshot. Capture durations and a redacted go/no-go report.
 9. Review legal notice/consent versions, retention/deletion and data-subject processes before collecting anything real.
 
+## Offline encrypted backup prototype (staging fixture only)
+
+A manual experimental tool is available at `tools/secure-backup.cjs`. It uses Node's built-in AES-256-GCM and scrypt and includes only `events.jsonl`, `mailbox-state.json` and `password.hash` from a **stopped** pilot instance. It does not perform network calls or schedule backups. The key file must be a private, owner-only local file outside Git. Keep the key independently from the backup artifact.
+
+Example with **disposable synthetic data only** (do not point it at the VPS):
+
+```bash
+# Generate in an already-private working directory outside Git. Never paste key material into chat.
+umask 077
+node -e "require('fs').writeFileSync('/tmp/core8-staging-restore.key', require('crypto').randomBytes(48), {mode:0o600})"
+node apps/lead-triage-pilot/tools/secure-backup.cjs backup \
+  /tmp/core8-synthetic-data /tmp/core8-staging-backup.enc /tmp/core8-staging-restore.key
+node apps/lead-triage-pilot/tools/secure-backup.cjs restore \
+  /tmp/core8-staging-backup.enc /tmp/core8-synthetic-restored /tmp/core8-staging-restore.key
+```
+
+The source must already contain a valid event log and the restore target **must not already exist**. The tool refuses to overwrite backup files or restore directories and verifies the event-log hash chain. Never store the key file, encrypted archive or restored data in a Git checkout. The example is for an isolated test workstation; do not use `/tmp` for real backup material.
+
+**Remaining production security gaps:** this prototype has not been independently audited for path/symlink races, incomplete snapshots while a process writes, memory use under adversarial archives, crash-safe durability, key rotation, recovery-key escrow, automatic scheduling/retention, volume metadata or disaster recovery. A backup must be taken with the service stopped or via a coordinated snapshot, and restored to a new isolated volume. Successful local tests alone do not authorize production backup use.
+
 ## Gates and evidence record
 
 | Gate | Evidence required | State |
