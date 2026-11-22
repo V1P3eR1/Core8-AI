@@ -239,6 +239,39 @@ class DraftPublisherTests(unittest.TestCase):
             call_publish(api)
         self.assertTrue(all(method == "GET" for method, _, _ in api.calls))
 
+    def test_uncertain_pr_post_blocks_retry_after_branch_created(self):
+        # Simulate the provider failing after creating the Git branch.
+        # Retrying must never create a second branch or another PR blindly.
+        class InterruptedApi(FakeApi):
+            def __init__(self):
+                super().__init__()
+                self.branch_created = False
+
+            def call(self, method, path, payload=None):
+                if method == "POST" and path == "git/refs":
+                    self.branch_created = True
+                    return {"ref": "created"}
+                if method == "POST" and path == "pulls":
+                    raise HttpFailed(503)
+                if method == "GET" and path.startswith("git/ref/heads/") and path != "git/ref/heads/main":
+                    if self.branch_created:
+                        return {"object": {"sha": EXISTING_HEAD}}
+                return super().call(method, path, payload)
+
+        api = InterruptedApi()
+        with self.assertRaises(HttpFailed):
+            call_publish(api)
+        self.assertTrue(api.branch_created)
+        with self.assertRaisesRegex(PublishBlocked, "existing_branch_without_pr"):
+            call_publish(api)
+
+    def test_no_remote_writes_when_bundle_is_tampered(self):
+        api = FakeApi()
+        original, original_sha = bundle()
+        with self.assertRaisesRegex(PublishBlocked, "bundle_digest_mismatch"):
+            call_publish(api, data=original + b" ", hash_value=original_sha)
+        self.assertEqual(api.calls, [])
+
     def test_stale_main_blocks_before_any_write(self):
         api = FakeApi(main_sha="f" * 40)
         with self.assertRaisesRegex(PublishBlocked, "base_no_longer_main"):
