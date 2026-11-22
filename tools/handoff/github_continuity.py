@@ -94,10 +94,24 @@ def summarize_pr(pr, checks, number):
             records[name] = conclusion
         else:
             records[name] = "unknown"
-    # A response with zero checks is not green.
-    check_state = "no_checks" if not records else (
-        "passed" if all(v == "success" for v in records.values()) else
-        "pending" if any(v == "pending" for v in records.values()) else "needs_review")
+    # A single unrelated green check must not masquerade as the required
+    # review gates. Each tracked PR needs its expected test suite AND secret scan.
+    suite = ("release preflight (offline)" if number in (55, 70) else
+             "Orchestration staging offline unit tests" if number in (67, 74) else
+             "Handoff contract tests")
+    required = {"secret-scan", suite}
+    if not records:
+        check_state = "no_checks"
+    elif not required.issubset(records):
+        check_state = "missing_required_checks"
+    elif any(records[k] == "pending" for k in required):
+        check_state = "pending"
+    elif any(records[k] != "success" for k in required):
+        check_state = "needs_review"
+    elif any(value != "success" for value in records.values()):
+        check_state = "needs_review"
+    else:
+        check_state = "passed"
     state = pr.get("state")
     if state not in ("open", "closed"):
         raise SnapshotBlocked("unknown_pr_state")
