@@ -89,6 +89,12 @@ GitHub/Notion state reconciliation (existing sync, approval required)
 
 **Operational rule:** don't claim an automated repair happened merely because the monitor says `review_ci_failure`. In V1 that status is advisory and routes to the existing gated engineering lane. The missing patch-to-PR worker, retry control and automatic acceptance/replanning are implementation gaps, not features currently running.
 
+### Implemented structural patch admission (draft; not an executing worker)
+
+The new `tools/orchestration/validate_patch.py` accepts only small UTF-8 reviewable text patches scoped to `apps/` or `docs/`. It rejects potential credentials, workflows, deploy scripts, environment files, executable/symlink/submodule modes, renames, binary patches, path traversal, duplicate files and oversized changes. Offline adversarial tests run in the same read-only CI workflow.
+
+**Security warning:** the structural validator is **not a full Git patch parser, not a sandbox and not a proof of safety**. It does not apply a patch, verify hunk counts, prevent runtime malicious changes in otherwise allowed files, run tests or authorize a draft PR. A future worker must additionally verify the actual filesystem diff after applying in a sandbox, compare changed paths to the approved task scope, conduct code/security review, and use narrowly scoped write credentials separate from the execution sandbox.
+
 ### Safe activation checklist
 
 1. Inspect this PR diff and successful `Core8 development loop (read-only)` CI, security review, codeowners and actions-policy compatibility.
