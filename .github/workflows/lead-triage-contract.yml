@@ -74,5 +74,31 @@ jobs:
           const forged = raw.replace(/sig: [a-f0-9]{64}/, 'sig: ' + '0'.repeat(64));
           const bad = I.parseLeadEmail(forged, { secret: 'handler-test-secret-not-real' });
           assert.equal(bad.ok, false, 'invalid HMAC must not be accepted');
-          console.log('Cross-language CORE8 LEAD v1 contract verified using synthetic data');
+          // Exercise the actual supervised intake endpoint with the PHP-generated message:
+          const { createApp } = require('./consumer/apps/lead-triage-pilot/server.cjs');
+          const { tmpDir, raw: request } = require('./consumer/apps/lead-triage-pilot/tests/helpers.cjs');
+          (async () => {
+            const app = createApp({ dataDir: tmpDir(), quiet: true, leadSecret: 'handler-test-secret-not-real' });
+            try {
+              const port = await app.listen(0);
+              const post = (body) => request(port, { method: 'POST', path: '/api/intake/email', body: { raw: body } });
+              const first = await post(raw);
+              assert.equal(first.status, 201);
+              assert.equal(first.json.lead.status, 'needs_review');
+              assert.equal(first.json.lead.contact.email, 'dana@example.invalid');
+              assert.equal(first.json.lead.consent.textId, 'he-v1');
+              const repeat = await post(raw);
+              assert.equal(repeat.status, 200);
+              assert.equal(repeat.json.duplicate, true);
+              const rejected = await post(forged);
+              assert.equal(rejected.status, 422);
+              assert.equal(app.store.leads().length, 1);
+              const report = await request(port, { path: '/api/report' });
+              assert.ok(!report.text.includes('dana@example.invalid'), 'redacted report has no contact data');
+              console.log('PHP spool -> signed Node intake -> dedupe -> human review verified (synthetic)');
+            } finally {
+              await app.close();
+            }
+          })().catch(err => { console.error(err); process.exitCode = 1; });
+
           NODE
