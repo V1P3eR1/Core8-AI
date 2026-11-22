@@ -23,6 +23,8 @@ services:
       STRIPE_EXPECT_LIVEMODE: "false"
       DATABASE_URL: postgresql://finance:local_sandbox_only@postgres:5432/finance
       STRIPE_WEBHOOK_SECRET: ${STRIPE_WEBHOOK_SECRET:?Set a sandbox webhook signing secret}
+      FINANCE_WEBHOOK_ACCOUNT_ID: ${FINANCE_WEBHOOK_ACCOUNT_ID:?Set verified sandbox Stripe account ID}
+      FINANCE_WEBHOOK_TENANT_ID: ${FINANCE_WEBHOOK_TENANT_ID:?Set verified sandbox tenant ID}
     depends_on:
       postgres:
         condition: service_healthy
