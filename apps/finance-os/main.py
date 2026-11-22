@@ -59,9 +59,15 @@ async def stripe_webhook(request: Request, stripe_signature: str | None = Header
                 raise HTTPException(status_code=413, detail="Payload too large")
         except ValueError:
             raise HTTPException(status_code=400, detail="Invalid Content-Length")
-    payload = await request.body()
-    if len(payload) > MAX_PAYLOAD_BYTES:
-        raise HTTPException(status_code=413, detail="Payload too large")
+    # Enforce the limit while streaming; Content-Length may be absent or forged.
+    chunks = []
+    total = 0
+    async for chunk in request.stream():
+        total += len(chunk)
+        if total > MAX_PAYLOAD_BYTES:
+            raise HTTPException(status_code=413, detail="Payload too large")
+        chunks.append(chunk)
+    payload = b"".join(chunks)
     try:
         event = verify_stripe_event(payload, stripe_signature or "",
                                     os.environ.get("STRIPE_WEBHOOK_SECRET", ""))
