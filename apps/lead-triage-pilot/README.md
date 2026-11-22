@@ -122,7 +122,10 @@ Local use needs none of this. For a server:
   `CORE8_PILOT_PASSWORD_HASH_FILE` and `node tools/set-password.cjs`: the tool
   then starts locked until the owner sets a password on the server.
 - `CORE8_PILOT_IMAP_USER` + `CORE8_PILOT_IMAP_PASS` (an app password) turn on a
-  read-only mailbox check (`lib/mailbox.cjs`): `EXAMINE`, a server-side search
+  read-only mailbox check (`lib/mailbox.cjs`) **only when `CORE8_LEAD_SECRET` is configured**.
+  Publicly configured pilots reject plaintext IMAP; loopback-only synthetic tests
+  may explicitly use it. Production mailbox connections use certificate-verified TLS.
+  The reader uses `EXAMINE`, a server-side search
   for `[CORE8-LEAD]` in the subject, and `BODY.PEEK`. It cannot send, move,
   flag or delete mail, and other messages are never downloaded.
 - `deploy/` holds a Dockerfile, a compose file with no published port, a Caddy
