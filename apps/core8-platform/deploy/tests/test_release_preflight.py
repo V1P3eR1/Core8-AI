@@ -76,6 +76,43 @@ class ReleasePreflightTests(unittest.TestCase):
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertNotIn("FAKE_TEST_VALUE", result.stdout)
 
+
+    def install(self, **overrides):
+        # Admission tests only: never let this fixture reach Docker or Git mutations.
+        env = dict(os.environ, DOMAIN="example.test", ROOT=str(self.checkout))
+        for key in ("CORE8_DEPLOY_APPROVED", "BACKUP_VERIFIED", "RELEASE_SHA", "BRANCH"):
+            env.pop(key, None)
+        env.update(overrides)
+        installer = SCRIPT.parent / "install.sh"
+        return subprocess.run(["bash", str(installer)], env=env, capture_output=True, text=True)
+
+    def test_installer_denies_by_default_before_any_mutation(self):
+        before = git(self.checkout, "rev-parse", "HEAD")
+        result = self.install()
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("CORE8_DEPLOY_APPROVED", result.stderr)
+        self.assertEqual(git(self.checkout, "rev-parse", "HEAD"), before)
+
+    def test_installer_requires_backup_attestation(self):
+        result = self.install(CORE8_DEPLOY_APPROVED="YES", RELEASE_SHA=self.sha)
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("BACKUP_VERIFIED", result.stderr)
+
+    def test_installer_requires_full_immutable_sha(self):
+        result = self.install(CORE8_DEPLOY_APPROVED="YES", BACKUP_VERIFIED="YES")
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("RELEASE_SHA", result.stderr)
+        result = self.install(CORE8_DEPLOY_APPROVED="YES", BACKUP_VERIFIED="YES",
+                              RELEASE_SHA=self.sha[:7])
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("RELEASE_SHA", result.stderr)
+
+    def test_installer_rejects_branch_override_before_mutation(self):
+        result = self.install(CORE8_DEPLOY_APPROVED="YES", BACKUP_VERIFIED="YES",
+                              RELEASE_SHA=self.sha, BRANCH="feature/social-manager")
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("BRANCH", result.stderr)
+
     def test_unmerged_commit_fails_closed(self):
         git(self.checkout, "checkout", "-b", "feature")
         (self.checkout / "README").write_text("feature\n")
