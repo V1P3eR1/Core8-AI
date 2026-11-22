@@ -25,6 +25,7 @@ function regularFile(file) {
 }
 
 function keyFromFile(file) {
+  if (insideGitRepo(file)) throw new Error('Backup key cannot live inside Git');
   const st = regularFile(file);
   if (process.platform !== 'win32' && (st.mode & 0o077) !== 0) {
     throw new Error('Backup key file must be owner-only (chmod 600)');
@@ -77,6 +78,7 @@ function restoreBackup(archiveFile, targetDir, keyFile) {
   const target = path.resolve(targetDir);
   if (insideGitRepo(target)) throw new Error('Restore destination cannot be inside Git');
   if (fs.existsSync(target)) throw new Error('Restore destination already exists; refuse overwrite');
+  if (insideGitRepo(archiveFile)) throw new Error('Backup archive cannot live inside Git');
   regularFile(archiveFile); // Also bounds the size read in memory.
   const record = JSON.parse(fs.readFileSync(archiveFile, 'utf8'));
   if (record.format !== MAGIC || record.kdf !== 'scrypt-N32768-r8-p1' ||
