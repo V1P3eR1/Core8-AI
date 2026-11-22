@@ -72,5 +72,50 @@ class PatchGateTests(unittest.TestCase):
             verify(make_patch().replace(b"@@ -0,0 +1 @@", b"not a hunk"))
 
 
+    def test_missing_old_header(self):
+        self.assertRaises(RejectedPatch, verify, make_patch().replace(b"--- /dev/null\n", b""))
+
+    def test_missing_new_header(self):
+        self.assertRaises(RejectedPatch, verify, make_patch().replace(b"+++ b/docs/demo.md\n", b""))
+
+    def test_cross_file_header(self):
+        p = make_patch() + make_patch("apps/demo/file.py").replace(
+            b"+++ b/apps/demo/file.py", b"+++ b/docs/demo.md")
+        self.assertRaises(RejectedPatch, verify, p)
+
+    def test_extra_instruction_line(self):
+        self.assertRaises(RejectedPatch, verify, make_patch() + b"untrusted metadata\n")
+
+    def test_hunk_count_mismatch(self):
+        self.assertRaises(RejectedPatch, verify, make_patch().replace(
+            b"@@ -0,0 +1 @@", b"@@ -0,0 +2 @@"))
+
+    def test_deleted_file_rejected(self):
+        self.assertRaises(RejectedPatch, verify, make_patch().replace(
+            b"new file mode 100644", b"deleted file mode 100644"))
+
+    def test_newline_mode_rejected(self):
+        self.assertRaises(RejectedPatch, verify, make_patch().replace(
+            b"new file mode 100644", b"new file mode 100755"))
+
+    def test_valid_multifile(self):
+        p = make_patch() + make_patch("apps/demo/file.py")
+        self.assertEqual(len(verify(p)["files"]), 2)
+
+    def test_git_apply_check_on_disposable_repo(self):
+        import subprocess
+        import tempfile
+        from pathlib import Path
+        payload = make_patch()
+        verify(payload)
+        with tempfile.TemporaryDirectory() as worktree:
+            subprocess.run(["git", "init", "-q", worktree], check=True)
+            Path(worktree, "docs").mkdir()
+            result = subprocess.run(["git", "-C", worktree, "apply", "--check", "-"],
+                                    input=payload, capture_output=True)
+            self.assertEqual(result.returncode, 0, result.stderr.decode())
+
+
+
 if __name__ == "__main__":
     unittest.main()
