@@ -45,8 +45,13 @@ def validate_artifact_receipt(*, receipt, expected_record, patch_bytes, now, con
     now = now.astimezone(timezone.utc)
     if not isinstance(patch_bytes, bytes) or not patch_bytes or len(patch_bytes) > MAX_PATCH_BYTES:
         raise RejectedArtifact("invalid_artifact_size")
+    # Critical: all artifact identity, success, digest and expiration assertions
+    # must match independently fetched GitHub metadata. Self-asserted values
+    # copied from a patch/receipt are not trusted provenance.
     for field in ("repo", "run_id", "artifact_id", "head_sha", "task_digest",
-                  "task_revision", "issue_number", "approver_id", "run_event"):
+                  "task_revision", "issue_number", "approver_id", "run_event",
+                  "run_conclusion", "artifact_name", "expired", "artifact_sha256",
+                  "created_at", "expires_at"):
         if field not in receipt or field not in expected_record:
             raise RejectedArtifact("missing_metadata")
         if receipt[field] != expected_record[field]:
