@@ -50,11 +50,23 @@ def inspect_bundle(raw, expected_bundle_sha, *, base_sha, scope_sha, artifact_sh
         raise PublishBlocked("bundle_digest_mismatch")
     if not SHA40.fullmatch(base_sha) or any(not SHA256.fullmatch(x) for x in (scope_sha, artifact_sha)):
         raise PublishBlocked("invalid_trusted_metadata")
+    def reject_duplicate_keys(pairs):
+        value = {}
+        for key, item in pairs:
+            if key in value:
+                raise PublishBlocked("duplicate_json_key")
+            value[key] = item
+        return value
+
     try:
-        obj = json.loads(raw)
+        obj = json.loads(raw, object_pairs_hook=reject_duplicate_keys)
     except (UnicodeDecodeError, ValueError) as exc:
         raise PublishBlocked("bad_json") from exc
-    if not isinstance(obj, dict) or obj.get("schema") != 1 or obj.get("status") != "REVIEW_ONLY":
+    required_keys = {"schema", "status", "base_sha", "approved_scope_sha256",
+                     "artifact_sha256", "idempotency_key", "paths", "files"}
+    if (not isinstance(obj, dict) or set(obj) != required_keys
+            or type(obj.get("schema")) is not int or obj["schema"] != 1
+            or obj.get("status") != "REVIEW_ONLY"):
         raise PublishBlocked("invalid_schema")
     if (obj.get("base_sha"), obj.get("approved_scope_sha256"), obj.get("artifact_sha256")) != (base_sha, scope_sha, artifact_sha):
         raise PublishBlocked("scope_or_base_mismatch")
