@@ -49,7 +49,14 @@ class ProvenanceTests(unittest.TestCase):
                                      run_id=123, artifact_id=456, head_sha=self.sha)
 
     def test_valid_metadata(self):
-        self.assertEqual(self.check()["artifact_sha256"], "b" * 64)
+        self.assertEqual(self.check()["archive_sha256"], "b" * 64)
+        self.assertNotIn("artifact_sha256", self.check())
+
+    def test_archive_digest_is_not_patch_digest(self):
+        record = self.check()
+        self.assertIn("archive_sha256", record)
+        self.assertNotIn("artifact_sha256", record)
+        self.assertNotIn("patch_sha256", record)
 
     def test_get_only_fixed_endpoints(self):
         opener = FakeOpener(self.run, self.artifact)
