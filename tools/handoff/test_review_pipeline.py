@@ -16,9 +16,12 @@ class PipelineTests(unittest.TestCase):
         self.checkout.mkdir()
         subprocess.run(["git", "init", "-q", str(self.checkout)], check=True)
         (self.checkout / "docs").mkdir()
+        (self.checkout / "docs" / "existing.md").write_text("fixture\n")
+        subprocess.run(["git", "-C", str(self.checkout), "add",
+                        "docs/existing.md"], check=True)
         subprocess.run(["git", "-C", str(self.checkout), "-c", "user.name=Core8 Test",
                         "-c", "user.email=core8-test@example.invalid",
-                        "commit", "--allow-empty", "-qm", "initial fixture"], check=True)
+                        "commit", "-qm", "initial fixture"], check=True)
         self.base_sha = subprocess.check_output(
             ["git", "-C", str(self.checkout), "rev-parse", "HEAD"], text=True).strip()
         self.patch = (b"diff --git a/docs/demo.md b/docs/demo.md\n"
@@ -73,7 +76,19 @@ class PipelineTests(unittest.TestCase):
 
     def test_unappliable_patch_blocked_without_reservation(self):
         (self.checkout / "docs" / "demo.md").write_text("already exists")
-        with self.assertRaisesRegex(ReviewRejected, "git_apply_check_failed"):
+        with self.assertRaisesRegex(ReviewRejected, "checkout_not_clean"):
+            self.run_pipeline()
+        self.assertFalse(self.ledger_path.exists())
+
+    def test_untracked_file_blocks_without_reserving(self):
+        (self.checkout / "docs" / "untracked.txt").write_text("unexpected")
+        with self.assertRaisesRegex(ReviewRejected, "checkout_not_clean"):
+            self.run_pipeline()
+        self.assertFalse(self.ledger_path.exists())
+
+    def test_tracked_modification_blocks_without_reserving(self):
+        (self.checkout / "docs" / "existing.md").write_text("modified")
+        with self.assertRaisesRegex(ReviewRejected, "checkout_not_clean"):
             self.run_pipeline()
         self.assertFalse(self.ledger_path.exists())
 
