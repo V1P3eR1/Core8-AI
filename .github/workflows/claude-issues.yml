@@ -78,16 +78,16 @@ jobs:
             --tools Read,Edit,Write,Glob,Grep
             --allowedTools Read,Edit,Write,Glob,Grep
       - name: Package changes without executing generated code
-        env:
-          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
         run: |
           git add -N -- apps docs
           git diff --binary -- apps docs > /tmp/core8-implementation.patch
           python - <<'PY'
-          import os, pathlib, re
-          patch = pathlib.Path('/tmp/core8-implementation.patch').read_text()
-          key = os.environ.get('ANTHROPIC_API_KEY', '')
-          if not patch.strip() or (key and key in patch) or re.search(r'(sk-(?:ant-|proj-)?[A-Za-z0-9_-]{16,}|(?:ghp_|github_pat_|ntn_)[A-Za-z0-9_]{16,}|-----BEGIN .*PRIVATE KEY-----)', patch):
+          import pathlib, re
+          path = pathlib.Path('/tmp/core8-implementation.patch')
+          if path.stat().st_size > 256 * 1024:
+              raise SystemExit('Patch over 256 KiB: artifact blocked')
+          patch = path.read_text()
+          if not patch.strip() or re.search(r'(sk-(?:ant-|proj-)?[A-Za-z0-9_-]{16,}|(?:ghp_|github_pat_|ntn_)[A-Za-z0-9_]{16,}|-----BEGIN .*PRIVATE KEY-----)', patch):
               raise SystemExit('Empty patch or possible secret: artifact blocked')
           PY
       - uses: actions/upload-artifact@v4
