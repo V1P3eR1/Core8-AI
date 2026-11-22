@@ -33,19 +33,28 @@ def positive(value):
     return value
 
 
-def validate_run_artifact(run, artifact, *, run_id, artifact_id, head_sha):
+def validate_run_artifact(run, artifact, *, run_id, artifact_id, head_sha, expected_actor_id):
     """Check two authenticated GitHub API objects against exact immutable IDs.
 
     These objects MUST be obtained independently from GitHub using an authorized
     read-only connection, not from task text or Claude output.
     """
     run_id, artifact_id = positive(run_id), positive(artifact_id)
+    expected_actor_id = positive(expected_actor_id)
     if not isinstance(head_sha, str) or not HEX40.fullmatch(head_sha):
         raise EvidenceBlocked("invalid_head_sha")
     if not isinstance(run, dict) or not isinstance(artifact, dict):
         raise EvidenceBlocked("invalid_response")
     rrepo = run.get("repository") or {}
-    if not (run.get("id") == run_id and type(run.get("id")) is int
+    actor = run.get("actor") or {}
+    triggering_actor = run.get("triggering_actor") or {}
+    if not (type(actor.get("id")) is int
+            and actor["id"] == expected_actor_id
+            and type(triggering_actor.get("id")) is int
+            and triggering_actor["id"] == expected_actor_id
+            and type(rrepo.get("id")) is int
+            and type(run.get("run_attempt")) is int
+            and run.get("id") == run_id and type(run.get("id")) is int
             and rrepo.get("full_name") == REPO and rrepo.get("id") == REPO_ID
             and run.get("event") == "issue_comment"
             and run.get("head_branch") == "main"
@@ -75,6 +84,7 @@ def validate_run_artifact(run, artifact, *, run_id, artifact_id, head_sha):
     return {
         "repo": REPO, "run_id": run_id, "artifact_id": artifact_id,
         "head_sha": head_sha, "run_event": "issue_comment",
+        "approver_id": expected_actor_id,
         "run_conclusion": "success", "artifact_name": ARTIFACT_NAME,
         # GitHub Actions digest covers the uploaded artifact archive (ZIP),
         # NOT the extracted patch bytes; never pass it as patch_sha256.
@@ -115,9 +125,11 @@ class GitHubReadOnly:
             raise EvidenceBlocked("github_response_invalid")
         return doc
 
-    def fetch_verified(self, *, run_id, artifact_id, head_sha):
+    def fetch_verified(self, *, run_id, artifact_id, head_sha, expected_actor_id):
         run_id, artifact_id = positive(run_id), positive(artifact_id)
+        expected_actor_id = positive(expected_actor_id)
         run = self._get("actions/runs/" + str(run_id))
         artifact = self._get("actions/artifacts/" + str(artifact_id))
         return validate_run_artifact(run, artifact, run_id=run_id,
-                                     artifact_id=artifact_id, head_sha=head_sha)
+                                     artifact_id=artifact_id, head_sha=head_sha,
+                                     expected_actor_id=expected_actor_id)
