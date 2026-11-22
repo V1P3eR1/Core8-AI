@@ -60,6 +60,8 @@ def inspect_bundle(raw, expected_bundle_sha, *, base_sha, scope_sha, artifact_sh
 
     try:
         obj = json.loads(raw, object_pairs_hook=reject_duplicate_keys)
+    except PublishBlocked:
+        raise
     except (UnicodeDecodeError, ValueError) as exc:
         raise PublishBlocked("bad_json") from exc
     required_keys = {"schema", "status", "base_sha", "approved_scope_sha256",
