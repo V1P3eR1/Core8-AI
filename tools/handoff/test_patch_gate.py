@@ -88,7 +88,7 @@ class PatchGateTests(unittest.TestCase):
 
     def test_hunk_count_mismatch(self):
         self.assertRaises(RejectedPatch, verify, make_patch().replace(
-            b"@@ -0,0 +1 @@", b"@@ -0,0 +2 @@"))
+            b"@@ -0,0 +1 @@", b"@@ -0,0 +1,2 @@"))
 
     def test_deleted_file_rejected(self):
         self.assertRaises(RejectedPatch, verify, make_patch().replace(
