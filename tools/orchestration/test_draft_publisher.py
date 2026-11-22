@@ -2,7 +2,7 @@ import base64
 import hashlib
 import json
 import unittest
-from draft_publisher import PublishBlocked, HttpFailed, inspect_bundle, publish
+from draft_publisher import PublishBlocked, HttpFailed, _NoRedirect, inspect_bundle, publish
 
 BASE = "a" * 40
 SCOPE = "b" * 64
@@ -86,6 +86,13 @@ def call_publish(api, data=None, hash_value=None):
 
 
 class DraftPublisherTests(unittest.TestCase):
+    def test_writer_redirect_refuses_before_following(self):
+        handler = _NoRedirect()
+        with self.assertRaisesRegex(PublishBlocked, "github_writer_redirect_refused"):
+            handler.redirect_request(
+                req=None, fp=None, code=302, msg="Found", headers={},
+                newurl="https://untrusted.example/forward-token")
+
     def test_valid_bundle(self):
         raw, expected = bundle()
         idem, items = inspect_bundle(raw, expected, base_sha=BASE, scope_sha=SCOPE, artifact_sha=ARTIFACT)
