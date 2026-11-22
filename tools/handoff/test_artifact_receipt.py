@@ -20,7 +20,9 @@ class ArtifactReceiptTests(unittest.TestCase):
         }
         self.expected = {k: self.receipt[k] for k in (
             "repo", "run_id", "artifact_id", "head_sha", "task_digest",
-            "task_revision", "issue_number", "approver_id", "run_event")}
+            "task_revision", "issue_number", "approver_id", "run_event",
+            "run_conclusion", "artifact_name", "expired", "artifact_sha256",
+            "created_at", "expires_at")}
         self.expected.update(decision="Approved", public_export=True, execution_authorized=True)
 
     def check(self, **changes):
@@ -110,6 +112,35 @@ class ArtifactReceiptTests(unittest.TestCase):
         with self.assertRaises(RejectedArtifact):
             validate_artifact_receipt(receipt=r, expected_record=self.expected,
                                       patch_bytes=self.patch, now=self.now, consumed=set())
+
+
+    def test_forged_success_after_failed_run(self):
+        self.expected["run_conclusion"] = "failure"
+        with self.assertRaisesRegex(RejectedArtifact, "provenance_mismatch"):
+            self.check()
+
+    def test_forged_artifact_name(self):
+        self.expected["artifact_name"] = "different-artifact"
+        with self.assertRaisesRegex(RejectedArtifact, "provenance_mismatch"):
+            self.check()
+
+    def test_forged_expiry(self):
+        self.expected["expires_at"] = "2026-11-22T11:00:00Z"
+        with self.assertRaisesRegex(RejectedArtifact, "provenance_mismatch"):
+            self.check()
+
+    def test_forged_digest_with_matching_payload(self):
+        payload = b"attacker-controlled-patch"
+        receipt = self.receipt.copy()
+        receipt["artifact_sha256"] = hashlib.sha256(payload).hexdigest()
+        with self.assertRaisesRegex(RejectedArtifact, "provenance_mismatch"):
+            validate_artifact_receipt(receipt=receipt, expected_record=self.expected,
+                                      patch_bytes=payload, now=self.now, consumed=set())
+
+    def test_forged_created_at(self):
+        self.expected["created_at"] = "2026-11-21T10:00:00Z"
+        with self.assertRaisesRegex(RejectedArtifact, "provenance_mismatch"):
+            self.check()
 
 
 if __name__ == "__main__":
