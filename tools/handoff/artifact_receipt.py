@@ -51,7 +51,7 @@ def validate_artifact_receipt(*, receipt, expected_record, patch_bytes, now, con
             raise RejectedArtifact("missing_metadata")
         if receipt[field] != expected_record[field]:
             raise RejectedArtifact("provenance_mismatch")
-    if receipt["repo"] != REPO or receipt["run_event"] != "issue_comment":
+    # These values must be checked against an independently fetched GitHub run\n    # and artifact record. Do not trust claims inside an artifact receipt.\n    for field in ("run_conclusion", "artifact_name", "expired", "artifact_sha256",\n                  "created_at", "expires_at"):\n        if field not in receipt or field not in expected_record:\n            raise RejectedArtifact("missing_metadata")\n        if receipt[field] != expected_record[field]:\n            raise RejectedArtifact("provenance_mismatch")\n    if receipt["repo"] != REPO or receipt["run_event"] != "issue_comment":
         raise RejectedArtifact("untrusted_origin")
     for field in ("run_id", "artifact_id", "task_revision", "issue_number", "approver_id"):
         if type(receipt[field]) is not int or receipt[field] <= 0:
