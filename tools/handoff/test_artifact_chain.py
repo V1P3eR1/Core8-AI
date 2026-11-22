@@ -72,7 +72,7 @@ class EndToEndSyntheticTests(unittest.TestCase):
             id=123, repository=dict(full_name=REPO, id=REPO_ID),
             event="issue_comment", head_branch="main", head_sha=self.base,
             path=WORKFLOW_PATH, status="completed", conclusion="success",
-            run_attempt=1)
+            run_attempt=1, actor={"id": 999}, triggering_actor={"id": 999})
         self.artifact = dict(
             id=456, name=ARTIFACT_NAME, expired=False, digest="sha256:" + sha,
             created_at="2026-11-22T10:00:00Z",
@@ -83,7 +83,8 @@ class EndToEndSyntheticTests(unittest.TestCase):
     def prepare(self, approved=True, archive=None):
         record = GitHubReadOnly(
             "synthetic-token", opener=FakeGitHub(self.run, self.artifact)
-        ).fetch_verified(run_id=123, artifact_id=456, head_sha=self.base)
+        ).fetch_verified(run_id=123, artifact_id=456, head_sha=self.base,
+                         expected_actor_id=999)
         extracted = extract_verified_patch(
             self.archive if archive is None else archive,
             trusted_archive_sha256=record["archive_sha256"])
