@@ -166,6 +166,7 @@
     'Login required': 'נדרשת כניסה',
     'Unknown lead': 'ליד לא מוכר',
     'Mailbox reading is not configured': 'קריאת תיבת הדואר לא מוגדרת',
+    'Signed email intake is required in public mode': 'במצב ציבורי מתקבלים רק אימיילים עם חתימה מאומתת',
     'A decision is already recorded for this lead': 'כבר נרשמה החלטה לליד הזה',
     'Lead has no draft yet': 'לליד עדיין אין טיוטה',
     'Only an approved reply can be marked as sent': 'אפשר לסמן כנשלח רק תשובה מאושרת',
