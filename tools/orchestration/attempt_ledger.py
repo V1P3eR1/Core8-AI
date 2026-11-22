@@ -69,8 +69,13 @@ def replay(events):
     prev = GENESIS
     active = {}
     attempts = {}
+    last_at = None
     for pos, event in enumerate(events, 1):
         _fields(event)
+        current_at = _timestamp(event["at"])
+        if last_at is not None and current_at < last_at:
+            raise InvalidLedger("non_monotonic_time")
+        last_at = current_at
         if event["seq"] != pos or event["prev"] != prev or event["hash"] != _hash(event):
             raise InvalidLedger("broken_hash_chain")
         prev = event["hash"]
