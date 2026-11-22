@@ -16,6 +16,11 @@ class PipelineTests(unittest.TestCase):
         self.checkout.mkdir()
         subprocess.run(["git", "init", "-q", str(self.checkout)], check=True)
         (self.checkout / "docs").mkdir()
+        subprocess.run(["git", "-C", str(self.checkout), "-c", "user.name=Core8 Test",
+                        "-c", "user.email=core8-test@example.invalid",
+                        "commit", "--allow-empty", "-qm", "initial fixture"], check=True)
+        self.base_sha = subprocess.check_output(
+            ["git", "-C", str(self.checkout), "rev-parse", "HEAD"], text=True).strip()
         self.patch = (b"diff --git a/docs/demo.md b/docs/demo.md\n"
                       b"new file mode 100644\nindex 0000000..1234567\n"
                       b"--- /dev/null\n+++ b/docs/demo.md\n"
@@ -33,7 +38,7 @@ class PipelineTests(unittest.TestCase):
         }
         self.expected = dict(self.receipt)
         self.expected.update(decision="Approved", public_export=True,
-                             execution_authorized=True)
+                             execution_authorized=True, checkout_sha=self.base_sha)
         self.ledger_path = self.base / "replay.db"
 
     def run_pipeline(self, patch=None, receipt=None, expected=None):
@@ -96,6 +101,19 @@ class PipelineTests(unittest.TestCase):
     def test_does_not_execute_generated_code(self):
         self.run_pipeline()
         self.assertFalse((self.checkout / "docs" / "demo.md").exists())
+
+    def test_untrusted_checkout_sha_blocked(self):
+        expected = dict(self.expected, checkout_sha="f" * 40)
+        with self.assertRaisesRegex(ReviewRejected, "checkout_sha_mismatch"):
+            self.run_pipeline(expected=expected)
+        self.assertFalse(self.ledger_path.exists())
+
+    def test_missing_checkout_sha_blocked(self):
+        expected = dict(self.expected)
+        del expected["checkout_sha"]
+        with self.assertRaisesRegex(ReviewRejected, "missing_trusted_checkout_sha"):
+            self.run_pipeline(expected=expected)
+        self.assertFalse(self.ledger_path.exists())
 
 if __name__ == "__main__":
     unittest.main()
