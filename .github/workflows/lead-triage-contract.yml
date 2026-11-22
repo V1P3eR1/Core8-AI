@@ -1,0 +1,28 @@
+name: lead triage offline contract
+on:
+  pull_request:
+    paths:
+      - "apps/lead-triage-pilot/**"
+      - ".github/workflows/lead-triage-contract.yml"
+permissions:
+  contents: read
+jobs:
+  node-contract:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    defaults:
+      run:
+        working-directory: apps/lead-triage-pilot
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Offline intake, signed email, dedupe, read-only mailbox and human approval
+        run: npm test
+      - name: Reject public bearer or true customer contact credentials in fixture tests
+        run: |
+          if grep -R -n -E '^(CORE8_LEAD_SECRET|ANTHROPIC_API_KEY|MAILBOX_PASS)=' tests/; then
+            echo 'Do not commit credential assignments to test fixtures' >&2
+            exit 1
+          fi
