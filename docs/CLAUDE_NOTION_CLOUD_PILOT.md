@@ -73,3 +73,10 @@ Do not publish private Obsidian content, actual customer records, credentials, p
 ### Owner-free next steps
 
 Continue static and hosted offline checks, review-only PR updates and evidence collection. Do **not** turn on `CORE8_SYNC_ENABLED`, even temporarily, because the scheduled trigger applies changes. Do not start paid Claude, create or expose public tasks, merge or deploy. Owner-only tasks remain branch protection, protected environments, GitHub Actions token/variable setup and explicit activation.
+
+## Latest hosted evidence and integration boundary — 2026-11-22
+
+- [Cloud continuity #10](https://github.com/V1P3eR1/Core8-AI/actions/runs/45020444185): **PASS**, including the offline synthetic and bridge-contract steps (job step conclusions independently checked).
+- [Secret scan #248](https://github.com/V1P3eR1/Core8-AI/actions/runs/45020444207): **PASS**. Latest PR branch commit `73a6ab1` adds independent-process contention coverage; an addressed review thread was resolved.
+- **Current Notion connector limitation:** A later access probe from this ChatGPT session returned `link_id must identify an eligible linked account` for both previously used connection identifiers. This is a session connector eligibility error, **not** proof that the Notion page was deleted, that a different chat cannot access it, or that the GitHub-hosted bridge is broken. Avoid instructing the owner to repeat connection changes solely on this evidence. No Notion writes were attempted.
+- **Next executable scope without owner action:** keep PR review-only, run offline CI, inspect logs and resolve code-review findings. Live Notion write, paid Claude execution, main merge and deployment remain separately gated.
