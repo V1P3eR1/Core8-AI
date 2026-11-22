@@ -47,7 +47,7 @@ class StageToPublisherTests(unittest.TestCase):
                                      scope_sha=SCOPE, artifact_sha=self.artifact)
         self.assertEqual(files[0][0], "docs/new.md")
         self.assertEqual(idem, manifest["idempotency_key"])
-        api = FakeApi()
+        api = FakeApi(main_sha=self.base)
         api.repo = "owner/repo"
         result = publish(api, repo="owner/repo", base_sha=self.base, bundle_raw=raw,
                          bundle_hash=manifest["bundle_sha256"], scope_sha=SCOPE,
