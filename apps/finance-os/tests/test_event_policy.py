@@ -16,21 +16,29 @@ def event(**overrides):
 
 class EventPolicyTests(unittest.TestCase):
     def test_no_private_customer_data_retained(self):
-        record = parse_event(event())
+        record = parse_event(event(), organization_id="tenant_alpha")
         self.assertEqual(record.source_object_id, "in_1")
         self.assertNotIn("private@example.com", repr(record))
+    def test_missing_organization_rejected(self):
+        with self.assertRaises((TypeError, ValueError)):
+            parse_event(event())
+
+    def test_explicit_organization_retained(self):
+        record = parse_event(event(), organization_id="tenant_beta")
+        self.assertEqual(record.organization_id, "tenant_beta")
+
     def test_production_rejected(self):
         for live in [True, None, "false"]:
             with self.subTest(live=live), self.assertRaises(ValueError):
-                parse_event(event(livemode=live))
+                parse_event(event(livemode=live), organization_id="tenant_alpha")
     def test_unsupported_ignored(self):
-        self.assertIsNone(parse_event(event(type="account.updated")))
+        self.assertIsNone(parse_event(event(type="account.updated"), organization_id="tenant_alpha"))
     def test_invalid_source_rejected(self):
         with self.assertRaises(ValueError):
-            parse_event(event(data={"object": {}}))
+            parse_event(event(data={"object": {}}), organization_id="tenant_alpha")
     def test_invalid_timestamp_rejected(self):
         with self.assertRaises(ValueError):
-            parse_event(event(created="bad"))
+            parse_event(event(created="bad"), organization_id="tenant_alpha")
 
 if __name__ == "__main__":
     unittest.main()
