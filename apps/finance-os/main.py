@@ -3,6 +3,7 @@ from __future__ import annotations
 import os
 from fastapi import FastAPI, Header, HTTPException, Request, status
 from event_policy import parse_event
+from merchant_binding import resolve_single_merchant
 from webhook_security import InvalidWebhook, MAX_PAYLOAD_BYTES, verify_stripe_event
 
 app = FastAPI(title="Core8 Finance OS (sandbox)", version="0.4.0", docs_url=None, redoc_url=None)
@@ -56,7 +57,8 @@ async def stripe_webhook(request: Request, stripe_signature: str | None = Header
     try:
         event = verify_stripe_event(payload, stripe_signature or "",
                                     os.environ.get("STRIPE_WEBHOOK_SECRET", ""))
-        record = parse_event(event)
+        account_id, merchant_map = resolve_single_merchant(event)
+        record = parse_event(event, organization_id=merchant_map[account_id])
     except (InvalidWebhook, ValueError, TypeError, AttributeError) as exc:
         raise HTTPException(status_code=400, detail="Invalid sandbox Stripe webhook") from exc
     if record is None:
