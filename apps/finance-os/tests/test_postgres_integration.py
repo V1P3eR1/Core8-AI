@@ -28,7 +28,7 @@ class TestPostgresEventFlow(unittest.TestCase):
                      "FINANCE_WEBHOOK_ACCOUNT_ID","FINANCE_WEBHOOK_TENANT_ID")}
         os.environ.update({"APP_ENV":"test","STRIPE_WEBHOOK_SECRET":secret,
                            "ENABLE_STRIPE_WRITES":"false","STRIPE_EXPECT_LIVEMODE":"false",
-                           "FINANCE_WEBHOOK_ACCOUNT_ID":"acct_ci_test_only",
+                           "FINANCE_WEBHOOK_ACCOUNT_ID":"acct_CITest123",
                            "FINANCE_WEBHOOK_TENANT_ID":"core8"})
         eid = "evt_ci_" + uuid4().hex
         payload = json.dumps({
