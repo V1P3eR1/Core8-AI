@@ -1,0 +1,21 @@
+name: Finance OS sandbox unit tests
+on:
+  pull_request:
+    paths:
+      - 'apps/finance-os/**'
+      - '.github/workflows/finance-os-unit.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  policy-tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Safety policy unit tests (no secrets or Stripe account)
+        run: python -m unittest discover -s apps/finance-os/tests -v
+      - name: Compile syntax
+        run: python -m compileall -q apps/finance-os
