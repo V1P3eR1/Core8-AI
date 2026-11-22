@@ -4,6 +4,7 @@ import hmac
 import json
 import os
 import sys
+import time
 from pathlib import Path
 from unittest.mock import patch
 import unittest
@@ -30,8 +31,8 @@ class TestFinanceWebhookHTTP(unittest.TestCase):
         self.environment.start()
     def tearDown(self):
         self.environment.stop()
-    def signed(self, content, stamp=1795340000):
-        # Signature time validation uses real clock; tests patch verifier clock.
+    def signed(self, content, stamp=None):
+        stamp = stamp if stamp is not None else int(time.time())
         secret = os.environ["STRIPE_WEBHOOK_SECRET"]
         digest=hmac.new(secret.encode(),str(stamp).encode()+b'.'+content,hashlib.sha256).hexdigest()
         return {"Stripe-Signature":f"t={stamp},v1={digest}"}
@@ -50,22 +51,19 @@ class TestFinanceWebhookHTTP(unittest.TestCase):
         data=b"x"*256001
         self.assertEqual(self.client.post("/webhooks/stripe",content=data).status_code,413)
     def test_missing_database_is_retryable(self):
-        with patch("webhook_security.time.time", return_value=1795340000):
-            with patch("main.persist_event", side_effect=RuntimeError("db unavailable")):
-                response=self.client.post("/webhooks/stripe",content=self.payload(),
-                                          headers=self.signed(self.payload()))
+        with patch("main.persist_event", side_effect=RuntimeError("db unavailable")):
+            response=self.client.post("/webhooks/stripe",content=self.payload(),
+                                      headers=self.signed(self.payload()))
         self.assertEqual(response.status_code,503)
     def test_duplicate_event_receipt(self):
         payload=self.payload()
-        with patch("webhook_security.time.time", return_value=1795340000):
-            with patch("main.persist_event", return_value=False) as save:
-                response=self.client.post("/webhooks/stripe",content=payload,headers=self.signed(payload))
+        with patch("main.persist_event", return_value=False) as save:
+            response=self.client.post("/webhooks/stripe",content=payload,headers=self.signed(payload))
         self.assertEqual(response.status_code,200)
         self.assertEqual(response.json()["duplicate"], True)
         save.assert_called_once()
     def test_live_webhook_denied(self):
         data=self.payload(live=True)
-        with patch("webhook_security.time.time", return_value=1795340000):
-            response=self.client.post("/webhooks/stripe",content=data,headers=self.signed(data))
+        response=self.client.post("/webhooks/stripe",content=data,headers=self.signed(data))
         self.assertEqual(response.status_code,400)
 if __name__ == "__main__": unittest.main()
