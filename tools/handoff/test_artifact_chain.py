@@ -92,7 +92,7 @@ class EndToEndSyntheticTests(unittest.TestCase):
             "repo": record["repo"], "run_id": record["run_id"],
             "artifact_id": record["artifact_id"], "head_sha": record["head_sha"],
             "task_digest": "b" * 64, "task_revision": 1,
-            "issue_number": 62, "approver_id": 999,
+            "issue_number": 62, "approver_id": record["approver_id"],
             "run_event": record["run_event"],
             "run_conclusion": record["run_conclusion"],
             "artifact_name": record["artifact_name"],
@@ -121,6 +121,18 @@ class EndToEndSyntheticTests(unittest.TestCase):
 
     def test_unapproved_task_stops_before_reservation(self):
         with self.assertRaises(ValueError): self.prepare(approved=False)
+        self.assertFalse(self.ledger.exists())
+
+    def test_spoofed_run_actor_blocks_before_reservation(self):
+        self.run["actor"]["id"] = 12345
+        with self.assertRaises(ValueError):
+            self.prepare()
+        self.assertFalse(self.ledger.exists())
+
+    def test_spoofed_rerun_actor_blocks_before_reservation(self):
+        self.run["triggering_actor"]["id"] = 12345
+        with self.assertRaises(ValueError):
+            self.prepare()
         self.assertFalse(self.ledger.exists())
 
     def test_modified_archive_rejected_before_reservation(self):
