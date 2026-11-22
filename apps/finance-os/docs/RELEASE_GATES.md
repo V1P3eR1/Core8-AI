@@ -33,10 +33,17 @@
 
 ## Manual local sandbox test
 1. Create a sandbox webhook signing secret through Stripe's CLI/dashboard (never use live keys).
-2. From `apps/finance-os`, set `STRIPE_WEBHOOK_SECRET` outside Git and run `docker compose up --build`.
+2. Independently verify the sandbox Stripe account and the Core8 tenant ownership, then set `STRIPE_WEBHOOK_SECRET`, `FINANCE_WEBHOOK_ACCOUNT_ID`, and `FINANCE_WEBHOOK_TENANT_ID` outside Git. The endpoint supports one merchant only and rejects Connect events; environment variables alone do **not** establish account ownership. Run `docker compose up --build` only after this binding is approved.
 3. API binds only to `127.0.0.1:8008`; `GET /health` provides the sandbox-only flag.
 4. Forward **sandbox** Stripe events to `http://localhost:8008/webhooks/stripe` and check the PostgreSQL inbox. No financial fulfillment is triggered.
 5. Run worker only on the local sandbox database after verifying tests.
+
+## Tenant security status (2026-11-22)
+- The default hardcoded `core8` tenant assignment has been removed from event projection; the webhook now requires explicit merchant configuration after signature verification.
+- A PostgreSQL composite foreign key rejects operational activity rows whose tenant differs from the inbox event's tenant. CI validates this narrow invariant; it does **not** prove authorization for every API or merchant.
+- Docker image import checks and disposable PostgreSQL integration tests have passed on prior commits. Each new commit requires fresh CI evidence.
+- **BLOCKED:** independent verification and secure provisioning of the Stripe account-to-webhook-secret-to-tenant binding; OIDC/RBAC, audited operator access, real Stripe-originated sandbox delivery, migration strategy and production security review.
+- **No deployment or merge authorized.**
 
 ## Evidence vs completion
 - CI success != Stripe Checkout success.
