@@ -69,8 +69,12 @@ and creates the lead with its contact details and consent record.
 CORE8_LEAD_SECRET=<same secret as lead-config.php> node server.cjs
 ```
 
-With the secret set, unsigned or altered e-mails are refused. Without it they
-are accepted and marked "unsigned".
+With the secret set, unsigned or altered e-mails are refused. Without it,
+unsigned messages may be imported **only in local loopback mode for offline testing**.
+A publicly configured pilot rejects unsigned e-mail intake; configuring an IMAP
+mailbox without `CORE8_LEAD_SECRET` refuses startup. This restriction applies to
+the signed e-mail route; the separate public website-form route has its own
+consent, host and rate-limit controls. Never expose test-only unsigned intake.
 
 **Not built yet: reading the mailbox automatically.** That needs a decision on
 how the tool is given access to the mailbox and where it runs; until then a
