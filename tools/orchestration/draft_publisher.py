@@ -150,7 +150,7 @@ def publish(api, *, repo, base_sha, bundle_raw, bundle_hash, scope_sha, artifact
         expected_blobs = {
             path: hashlib.sha1(
                 b"blob " + str(len(base64.b64decode(encoded))).encode() +
-                b"\\x00" + base64.b64decode(encoded)
+                b"\x00" + base64.b64decode(encoded)
             ).hexdigest()
             for path, encoded in files
         }
