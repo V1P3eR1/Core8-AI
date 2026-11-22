@@ -90,6 +90,11 @@ function createApp(opts) {
   const deduper = createDeduper({ clock });
   const auth = createAuth({ passwordHash: authOpts.passwordHash, passwordHashFile: authOpts.passwordHashFile, clock });
   const mailCfg = opts.mailbox && opts.mailbox.user && opts.mailbox.pass ? opts.mailbox : null;
+  // Mailbox intake must verify authenticity. Never ingest untrusted mailbox content
+  // without a signing key, even when the UI is bound to localhost.
+  if (mailCfg && !leadSecret) {
+    throw new Error('CORE8_LEAD_SECRET is required when mailbox intake is configured');
+  }
   const fetchMail = (opts.mailbox && opts.mailbox.fetchImpl) || fetchLeadMessages;
   const mailState = { enabled: !!mailCfg, lastCheckAt: null, lastResult: null, lastError: null, checking: false };
   const mailStateFile = path.join(store.dir, 'mailbox-state.json');
@@ -164,6 +169,11 @@ function createApp(opts) {
 
   // One place where a website-form e-mail becomes a lead, whether pasted or read from the mailbox.
   async function ingestLeadEmail(raw) {
+    // Only offline, loopback-only fixtures may use unsigned legacy messages.
+    // A public pilot must never accept unverified email intake.
+    if (!leadSecret && (publicHost || bindHost !== '127.0.0.1')) {
+      return { status: 'rejected', error: 'Signed email intake is required in public mode' };
+    }
     const parsed = parseLeadEmail(raw, { secret: leadSecret });
     if (!parsed.ok) return { status: 'rejected', error: parsed.error };
     const L = parsed.lead;
