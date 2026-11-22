@@ -90,3 +90,9 @@ test('key file requires owner-only permissions', { skip: process.platform === 'w
   assert.throws(() => createBackup(f.dir, f.backup, f.keyFile), /owner-only/);
   assert.equal(fs.existsSync(f.backup), false);
 });
+
+test('backup key stored in Git checkout is rejected before creating an archive', () => {
+  const f = fixture();
+  assert.throws(() => createBackup(f.dir, f.backup, __filename), /inside Git/);
+  assert.equal(fs.existsSync(f.backup), false);
+});
