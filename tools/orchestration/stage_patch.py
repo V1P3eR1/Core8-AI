@@ -15,7 +15,7 @@ import subprocess
 import sys
 import tarfile
 import tempfile
-from patch_gate import PatchRejected, validate_patch, _check_path
+from tools.handoff.patch_gate import RejectedPatch, validate_patch, validate_path
 
 SHA256 = re.compile(r"[0-9a-f]{64}\Z")
 SHA40 = re.compile(r"[0-9a-f]{40}\Z")
@@ -50,8 +50,8 @@ def stage(repo, patch, artifact_hash, base_sha, approved_scope_hash):
     if re.search(rb"(?:sk-ant-|sk-proj-|ghp_|github_pat_|ntn_)[A-Za-z0-9_-]{12,}|-----BEGIN [A-Z ]*PRIVATE KEY-----", patch):
         raise StageRejected("possible_secret")
     try:
-        summary = validate_patch(patch)
-    except PatchRejected as exc:
+        summary = validate_patch(patch, artifact_hash)
+    except RejectedPatch as exc:
         raise StageRejected("patch_" + str(exc)) from exc
     repo = Path(repo).resolve(strict=True)
     if not (repo / ".git").exists():
@@ -87,9 +87,9 @@ def stage(repo, patch, artifact_hash, base_sha, approved_scope_hash):
             status, path = raw[i].decode("ascii"), raw[i + 1].decode("utf-8")
             if status not in ("A", "M", "D"):
                 raise StageRejected("unexpected_git_change")
-            _check_path(path)
+            validate_path(path)
             paths.append(path)
-        if sorted(paths) != sorted(summary.paths):
+        if sorted(paths) != sorted(summary['files']):
             raise StageRejected("changed_paths_mismatch")
         git(target, "add", "--all", "--", *roots)
         for item in git(target, "ls-files", "-s", "-z", "--", *roots).split(b"\0"):
