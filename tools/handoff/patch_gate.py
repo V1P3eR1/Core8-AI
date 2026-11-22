@@ -74,8 +74,10 @@ def validate_patch(payload: bytes, expected_sha256: str) -> dict:
             raise RejectedPatch("rename_not_allowed")
         path = m.group(1)
         validate_path(path)
-        if path in paths or len(paths) >= 20:
-            raise RejectedPatch("duplicate_or_too_many_files")
+        if path in paths:
+            raise RejectedPatch("duplicate_file")
+        if len(paths) >= 20:
+            raise RejectedPatch("too_many_files")
         paths.append(path)
         section_start = i
         i += 1
