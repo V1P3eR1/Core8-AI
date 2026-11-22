@@ -104,7 +104,8 @@ jobs:
           NODE
 
   isolated-browser-staging:
-    runs-on: ubuntu-latest
+    # Pin to a Playwright-supported runner rather than rolling ubuntu-latest (26.04).
+    runs-on: ubuntu-24.04
     timeout-minutes: 15
     defaults:
       run:
