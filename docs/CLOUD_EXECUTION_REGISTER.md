@@ -60,3 +60,16 @@
 - [ ] Human sign-off and rollback instructions linked
 
 **Hard stop:** no credential creation/rotation, permission change, paid runtime activation, merge, deploy, social publishing, external outreach, payment or DNS change without separate Lev approval. This file only defines a future acceptance process.
+
+## Verified CI evidence — 2026-11-22
+
+| Evidence | Outcome | Interpretation |
+|---|---|---|
+| [Cloud continuity #11](https://github.com/V1P3eR1/Core8-AI/actions/runs/45036899451) | PASS | Synthetic offline continuity tests and Notion/GitHub bridge contract/dry-run tests passed in hosted GitHub Actions |
+| [Secret scan #289](https://github.com/V1P3eR1/Core8-AI/actions/runs/45036899446) | PASS | Branch secret-scan workflow passed; not a substitute for full security audit |
+| [PR #60](https://github.com/V1P3eR1/Core8-AI/pull/60) | OPEN, MERGEABLE | One visible review thread resolved; **not** merged or production-deployed |
+| Notion connector probe from this chat | BLOCKED | Both former account IDs now return `link_id must identify an eligible linked account`; no conclusion about other chats or live GitHub Actions credentials |
+
+**Scope clarification:** Hosted CI proves execution of *synthetic offline tests on GitHub-hosted runners*, not the full operational requirement that a live Notion ↔ GitHub synchronization completes while the owner's computers are off. That acceptance checkbox remains unchecked. The `knowledge-sync` inventory row must not be interpreted as proof of a Notion workspace outage: it is a connector eligibility failure observed in one chat session.
+
+**Next evidence needed:** inspect protected environment settings and token presence via authorized metadata-only API; verify branch protection; demonstrate owner-approved fictional queue item in dry-run before considering any apply. Do not enable scheduled sync as a test: its cron uses write mode when enabled.
