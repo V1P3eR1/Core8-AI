@@ -4,7 +4,7 @@
 # a reviewed release SHA and a human approval. Do not run this script unattended.
 # Never pipe a floating-branch script from curl into bash.
 set -euo pipefail
-die() { printf 'ERROR: %s\\n' "$*" >&2; exit 1; }
+die() { printf 'ERROR: %s\n' "$*" >&2; exit 1; }
 
 # Every denial below happens before any git fetch/checkout, apt, Docker, firewall
 # or other host mutation. Missing or ambiguous inputs MUST fail closed.
@@ -35,7 +35,7 @@ target_sha="$(git -C "$ROOT" rev-parse --verify "$RELEASE_SHA^{commit}" 2>/dev/n
 [[ "$target_sha" == "$RELEASE_SHA" ]] || die "RELEASE_SHA did not resolve exactly"
 git -C "$ROOT" merge-base --is-ancestor "$RELEASE_SHA" "$main_sha" || die "release not reachable from fetched origin/main"
 previous_sha="$(git -C "$ROOT" rev-parse --verify HEAD 2>/dev/null || true)"
-printf 'Approved release candidate: %s (main %s), prior %s\\n' "$target_sha" "$main_sha" "${previous_sha:-none}"
+printf 'Approved release candidate: %s (main %s), prior %s\n' "$target_sha" "$main_sha" "${previous_sha:-none}"
 git -C "$ROOT" checkout --detach "$RELEASE_SHA"
 [[ "$(git -C "$ROOT" rev-parse HEAD)" == "$RELEASE_SHA" ]] || die "checkout SHA mismatch"
 # Important: BACKUP_VERIFIED is an assertion, not proof. The operator must
