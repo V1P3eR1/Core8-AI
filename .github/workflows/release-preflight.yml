@@ -3,6 +3,7 @@ on:
   pull_request:
     paths:
       - "apps/core8-platform/deploy/release-preflight.sh"
+      - "apps/core8-platform/deploy/install.sh"
       - "apps/core8-platform/deploy/tests/**"
       - ".github/workflows/release-preflight.yml"
 permissions:
@@ -13,4 +14,5 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - run: bash -n apps/core8-platform/deploy/release-preflight.sh
+      - run: bash -n apps/core8-platform/deploy/install.sh
       - run: python -m unittest discover -s apps/core8-platform/deploy/tests -p 'test_*.py' -v
