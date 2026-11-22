@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Synthetic, offline-only cloud continuity contract check. No external services."""
 import sqlite3
-from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import ProcessPoolExecutor
 import tempfile
 import unittest
 from pathlib import Path
@@ -48,6 +48,12 @@ def read_state(db_path: Path, key: str) -> str:
         connection.close()
 
 
+def claim_worker(args):
+    """Top-level picklable entrypoint for independent process contention."""
+    db_path, key = args
+    return claim(db_path, key)
+
+
 class ContinuityContract(unittest.TestCase):
     def setUp(self):
         self.directory = tempfile.TemporaryDirectory()
@@ -62,8 +68,8 @@ class ContinuityContract(unittest.TestCase):
     def test_concurrent_claims_have_one_winner(self):
         # Prime the schema to avoid confusing DDL races with claim contention.
         claim(self.db, 'schema-primer')
-        with ThreadPoolExecutor(max_workers=8) as pool:
-            results = list(pool.map(lambda _: claim(self.db, 'same-task'), range(24)))
+        with ProcessPoolExecutor(max_workers=4) as pool:
+            results = list(pool.map(claim_worker, [(self.db, 'same-task')] * 16))
         self.assertEqual(sum(results), 1)
 
     def test_missing_state_is_keyerror(self):
