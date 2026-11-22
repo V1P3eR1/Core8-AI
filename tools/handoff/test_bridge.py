@@ -264,8 +264,9 @@ class AuditDraftTests(unittest.TestCase):
                 'state': 'open', 'draft': True,
                 'html_url': 'https://github.com/V1P3eR1/Core8-AI/pull/90',
                 'head': {'ref': 'core8-review/' + 'a' * 24,
+                         'sha': 'c' * 40,
                          'repo': {'full_name': 'V1P3eR1/Core8-AI'}},
-                'base': {'ref': 'main'},
+                'base': {'ref': 'main', 'sha': 'd' * 40},
                 'body': 'Scope SHA256: ' + 'b' * 64,
             }
 
@@ -273,6 +274,10 @@ class AuditDraftTests(unittest.TestCase):
             self.calls.append((method, path, data))
             if method == 'GET' and path.endswith('/pulls/90'):
                 return copy.deepcopy(self.item)
+            if method == 'GET' and path.endswith('/git/ref/heads/main'):
+                return {'object': {'sha': 'd' * 40}}
+            if method == 'GET' and path.endswith('/git/commits/' + 'c' * 40):
+                return {'parents': [{'sha': 'd' * 40}]}
             if method == 'POST' and path.endswith('/issues/20/comments'):
                 return {'id': 300}
             raise AssertionError('unexpected_api_operation')
@@ -285,7 +290,7 @@ class AuditDraftTests(unittest.TestCase):
 
     def test_draft_report_validates_and_posts_canonical_event(self):
         audit(self.gh, 20, 'b' * 64, 'draft', 90)
-        self.assertEqual(len(self.gh.calls), 2)
+        self.assertEqual(len(self.gh.calls), 4)
         self.assertEqual(self.gh.calls[-1][0], 'POST')
         body = self.gh.calls[-1][2]['body']
         self.assertEqual(body, 'core8-run ' + 'b' * 64 +
@@ -313,6 +318,31 @@ class AuditDraftTests(unittest.TestCase):
         self.gh.item['head']['ref'] = 'unreviewed-branch'
         with self.assertRaisesRegex(Stop, 'unverified_draft_pr'):
             audit(self.gh, 20, 'b' * 64, 'draft', 90)
+
+    def test_draft_parent_must_be_reviewed_main(self):
+        self.gh.item['base']['sha'] = 'e' * 40
+        with self.assertRaisesRegex(Stop, 'stale_draft_base'):
+            audit(self.gh, 20, 'b' * 64, 'draft', 90)
+        self.assertFalse(any(c[0] == 'POST' for c in self.gh.calls))
+
+    def test_draft_head_sha_is_required(self):
+        del self.gh.item['head']['sha']
+        with self.assertRaisesRegex(Stop, 'unverified_draft_commit'):
+            audit(self.gh, 20, 'b' * 64, 'draft', 90)
+        self.assertFalse(any(c[0] == 'POST' for c in self.gh.calls))
+
+    def test_draft_commit_must_have_single_approved_parent(self):
+        original = self.gh.call
+
+        def bad_parent(method, path, data=None):
+            if path.endswith('/git/commits/' + 'c' * 40):
+                return {'parents': [{'sha': 'e' * 40}]}
+            return original(method, path, data)
+
+        self.gh.call = bad_parent
+        with self.assertRaisesRegex(Stop, 'unverified_draft_parent'):
+            audit(self.gh, 20, 'b' * 64, 'draft', 90)
+        self.assertFalse(any(c[0] == 'POST' for c in self.gh.calls))
 
     def test_draft_requires_number(self):
         with self.assertRaisesRegex(Stop, 'invalid_draft_pr_number'):
