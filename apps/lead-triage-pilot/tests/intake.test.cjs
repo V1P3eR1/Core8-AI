@@ -137,25 +137,26 @@ test('API: support and spam leads get no meeting suggestions', async () => {
   await app.close();
 });
 
-test('public instance refuses unsigned email even with a valid consent payload', async () => {
-  const authHash = require('node:crypto').scryptSync('not-a-real-password', 'ci-test-only', 64).toString('hex');
-  // Reuse the hash fixture from the auth module tests rather than real credentials.
-  const fs = require('node:fs');
-  const source = fs.readFileSync(path.join(__dirname, 'auth.test.cjs'), 'utf8');
-  const match = /const HASH = ('[^']+'|"[^"]+")/.exec(source);
-  assert.ok(match, 'shared fake authentication fixture is present');
-  const HASH = match[1].slice(1, -1);
+test('public instance refuses unsigned email after valid operator login', async () => {
+  const { hashPassword } = require('../lib/auth.cjs');
+  const password = 'synthetic test passphrase only';
   const app = createApp({
     dataDir: tmpDir(), quiet: true,
-    auth: { publicHost: 'agent.example.invalid', passwordHash: HASH }
+    auth: { publicHost: 'agent.example.invalid', passwordHash: hashPassword(password) }
   });
   const port = await app.listen(0);
+  const origin = 'https://agent.example.invalid';
+  const host = { Host: 'agent.example.invalid', Origin: origin };
   try {
+    const login = await raw(port, { method: 'POST', path: '/api/login',
+      headers: host, body: { password } });
+    assert.equal(login.status, 200);
+    const cookie = login.headers['set-cookie'][0].split(';')[0];
     const unsigned = I.encodeLeadEmail(base(), '').body;
-    const response = await raw(port, { method: 'POST', path: '/api/intake/email', body: { raw: unsigned } });
-    // Public instance requires login, but an authenticated client must also be
-    // unable to create an unsigned lead. 401/403 means no bypass was possible.
-    assert.ok([401, 403, 422].includes(response.status), response.text);
+    const response = await raw(port, { method: 'POST', path: '/api/intake/email',
+      headers: { ...host, Cookie: cookie }, body: { raw: unsigned } });
+    assert.equal(response.status, 422);
+    assert.match(response.text, /Signed email intake is required/);
     assert.equal(app.store.leads().length, 0);
   } finally { await app.close(); }
 });
