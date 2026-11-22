@@ -12,7 +12,7 @@ import os
 import re
 import sys
 from urllib import request, error, parse
-from patch_gate import _check_path, PatchRejected
+from tools.handoff.patch_gate import validate_path, RejectedPatch
 
 SHA256 = re.compile(r"[0-9a-f]{64}\Z")
 SHA40 = re.compile(r"[0-9a-f]{40}\Z")
@@ -66,8 +66,8 @@ def inspect_bundle(raw, expected_bundle_sha, *, base_sha, scope_sha, artifact_sh
         if not isinstance(path, str):
             raise PublishBlocked("bad_path")
         try:
-            _check_path(path)
-        except PatchRejected as exc:
+            validate_path(path)
+        except RejectedPatch as exc:
             raise PublishBlocked("forbidden_path") from exc
         h = entry["sha256"]
         if not isinstance(h, str) or not SHA256.fullmatch(h):
