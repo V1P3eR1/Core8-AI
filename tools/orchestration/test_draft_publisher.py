@@ -38,7 +38,7 @@ class FakeApi:
         if path.startswith("pulls?"):
             if not self.existing:
                 return []
-            return [{"html_url": "https://github.com/owner/repo/pull/9",
+            return [{"draft": True, "html_url": "https://github.com/owner/repo/pull/9",
                      "body": "<!-- core8-review:" + sha((BASE + ":" + ARTIFACT + ":" + SCOPE).encode()) + " -->"}]
         if path.startswith("git/ref/heads/"):
             if self.blocked_ref:
@@ -114,6 +114,20 @@ class DraftPublisherTests(unittest.TestCase):
         result = call_publish(api)
         self.assertEqual(result["status"], "EXISTING_DRAFT")
         self.assertTrue(all(method == "GET" for method, _, _ in api.calls))
+
+    def test_matching_but_non_draft_pr_fails_closed(self):
+        api = FakeApi(existing=True)
+        original = api.call
+
+        def fail_non_draft(method, path, payload=None):
+            result = original(method, path, payload)
+            if path.startswith("pulls?"):
+                result[0]["draft"] = False
+            return result
+
+        api.call = fail_non_draft
+        with self.assertRaisesRegex(PublishBlocked, "conflicting_existing_pr"):
+            call_publish(api)
 
     def test_orphan_branch_fails_closed(self):
         api = FakeApi(blocked_ref=True)
