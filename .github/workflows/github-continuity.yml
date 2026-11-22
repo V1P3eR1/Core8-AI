@@ -1,0 +1,36 @@
+name: Core8 GitHub-only continuity (read-only)
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '17 6 * * *'
+
+permissions:
+  contents: read
+
+jobs:
+  continuity:
+    # This is an engineering-status snapshot only: no Notion approval inference,
+    # no Claude execution, no GitHub Issues/PR writes and no deployment.
+    runs-on: ubuntu-latest
+    timeout-minutes: 7
+    permissions:
+      contents: read
+      checks: read
+      pull-requests: read
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Generate sanitized PR/CI continuity summary
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: |
+          python tools/handoff/github_continuity.py --format markdown > "$GITHUB_STEP_SUMMARY"
+      - name: Do not infer any approval from GitHub-only status
+        run: |
+          echo 'This job is read-only and cannot authorize model execution, merges or deployment.'
