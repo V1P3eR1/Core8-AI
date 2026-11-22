@@ -151,6 +151,22 @@ class ContractTests(unittest.TestCase):
         self.b.sync()
         self.assertEqual(self.f.writes[-1][2]['properties']['Status']['select']['name'], 'Review')
 
+    def test_machine_status_with_wrong_digest_ignored(self):
+        self.export()
+        self.f.comments = [{'user': {'login': 'github-actions[bot]'},
+                            'body': 'core8-run ' + '0' * 64 +
+                            ' review https://github.com/V1P3eR1/Core8-AI/actions/runs/1'}]
+        self.b.sync()
+        self.assertEqual(self.f.writes[-1][2]['properties']['Status']['select']['name'], 'Queued')
+
+    def test_machine_status_with_untrusted_run_url_ignored(self):
+        self.export()
+        sha = digest(payload(self.f.page))
+        self.f.comments = [{'user': {'login': 'github-actions[bot]'},
+                            'body': f'core8-run {sha} review https://example.org/fake-run'}]
+        self.b.sync()
+        self.assertEqual(self.f.writes[-1][2]['properties']['Status']['select']['name'], 'Queued')
+
     def test_approved_gate(self):
         number, data = self.b.gate(self.event(), '123')
         self.assertEqual(number, 1)
