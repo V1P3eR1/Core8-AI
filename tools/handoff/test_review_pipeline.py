@@ -86,6 +86,30 @@ class PipelineTests(unittest.TestCase):
             self.run_pipeline()
         self.assertFalse(self.ledger_path.exists())
 
+    def test_ignored_file_blocks_without_reserving(self):
+        (self.checkout / ".gitignore").write_text("ignored-runtime.txt\n")
+        subprocess.run(["git", "-C", str(self.checkout), "add", ".gitignore"],
+                       check=True)
+        subprocess.run(["git", "-C", str(self.checkout), "-c", "user.name=Core8 Test",
+                        "-c", "user.email=core8-test@example.invalid",
+                        "commit", "-qm", "Add ignore fixture"], check=True)
+        self.base_sha = subprocess.check_output(
+            ["git", "-C", str(self.checkout), "rev-parse", "HEAD"], text=True).strip()
+        self.expected["checkout_sha"] = self.base_sha
+        (self.checkout / "ignored-runtime.txt").write_text("untrusted")
+        with self.assertRaisesRegex(ReviewRejected, "checkout_not_clean"):
+            self.run_pipeline()
+        self.assertFalse(self.ledger_path.exists())
+
+    def test_subdirectory_is_not_a_checkout_root(self):
+        directory = self.checkout / "docs"
+        with self.assertRaisesRegex(ReviewRejected, "checkout_not_git_root"):
+            stage_review(
+                receipt=self.receipt, expected_record=self.expected,
+                patch_bytes=self.patch, now=self.now,
+                ledger_path=self.ledger_path, checkout_path=directory)
+        self.assertFalse(self.ledger_path.exists())
+
     def test_tracked_modification_blocks_without_reserving(self):
         (self.checkout / "docs" / "existing.md").write_text("modified")
         with self.assertRaisesRegex(ReviewRejected, "checkout_not_clean"):
