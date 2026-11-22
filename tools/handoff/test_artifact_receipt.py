@@ -106,6 +106,40 @@ class ArtifactReceiptTests(unittest.TestCase):
             validate_artifact_receipt(receipt=self.receipt, expected_record=e,
                                       patch_bytes=self.patch, now=self.now, consumed=set())
 
+    def test_self_reported_digest_does_not_override_trusted_digest(self):
+        # Attacker's payload and SHA are consistent, but not independently trusted.
+        forged = b"diff --git a/docs/forged.md b/docs/forged.md\n"
+        receipt = self.receipt.copy()
+        receipt["artifact_sha256"] = hashlib.sha256(forged).hexdigest()
+        with self.assertRaisesRegex(RejectedArtifact, "provenance_mismatch"):
+            validate_artifact_receipt(
+                receipt=receipt, expected_record=self.expected, patch_bytes=forged,
+                now=self.now, consumed=set())
+
+    def test_self_reported_success_cannot_rewrite_failure(self):
+        expected = self.expected.copy()
+        expected["run_conclusion"] = "failure"
+        with self.assertRaisesRegex(RejectedArtifact, "provenance_mismatch"):
+            validate_artifact_receipt(
+                receipt=self.receipt, expected_record=expected,
+                patch_bytes=self.patch, now=self.now, consumed=set())
+
+    def test_self_reported_expiry_cannot_extend_retention(self):
+        expected = self.expected.copy()
+        expected["expires_at"] = "2026-11-22T11:00:00Z"
+        with self.assertRaisesRegex(RejectedArtifact, "provenance_mismatch"):
+            validate_artifact_receipt(
+                receipt=self.receipt, expected_record=expected,
+                patch_bytes=self.patch, now=self.now, consumed=set())
+
+    def test_missing_independently_trusted_digest_fails_closed(self):
+        expected = self.expected.copy()
+        del expected["artifact_sha256"]
+        with self.assertRaisesRegex(RejectedArtifact, "missing_metadata"):
+            validate_artifact_receipt(
+                receipt=self.receipt, expected_record=expected,
+                patch_bytes=self.patch, now=self.now, consumed=set())
+
     def test_missing_field(self):
         r = self.receipt.copy()
         del r["artifact_id"]
