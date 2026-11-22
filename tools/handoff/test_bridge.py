@@ -278,7 +278,8 @@ class AuditDraftTests(unittest.TestCase):
                 return {'object': {'sha': 'd' * 40}}
             if method == 'GET' and path.endswith('/git/commits/' + 'c' * 40):
                 return {'parents': [{'sha': 'd' * 40}]}
-            if method == 'POST' and path.endswith('/issues/20/comments'):
+            if method == 'POST' and (path.endswith('/issues/20/comments')
+                                     or path.endswith('/issues/1/comments')):
                 return {'id': 300}
             raise AssertionError('unexpected_api_operation')
 
