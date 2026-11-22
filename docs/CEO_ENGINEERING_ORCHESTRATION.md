@@ -101,6 +101,14 @@ The new `tools/orchestration/validate_patch.py` accepts only small UTF-8 reviewa
 
 Offline cases in `tools/orchestration/test_retry_policy.py` cover missing approval, stale heads, missing/pending CI, retry exhaustion, cooldown, nonfailed attempts, mismatched history and time validation. The hourly observer currently **does not call this policy automatically** because it lacks an authenticated, durable, owner-approved task/attempt ledger. Connecting this policy to Notion/GitHub must be a separately reviewed step that proves source integrity, idempotent run claims and tamper-resistant event records. Never auto-populate `approved=true` from PR labels or issue comments.
 
+### Deterministic attempt ledger — implemented, but not a live coordination backend
+
+`tools/orchestration/attempt_ledger.py` now models a bounded two-attempt execution history using strict hash-chained events and replay. It refuses duplicate claims, concurrent starts for the same scope, invalid event sequences, changed history, backward timestamps, unrecognized fields and retry after success or cancellation. `history_for()` creates an audited in-memory input for the pre-existing `retry_policy.decide()` policy. Adversarial synthetic tests live in `test_attempt_ledger.py` and are covered by the orchestration CI workflow.
+
+**Not running in production:** This is a pure offline fixture/module with no persistent shared ledger, no locking across GitHub jobs, no distributed single-writer guarantee and no authenticated actor signature. A SHA-256 chain detects edits only relative to a previously trusted head hash; it does not authenticate the writer or stop complete log replacement. It must not be treated as evidence of owner approval. No automatically generated patch is executed or merged as part of this implementation.
+
+**Next safe engineering tasks:** introduce a verified durable attempt record tied to GitHub run ID and immutable approved scope, atomic idempotency claims across concurrent runners, recorded model budget consumption, redacted failure evidence, a separately sandboxed patch review workflow, and a human review gate before any PR is merged. Preserve the existing owner/Notion approval mechanism rather than allowing the ledger to grant permissions.
+
 ### Safe activation checklist
 
 1. Inspect this PR diff and successful `Core8 development loop (read-only)` CI, security review, codeowners and actions-policy compatibility.
