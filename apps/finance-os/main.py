@@ -39,6 +39,14 @@ def persist_event(record):
             ON CONFLICT (event_id) DO NOTHING RETURNING event_id
         """, (record.event_id,record.organization_id,record.event_type,
               record.source_object_id,record.event_created)).fetchone()
+        if row is None:
+            # A repeated Stripe event ID must never cross tenant boundaries.
+            existing = conn.execute("""
+                SELECT organization_id FROM finance_stripe_event_inbox
+                WHERE event_id=%s
+            """, (record.event_id,)).fetchone()
+            if existing is None or existing[0] != record.organization_id:
+                raise RuntimeError("Stripe event ID tenant collision")
         return row is not None
 
 @app.post("/webhooks/stripe")
