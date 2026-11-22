@@ -76,7 +76,9 @@ def validate_run_artifact(run, artifact, *, run_id, artifact_id, head_sha):
         "repo": REPO, "run_id": run_id, "artifact_id": artifact_id,
         "head_sha": head_sha, "run_event": "issue_comment",
         "run_conclusion": "success", "artifact_name": ARTIFACT_NAME,
-        "expired": False, "artifact_sha256": digest[7:],
+        # GitHub Actions digest covers the uploaded artifact archive (ZIP),
+        # NOT the extracted patch bytes; never pass it as patch_sha256.
+        "expired": False, "archive_sha256": digest[7:],
         "created_at": created, "expires_at": expires,
     }
 
