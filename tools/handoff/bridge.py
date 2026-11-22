@@ -170,14 +170,21 @@ class Bridge:
                     # Only fixed machine audit events from the configured GitHub Actions identity.
                     for comment in comments:
                         if comment.get('user', {}).get('login') == 'github-actions[bot]':
+                            entry = comment.get('body', '')
                             match = re.fullmatch(
-                                r'core8-run ([a-f0-9]{64}) (started|review|draft|failed) '
-                                r'https://github.com/V1P3eR1/Core8-AI/actions/runs/[1-9][0-9]*'
-                                r'(?: https://github.com/V1P3eR1/Core8-AI/pull/[1-9][0-9]*)?',
-                                comment.get('body', ''))
+                                r'core8-run ([a-f0-9]{64}) (started|review|failed) '
+                                r'https://github.com/V1P3eR1/Core8-AI/actions/runs/[1-9][0-9]*',
+                                entry)
+                            draft = re.fullmatch(
+                                r'core8-run ([a-f0-9]{64}) draft '
+                                r'https://github.com/V1P3eR1/Core8-AI/actions/runs/[1-9][0-9]* '
+                                r'https://github.com/V1P3eR1/Core8-AI/pull/[1-9][0-9]*',
+                                entry)
                             if match and match[1] == sha:
                                 status = {'started': 'In progress', 'review': 'Review',
-                                          'draft': 'Review', 'failed': 'Blocked'}[match[2]]
+                                          'failed': 'Blocked'}[match[2]]
+                            elif draft and draft[1] == sha:
+                                status = 'Review'
                 self.update(page, status, issue=issue, sha=sha)
                 print(json.dumps({'task': data['task'], 'issue': issue['number'], 'status': status, 'apply': self.apply}))
             except Stop as error:
