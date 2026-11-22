@@ -15,6 +15,8 @@ from urllib.error import HTTPError, URLError
 REPO = "V1P3eR1/Core8-AI"
 BASE = "https://api.github.com/repos/" + REPO
 BAD = {"failure", "timed_out", "action_required"}
+INCOMPLETE = {"cancelled", "skipped", "stale", "startup_failure"}
+ACCEPTED = {"success", "neutral"}
 PENDING = {"queued", "in_progress", "requested", "waiting", "pending"}
 SHA = re.compile(r"^[a-f0-9]{40}$")
 MAX_PRS = 60
@@ -56,14 +58,18 @@ def classify(prs, checks_by_sha):
                 latest[name] = c
         failing = sorted(n for n, c in latest.items() if c.get("conclusion") in BAD)
         pending = sorted(n for n, c in latest.items() if c.get("status") in PENDING)
+        inconclusive = sorted(n for n, c in latest.items() if c.get("conclusion") in INCOMPLETE or
+                              (c.get("status") == "completed" and c.get("conclusion") not in BAD | INCOMPLETE | ACCEPTED))
         labels = {x.get("name") for x in pr.get("labels", []) if isinstance(x, dict)}
         # Never auto-run a code writer just because a PR has a failure.
         state = ("needs_human_triage" if failing else "checks_pending" if pending
+                 else "incomplete_check_evidence" if inconclusive
                  else "review_gate" if latest else "missing_check_evidence")
         outcomes.append({
             "pr": num, "head_sha": head, "draft": bool(pr.get("draft")),
             "state": state, "failed_checks": failing[:12],
-            "pending_count": len(pending), "check_count": len(latest),
+            "pending_count": len(pending), "inconclusive_checks": inconclusive[:12],
+            "check_count": len(latest),
             "approval": "not_granted_by_this_report",
             "priority": "p0" if "core8:priority:p0" in labels else "normal",
         })
