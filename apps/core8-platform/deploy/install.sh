@@ -22,6 +22,10 @@ docker compose version >/dev/null 2>&1 || die "docker compose plugin required"
 # Do not try to repair or overwrite modified build inputs; Git-ignored runtime
 # .env.production remains outside version control.
 if [[ -d "$ROOT/.git" ]]; then
+  # Do not trust an operator-modified local origin: ancestry checks alone are
+  # insufficient if origin/main is fetched from an unexpected repository.
+  [[ "$(git -C "$ROOT" remote get-url origin)" == "https://github.com/V1P3eR1/Core8-AI.git" ]] ||
+    die "unexpected origin URL; verify repository ownership before deploy"
   [[ -z "$(git -C "$ROOT" status --porcelain --untracked-files=normal)" ]] || die "checkout has dirty/untracked build inputs"
   # Only explicitly fetched main is trusted as a source of release ancestry.
   git -C "$ROOT" fetch --no-tags origin +refs/heads/main:refs/remotes/origin/main
