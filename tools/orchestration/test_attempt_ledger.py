@@ -71,6 +71,12 @@ class AttemptLedgerTests(unittest.TestCase):
         with self.assertRaises(InvalidLedger):
             replay(events[1:])
 
+    def test_events_do_not_allow_backwards_time(self):
+        events = add([], "attempt_started", 1, -60)
+        events = add(events, "attempt_failed", 1, -50)
+        with self.assertRaises(InvalidLedger):
+            add(events, "attempt_started", 2, -70)
+
     def test_terminal_earlier_than_start_refused(self):
         events = add([], "attempt_started", 1, -10)
         with self.assertRaises(InvalidLedger):
