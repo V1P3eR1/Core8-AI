@@ -26,3 +26,53 @@ jobs:
             echo 'Do not commit credential assignments to test fixtures' >&2
             exit 1
           fi
+
+  cross-language-contract:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - name: Read lead triage consumer at PR head
+        uses: actions/checkout@v4
+        with:
+          path: consumer
+      - name: Read pinned landing producer from draft PR 32
+        uses: actions/checkout@v4
+        with:
+          ref: 448f7ec03b208a69cb2495f69ece53d9b78edc74
+          path: producer
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Check PHP support for synthetic fixture
+        run: |
+          php -v
+          php -r 'if (!function_exists("mb_substr")) {fwrite(STDERR, "php mbstring missing\\n"); exit(1);}'
+      - name: Generate actual signed PHP lead with no outbound mail
+        env:
+          WRITE_FIXTURE: ${{ runner.temp }}/core8-lead-from-php.txt
+        run: node --test producer/apps/landing/tests/handler.test.cjs
+      - name: Verify producer signature and all contact/consent fields with Node consumer
+        env:
+          FIXTURE_PATH: ${{ runner.temp }}/core8-lead-from-php.txt
+        run: |
+          node <<'NODE'
+          const assert = require('node:assert/strict');
+          const fs = require('node:fs');
+          const I = require('./consumer/apps/lead-triage-pilot/lib/intake.cjs');
+          const raw = fs.readFileSync(process.env.FIXTURE_PATH, 'utf8');
+          const parsed = I.parseLeadEmail(raw, { secret: 'handler-test-secret-not-real' });
+          assert.equal(parsed.ok, true, parsed.error);
+          assert.equal(parsed.verified, 'verified');
+          assert.equal(parsed.lead.contact.name, 'דנה לדוגמה');
+          assert.equal(parsed.lead.contact.company, 'חברה לדוגמה');
+          assert.equal(parsed.lead.contact.email, 'dana@example.invalid');
+          assert.equal(parsed.lead.lang, 'he');
+          assert.equal(parsed.lead.consent.given, true);
+          assert.equal(parsed.lead.consent.textId, 'he-v1');
+          assert.equal(parsed.lead.status, undefined);
+          const forged = raw.replace(/sig: [a-f0-9]{64}/, 'sig: ' + '0'.repeat(64));
+          const bad = I.parseLeadEmail(forged, { secret: 'handler-test-secret-not-real' });
+          assert.equal(bad.ok, false, 'invalid HMAC must not be accepted');
+          console.log('Cross-language CORE8 LEAD v1 contract verified using synthetic data');
+          NODE
