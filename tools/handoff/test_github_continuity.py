@@ -19,8 +19,10 @@ def fake_pr(n):
 
 
 def fake_checks():
-    return {"total_count": 2, "check_runs": [
-        {"name": "unit-tests", "status": "completed", "conclusion": "success"},
+    return {"total_count": 4, "check_runs": [
+        {"name": "Handoff contract tests", "status": "completed", "conclusion": "success"},
+        {"name": "Orchestration staging offline unit tests", "status": "completed", "conclusion": "success"},
+        {"name": "release preflight (offline)", "status": "completed", "conclusion": "success"},
         {"name": "secret-scan", "status": "completed", "conclusion": "success"},
     ]}
 
@@ -48,19 +50,35 @@ class ContinuityTests(unittest.TestCase):
 
     def test_pending_checks_never_green(self):
         checks = fake_checks()
-        checks["check_runs"][0]["status"] = "in_progress"
-        checks["check_runs"][0]["conclusion"] = None
+        checks["check_runs"][1]["status"] = "in_progress"
+        checks["check_runs"][1]["conclusion"] = None
         self.assertEqual(summarize_pr(fake_pr(74), checks, 74)["check_state"], "pending")
 
     def test_failed_check_never_green(self):
         checks = fake_checks()
-        checks["check_runs"][0]["conclusion"] = "failure"
+        checks["check_runs"][1]["conclusion"] = "failure"
         self.assertEqual(summarize_pr(fake_pr(74), checks, 74)["check_state"], "needs_review")
+
+    def test_unrelated_success_cannot_replace_required_ci(self):
+        checks = {"total_count": 1, "check_runs": [
+            {"name": "unit-tests", "status": "completed", "conclusion": "success"}]}
+        self.assertEqual(
+            summarize_pr(fake_pr(74), checks, 74)["check_state"],
+            "missing_required_checks")
+
+    def test_release_requires_release_preflight(self):
+        checks = fake_checks()
+        checks["check_runs"] = [c for c in checks["check_runs"]
+                                if c["name"] != "release preflight (offline)"]
+        checks["total_count"] = len(checks["check_runs"])
+        self.assertEqual(
+            summarize_pr(fake_pr(55), checks, 55)["check_state"],
+            "missing_required_checks")
 
     def test_duplicate_check_names_fail_closed(self):
         checks = fake_checks()
         checks["check_runs"].append(copy.deepcopy(checks["check_runs"][0]))
-        checks["total_count"] = 3
+        checks["total_count"] = 5
         with self.assertRaisesRegex(SnapshotBlocked, "duplicate_check_names"):
             summarize_pr(fake_pr(74), checks, 74)
 
