@@ -95,6 +95,12 @@ The new `tools/orchestration/validate_patch.py` accepts only small UTF-8 reviewa
 
 **Security warning:** the structural validator is **not a full Git patch parser, not a sandbox and not a proof of safety**. It does not apply a patch, verify hunk counts, prevent runtime malicious changes in otherwise allowed files, run tests or authorize a draft PR. A future worker must additionally verify the actual filesystem diff after applying in a sandbox, compare changed paths to the approved task scope, conduct code/security review, and use narrowly scoped write credentials separate from the execution sandbox.
 
+### Implemented retry decision policy (draft PR #61)
+
+`tools/orchestration/retry_policy.py` adds a pure, fail-closed policy for the **next recommended engineering action**; it does not call a model or run patches. The policy validates exact task/scope digest, owner-approved current commit SHA, real CI failure state, chronological same-scope attempt history, explicit paid-execution permission, a 30-minute cooldown and a hard limit of two attempts. Green checks move to human review rather than triggering another patch. Exhausted retries or changed SHA stop for re-approval. Its decision output permanently sets `execution_authorized=false` and `may_spend=false`; even `propose_approved_patch_lane` is **only a proposal**, not approval to spend or invoke Claude.
+
+Offline cases in `tools/orchestration/test_retry_policy.py` cover missing approval, stale heads, missing/pending CI, retry exhaustion, cooldown, nonfailed attempts, mismatched history and time validation. The hourly observer currently **does not call this policy automatically** because it lacks an authenticated, durable, owner-approved task/attempt ledger. Connecting this policy to Notion/GitHub must be a separately reviewed step that proves source integrity, idempotent run claims and tamper-resistant event records. Never auto-populate `approved=true` from PR labels or issue comments.
+
 ### Safe activation checklist
 
 1. Inspect this PR diff and successful `Core8 development loop (read-only)` CI, security review, codeowners and actions-policy compatibility.
