@@ -8,6 +8,8 @@ on:
     paths:
       - 'tests/test_cloud_*.py'
       - 'tools/handoff/**'
+      - '.github/workflows/core8-sync.yml'
+      - '.github/workflows/claude-issues.yml'
       - '.github/workflows/cloud-continuity-synthetic.yml'
 
 permissions:
