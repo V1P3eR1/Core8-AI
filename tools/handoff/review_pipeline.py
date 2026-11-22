@@ -45,11 +45,20 @@ def stage_review(*, receipt, expected_record, patch_bytes, now, ledger_path,
             timeout=10, check=False, env=env)
         if head.returncode != 0 or head.stdout.decode("ascii", errors="replace").strip() != trusted_base:
             raise ReviewRejected("checkout_sha_mismatch")
+        # Do not allow a parent checkout or an unexpected subdirectory.
+        # Both can report the same HEAD while changing patch path semantics.
+        worktree = subprocess.run(
+            ["git", "-C", str(checkout), "rev-parse", "--show-toplevel"],
+            stdout=subprocess.PIPE, stderr=subprocess.DEVNULL,
+            timeout=10, check=False, env=env)
+        if (worktree.returncode != 0 or
+                Path(os.fsdecode(worktree.stdout).strip()).resolve() != checkout):
+            raise ReviewRejected("checkout_not_git_root")
         # A matching HEAD alone is insufficient: an untracked or modified
         # checkout could supply unexpected context to a reviewed patch.
         cleanliness = subprocess.run(
             ["git", "-C", str(checkout), "status", "--porcelain",
-             "--untracked-files=all"],
+             "--untracked-files=all", "--ignored"],
             stdout=subprocess.PIPE, stderr=subprocess.DEVNULL,
             timeout=10, check=False, env=env)
         if cleanliness.returncode != 0 or cleanliness.stdout:
