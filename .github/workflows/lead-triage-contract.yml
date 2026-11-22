@@ -1,0 +1,126 @@
+name: lead triage offline contract
+on:
+  pull_request:
+    paths:
+      - "apps/lead-triage-pilot/**"
+      - ".github/workflows/lead-triage-contract.yml"
+permissions:
+  contents: read
+jobs:
+  node-contract:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    defaults:
+      run:
+        working-directory: apps/lead-triage-pilot
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Offline intake, signed email, dedupe, read-only mailbox and human approval
+        run: npm test
+      - name: Reject public bearer or true customer contact credentials in fixture tests
+        run: |
+          if grep -R -n -E '^(CORE8_LEAD_SECRET|ANTHROPIC_API_KEY|MAILBOX_PASS)=' tests/; then
+            echo 'Do not commit credential assignments to test fixtures' >&2
+            exit 1
+          fi
+
+  cross-language-contract:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - name: Read lead triage consumer at PR head
+        uses: actions/checkout@v4
+        with:
+          path: consumer
+      - name: Read pinned landing producer from draft PR 32
+        uses: actions/checkout@v4
+        with:
+          ref: 448f7ec03b208a69cb2495f69ece53d9b78edc74
+          path: producer
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Check PHP support for synthetic fixture
+        run: |
+          php -v
+          php -r 'if (!function_exists("mb_substr")) {fwrite(STDERR, "php mbstring missing\\n"); exit(1);}'
+      - name: Generate actual signed PHP lead with no outbound mail
+        env:
+          WRITE_FIXTURE: ${{ runner.temp }}/core8-lead-from-php.txt
+        run: node --test producer/apps/landing/tests/handler.test.cjs
+      - name: Verify producer signature and all contact/consent fields with Node consumer
+        env:
+          FIXTURE_PATH: ${{ runner.temp }}/core8-lead-from-php.txt
+        run: |
+          node <<'NODE'
+          const assert = require('node:assert/strict');
+          const fs = require('node:fs');
+          const I = require('./consumer/apps/lead-triage-pilot/lib/intake.cjs');
+          const raw = fs.readFileSync(process.env.FIXTURE_PATH, 'utf8');
+          const parsed = I.parseLeadEmail(raw, { secret: 'handler-test-secret-not-real' });
+          assert.equal(parsed.ok, true, parsed.error);
+          assert.equal(parsed.verified, 'verified');
+          assert.equal(parsed.lead.contact.name, 'דנה לדוגמה');
+          assert.equal(parsed.lead.contact.company, 'חברה לדוגמה');
+          assert.equal(parsed.lead.contact.email, 'dana@example.invalid');
+          assert.equal(parsed.lead.lang, 'he');
+          assert.equal(parsed.lead.consent.given, true);
+          assert.equal(parsed.lead.consent.textId, 'he-v1');
+          assert.equal(parsed.lead.status, undefined);
+          const forged = raw.replace(/sig: [a-f0-9]{64}/, 'sig: ' + '0'.repeat(64));
+          const bad = I.parseLeadEmail(forged, { secret: 'handler-test-secret-not-real' });
+          assert.equal(bad.ok, false, 'invalid HMAC must not be accepted');
+          // Exercise the actual supervised intake endpoint with the PHP-generated message:
+          const { createApp } = require('./consumer/apps/lead-triage-pilot/server.cjs');
+          const { tmpDir, raw: request } = require('./consumer/apps/lead-triage-pilot/tests/helpers.cjs');
+          (async () => {
+            const app = createApp({ dataDir: tmpDir(), quiet: true, leadSecret: 'handler-test-secret-not-real' });
+            try {
+              const port = await app.listen(0);
+              const post = (body) => request(port, { method: 'POST', path: '/api/intake/email', body: { raw: body } });
+              const first = await post(raw);
+              assert.equal(first.status, 201);
+              assert.equal(first.json.lead.status, 'needs_review');
+              assert.equal(first.json.lead.contact.email, 'dana@example.invalid');
+              assert.equal(first.json.lead.consent.textId, 'he-v1');
+              const repeat = await post(raw);
+              assert.equal(repeat.status, 200);
+              assert.equal(repeat.json.duplicate, true);
+              const rejected = await post(forged);
+              assert.equal(rejected.status, 422);
+              assert.equal(app.store.leads().length, 1);
+              const report = await request(port, { path: '/api/report' });
+              assert.ok(!report.text.includes('dana@example.invalid'), 'redacted report has no contact data');
+              console.log('PHP spool -> signed Node intake -> dedupe -> human review verified (synthetic)');
+            } finally {
+              await app.close();
+            }
+          })().catch(err => { console.error(err); process.exitCode = 1; });
+
+          NODE
+
+  isolated-browser-staging:
+    # Pin to a Playwright-supported runner rather than rolling ubuntu-latest (26.04).
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: apps/lead-triage-pilot
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Install browser harness (ephemeral CI only)
+        run: npm install --no-save --package-lock=false playwright@1.56.1
+      - name: Install isolated Chromium and system dependencies
+        run: npx playwright install --with-deps chromium
+      - name: Exercise local-only UI, drafts-only approval and sign-in flows
+        env:
+          EVIDENCE_DIR: ${{ runner.temp }}/core8-synthetic-browser-evidence
+          CI_NO_SANDBOX: "1"
+        run: npm run test:browser

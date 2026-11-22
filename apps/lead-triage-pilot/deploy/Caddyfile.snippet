@@ -1,0 +1,7 @@
+# Add this site block to the Caddy that already owns ports 80/443 on the VPS,
+# and attach that Caddy container to the external network "core8-edge".
+# Caddy obtains and renews the certificate by itself.
+agent.core8-ai.io {
+	encode gzip
+	reverse_proxy lead-agent:4180
+}
