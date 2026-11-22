@@ -27,9 +27,11 @@ class StageRejected(ValueError):
 
 
 def git(root, *args, data=None):
-    env = {k: v for k, v in os.environ.items()
-           if not k.startswith("GIT_") and k not in ("SSH_ASKPASS", "GIT_ASKPASS")}
-    env.update(GIT_CONFIG_NOSYSTEM="1", GIT_TERMINAL_PROMPT="0", LC_ALL="C")
+    # Never forward the caller's arbitrary environment into Git subprocesses.
+    # In particular, this excludes API keys, credentials and injection variables.
+    env = {"PATH": os.defpath, "HOME": "/nonexistent", "LC_ALL": "C",
+           "GIT_CONFIG_NOSYSTEM": "1", "GIT_CONFIG_GLOBAL": "/dev/null",
+           "GIT_TERMINAL_PROMPT": "0"}
     cmd = ["git", "-c", "core.hooksPath=/dev/null", "-c", "protocol.allow=never",
            "-C", str(root), *args]
     try:
