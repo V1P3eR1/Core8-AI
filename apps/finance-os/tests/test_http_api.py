@@ -27,7 +27,7 @@ class TestFinanceWebhookHTTP(unittest.TestCase):
             "ENABLE_STRIPE_WRITES": "false",
             "STRIPE_EXPECT_LIVEMODE": "false",
             "STRIPE_WEBHOOK_SECRET": "whsec_for_unit_tests_only",
-            "FINANCE_WEBHOOK_ACCOUNT_ID": "acct_ci_test_only",
+            "FINANCE_WEBHOOK_ACCOUNT_ID": "acct_CITest123",
             "FINANCE_WEBHOOK_TENANT_ID": "core8",
         })
         self.environment.start()
