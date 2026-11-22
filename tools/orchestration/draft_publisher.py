@@ -120,14 +120,47 @@ def publish(api, *, repo, base_sha, bundle_raw, bundle_hash, scope_sha, artifact
     query = parse.urlencode({"head": head, "base": "main", "state": "open"})
     existing = api.call("GET", "pulls?" + query)
     if existing:
-        if (len(existing) == 1 and existing[0].get("draft") is True
-                and marker in (existing[0].get("body") or "")
-                and existing[0].get("head", {}).get("ref") == branch
-                and existing[0].get("head", {}).get("repo", {}).get("full_name") == repo
-                and existing[0].get("base", {}).get("ref") == "main"
-                and existing[0].get("base", {}).get("sha") == base_sha):
-            return {"status": "EXISTING_DRAFT", "url": existing[0]["html_url"], "branch": branch}
-        raise PublishBlocked("conflicting_existing_pr")
+        if len(existing) != 1:
+            raise PublishBlocked("conflicting_existing_pr")
+        pr = existing[0]
+        pr_head = pr.get("head") or {}
+        pr_head_repo = pr_head.get("repo") or {}
+        pr_base = pr.get("base") or {}
+        if not (pr.get("draft") is True
+                and marker in (pr.get("body") or "")
+                and pr_head.get("ref") == branch
+                and pr_head_repo.get("full_name") == repo
+                and pr_base.get("ref") == "main"
+                and pr_base.get("sha") == base_sha):
+            raise PublishBlocked("conflicting_existing_pr")
+        # A matching title/body is not evidence that a previously created draft
+        # still contains the exact approved files. Verify remote Git objects.
+        remote_ref = api.call("GET", "git/ref/heads/" + parse.quote(branch, safe=""))
+        remote_sha = (remote_ref.get("object") or {}).get("sha")
+        if not SHA40.fullmatch(remote_sha or "") or pr_head.get("sha") != remote_sha:
+            raise PublishBlocked("existing_draft_head_mismatch")
+        remote_commit = api.call("GET", "git/commits/" + remote_sha)
+        parents = remote_commit.get("parents") or []
+        if len(parents) != 1 or parents[0].get("sha") != base_sha:
+            raise PublishBlocked("existing_draft_parent_mismatch")
+        comparison = api.call("GET", "compare/" + base_sha + "..." + remote_sha)
+        changes = comparison.get("files") or []
+        if comparison.get("total_commits") != 1 or len(changes) != len(files):
+            raise PublishBlocked("existing_draft_changes_mismatch")
+        expected_blobs = {
+            path: hashlib.sha1(
+                b"blob " + str(len(base64.b64decode(encoded))).encode() +
+                b"\\x00" + base64.b64decode(encoded)
+            ).hexdigest()
+            for path, encoded in files
+        }
+        for change in changes:
+            name = change.get("filename")
+            if (name not in expected_blobs
+                    or change.get("status") not in ("added", "modified")
+                    or change.get("sha") != expected_blobs[name]):
+                raise PublishBlocked("existing_draft_changes_mismatch")
+        return {"status": "EXISTING_DRAFT", "url": pr["html_url"], "branch": branch}
     ref_path = "git/ref/heads/" + parse.quote(branch, safe="")
     try:
         api.call("GET", ref_path)
