@@ -8,6 +8,7 @@ BASE = "a" * 40
 SCOPE = "b" * 64
 ARTIFACT = "c" * 64
 REPO = "owner/repo"
+EXISTING_HEAD = "d" * 40
 
 
 def sha(data):
@@ -42,14 +43,26 @@ class FakeApi:
             idem = sha((BASE + ":" + ARTIFACT + ":" + SCOPE).encode())
             return [{"draft": True, "html_url": "https://github.com/owner/repo/pull/9",
                      "body": "<!-- core8-review:" + idem + " -->",
-                     "head": {"ref": "core8-review/" + idem[:24], "repo": {"full_name": REPO}},
+                     "head": {"ref": "core8-review/" + idem[:24], "sha": EXISTING_HEAD,
+                              "repo": {"full_name": REPO}},
                      "base": {"ref": "main", "sha": BASE}}]
         if path == "git/ref/heads/main":
             return {"object": {"sha": self.main_sha}}
         if path.startswith("git/ref/heads/"):
+            if self.existing:
+                return {"object": {"sha": EXISTING_HEAD}}
             if self.blocked_ref:
                 return {"ref": "existing"}
             raise HttpFailed(404)
+        if path == "git/commits/" + EXISTING_HEAD:
+            return {"parents": [{"sha": BASE}], "tree": {"sha": "review-tree"}}
+        if path.startswith("compare/"):
+            raw, _ = bundle()
+            entry = json.loads(raw)["files"][0]
+            content = base64.b64decode(entry["content_b64"])
+            blob_id = hashlib.sha1(b"blob " + str(len(content)).encode() + b"\x00" + content).hexdigest()
+            return {"total_commits": 1, "files": [
+                {"filename": entry["path"], "status": "added", "sha": blob_id}]}
         if path.startswith("git/commits/"):
             return {"tree": {"sha": "base-tree"}}
         if path == "git/blobs":
@@ -161,6 +174,63 @@ class DraftPublisherTests(unittest.TestCase):
 
         api.call = stale
         with self.assertRaisesRegex(PublishBlocked, "conflicting_existing_pr"):
+            call_publish(api)
+
+    def test_existing_draft_tampered_blob_is_blocked(self):
+        api = FakeApi(existing=True)
+        original = api.call
+
+        def tampered(method, path, payload=None):
+            result = original(method, path, payload)
+            if path.startswith("compare/"):
+                result["files"][0]["sha"] = "0" * 40
+            return result
+
+        api.call = tampered
+        with self.assertRaisesRegex(PublishBlocked, "existing_draft_changes_mismatch"):
+            call_publish(api)
+
+    def test_existing_draft_unexpected_extra_file_is_blocked(self):
+        api = FakeApi(existing=True)
+        original = api.call
+
+        def tampered(method, path, payload=None):
+            result = original(method, path, payload)
+            if path.startswith("compare/"):
+                result["files"].append({"filename": "docs/extra.md",
+                                        "status": "added", "sha": "0" * 40})
+            return result
+
+        api.call = tampered
+        with self.assertRaisesRegex(PublishBlocked, "existing_draft_changes_mismatch"):
+            call_publish(api)
+
+    def test_existing_draft_missing_parent_is_blocked(self):
+        api = FakeApi(existing=True)
+        original = api.call
+
+        def tampered(method, path, payload=None):
+            result = original(method, path, payload)
+            if path == "git/commits/" + EXISTING_HEAD:
+                result["parents"] = []
+            return result
+
+        api.call = tampered
+        with self.assertRaisesRegex(PublishBlocked, "existing_draft_parent_mismatch"):
+            call_publish(api)
+
+    def test_existing_draft_branch_ref_mismatch_is_blocked(self):
+        api = FakeApi(existing=True)
+        original = api.call
+
+        def tampered(method, path, payload=None):
+            result = original(method, path, payload)
+            if path.startswith("git/ref/heads/") and path != "git/ref/heads/main":
+                result["object"]["sha"] = "e" * 40
+            return result
+
+        api.call = tampered
+        with self.assertRaisesRegex(PublishBlocked, "existing_draft_head_mismatch"):
             call_publish(api)
 
     def test_orphan_branch_fails_closed(self):
