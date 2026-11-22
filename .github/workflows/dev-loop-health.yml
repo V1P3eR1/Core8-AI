@@ -26,7 +26,11 @@ jobs:
       - name: Deterministic orchestration contract
         run: python -m unittest discover -s tools/orchestration -p 'test_*.py' -v
   observe:
-    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
+    # Explicit budget/operations switch; never begin hourly runs just by merging.
+    if: >-
+      vars.CORE8_DEV_LOOP_ENABLED == 'true' &&
+      github.event_name != 'pull_request' &&
+      github.ref == 'refs/heads/main'
     runs-on: ubuntu-24.04
     timeout-minutes: 15
     permissions:
