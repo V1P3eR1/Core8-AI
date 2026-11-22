@@ -101,6 +101,17 @@ class PipelineTests(unittest.TestCase):
             self.run_pipeline()
         self.assertFalse(self.ledger_path.exists())
 
+    def test_repository_fsmonitor_helper_not_executed(self):
+        helper = self.base / "local-fsmonitor.sh"
+        marker = self.base / "fsmonitor-ran"
+        helper.write_text("#!/bin/sh\ntouch '" + str(marker) + "'\nexit 0\n")
+        helper.chmod(0o755)
+        subprocess.run(["git", "-C", str(self.checkout), "config",
+                        "core.fsmonitor", str(helper)], check=True)
+        result = self.run_pipeline()
+        self.assertEqual(result["status"], "RESERVED_FOR_REVIEW")
+        self.assertFalse(marker.exists())
+
     def test_subdirectory_is_not_a_checkout_root(self):
         directory = self.checkout / "docs"
         with self.assertRaisesRegex(ReviewRejected, "checkout_not_git_root"):
