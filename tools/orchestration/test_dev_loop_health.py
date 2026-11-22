@@ -40,6 +40,21 @@ class PlannerTests(unittest.TestCase):
         rows = classify([pr(4, A)], {A: [check("tests", None)]})
         self.assertEqual(rows[0]["state"], "checks_pending")
 
+    def test_cancelled_or_skipped_checks_are_not_green(self):
+        for conclusion in ("cancelled", "skipped", "stale", "startup_failure"):
+            rows = classify([pr(7, A)], {A: [check("test-suite", conclusion)]})
+            self.assertEqual(rows[0]["state"], "incomplete_check_evidence", conclusion)
+            self.assertEqual(rows[0]["inconclusive_checks"], ["test-suite"])
+
+    def test_unknown_completion_cannot_be_promoted_to_review_gate(self):
+        rows = classify([pr(7, A)], {A: [check("test-suite", "unexpected_status")]})
+        self.assertEqual(rows[0]["state"], "incomplete_check_evidence")
+
+    def test_failed_check_stays_priority_over_cancelled_check(self):
+        rows = classify([pr(7, A)], {A: [check("build", "failure"),
+                                        check("browser", "cancelled")]})
+        self.assertEqual(rows[0]["state"], "needs_human_triage")
+
     def test_no_evidence_is_not_green(self):
         self.assertEqual(classify([pr(7, A)], {})[0]["state"], "missing_check_evidence")
 
