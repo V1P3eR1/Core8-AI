@@ -19,3 +19,7 @@ What it does: validates independently supplied task/run/artifact details, valida
 - PR remains draft; no activation, merge, paid Claude run, external publishing, or production changes.
 
 Track in Issue #62, review in PRs #65, #68, #72.
+
+## GitHub metadata provenance (read-only proposal)
+
+`tools/handoff/github_provenance.py` independently fetches workflow-run and artifact **metadata only** over authenticated GitHub GET requests and rejects wrong repo/workflow/commit/run identity. It intentionally returns `archive_sha256` for the uploaded GitHub Actions artifact ZIP. **This is not the extracted patch digest**. A future downloader must validate the archive bytes against `archive_sha256`, bound extraction size and paths, then derive the separate extracted patch SHA-256 and bind it to the human-approved task/run before allowing patch validation. The provider metadata alone does not prove Notion approval or user identity; those remain independently gated. This code is not an active job and currently has no live Notion task queue available for approval verification.
