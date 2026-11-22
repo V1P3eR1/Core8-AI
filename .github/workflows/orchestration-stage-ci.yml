@@ -1,0 +1,28 @@
+name: Orchestration staging offline unit tests
+on:
+  pull_request:
+    paths:
+      - 'tools/orchestration/**'
+      - 'tools/handoff/**'
+      - '.github/workflows/orchestration-stage-ci.yml'
+permissions:
+  contents: read
+jobs:
+  offline-stage:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Offline tests with disposable local Git fixtures
+        run: python -m unittest discover -s tools/orchestration -p 'test_*.py' -v
+      - name: Existing human-gated handoff contracts
+        run: python -m unittest discover -s tools/handoff -p 'test_*.py' -v
+      - name: Compile stage scripts
+        run: python -m py_compile tools/handoff/patch_gate.py tools/orchestration/stage_patch.py
