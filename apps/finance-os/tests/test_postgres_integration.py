@@ -76,13 +76,13 @@ class TestPostgresEventFlow(unittest.TestCase):
         with psycopg.connect(os.environ["DATABASE_URL"]) as db:
             db.execute("""
                 CREATE OR REPLACE FUNCTION finance_ci_reject_activity()
-                RETURNS trigger LANGUAGE plpgsql AS $
+                RETURNS trigger LANGUAGE plpgsql AS $finance_ci$
                 BEGIN
                   IF NEW.source_object_id LIKE 'ci_fail_%' THEN
                     RAISE EXCEPTION 'injected retry test failure';
                   END IF;
                   RETURN NEW;
-                END $;
+                END $finance_ci$;
             """)
             db.execute("""
                 CREATE TRIGGER finance_ci_reject_activity
