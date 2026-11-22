@@ -1,6 +1,8 @@
 import copy
+import os
 import unittest
-from bridge import Bridge, Stop, body, digest, eligible, payload, PREFIX
+from unittest.mock import patch
+from bridge import Bridge, Stop, audit, body, digest, eligible, payload, PREFIX
 
 SOURCE = '11111111-1111-4111-8111-111111111111'
 TASK = '22222222-2222-4222-8222-222222222222'
@@ -151,6 +153,39 @@ class ContractTests(unittest.TestCase):
         self.b.sync()
         self.assertEqual(self.f.writes[-1][2]['properties']['Status']['select']['name'], 'Review')
 
+    def test_authenticated_machine_draft_status_mirrored(self):
+        self.export()
+        sha = digest(payload(self.f.page))
+        self.f.comments = [{
+            'user': {'login': 'github-actions[bot]'},
+            'body': f'core8-run {sha} draft '
+                    'https://github.com/V1P3eR1/Core8-AI/actions/runs/123 '
+                    'https://github.com/V1P3eR1/Core8-AI/pull/90'}]
+        self.b.sync()
+        self.assertEqual(
+            self.f.writes[-1][2]['properties']['Status']['select']['name'], 'Review')
+
+    def test_draft_without_pr_link_not_mirrored(self):
+        self.export()
+        sha = digest(payload(self.f.page))
+        self.f.comments = [{'user': {'login': 'github-actions[bot]'},
+                            'body': f'core8-run {sha} draft '
+                                    'https://github.com/V1P3eR1/Core8-AI/actions/runs/123'}]
+        self.b.sync()
+        self.assertEqual(
+            self.f.writes[-1][2]['properties']['Status']['select']['name'], 'Queued')
+
+    def test_non_draft_status_with_pr_link_rejected(self):
+        self.export()
+        sha = digest(payload(self.f.page))
+        self.f.comments = [{'user': {'login': 'github-actions[bot]'},
+                            'body': f'core8-run {sha} review '
+                                    'https://github.com/V1P3eR1/Core8-AI/actions/runs/123 '
+                                    'https://github.com/V1P3eR1/Core8-AI/pull/90'}]
+        self.b.sync()
+        self.assertEqual(
+            self.f.writes[-1][2]['properties']['Status']['select']['name'], 'Queued')
+
     def test_approved_gate(self):
         number, data = self.b.gate(self.event(), '123')
         self.assertEqual(number, 1)
@@ -219,6 +254,79 @@ class ContractTests(unittest.TestCase):
         event['comment']['body'] += '\nextra instruction'
         with self.assertRaisesRegex(Stop, 'invalid_approval_command'):
             self.b.gate(event, '123')
+
+
+class AuditDraftTests(unittest.TestCase):
+    class Github:
+        def __init__(self):
+            self.calls = []
+            self.item = {
+                'state': 'open', 'draft': True,
+                'html_url': 'https://github.com/V1P3eR1/Core8-AI/pull/90',
+                'head': {'ref': 'core8-review/' + 'a' * 24,
+                         'repo': {'full_name': 'V1P3eR1/Core8-AI'}},
+                'base': {'ref': 'main'},
+                'body': 'Scope SHA256: ' + 'b' * 64,
+            }
+
+        def call(self, method, path, data=None):
+            self.calls.append((method, path, data))
+            if method == 'GET' and path.endswith('/pulls/90'):
+                return copy.deepcopy(self.item)
+            if method == 'POST' and path.endswith('/issues/20/comments'):
+                return {'id': 300}
+            raise AssertionError('unexpected_api_operation')
+
+    def setUp(self):
+        self.gh = self.Github()
+        self.env = patch.dict(os.environ, {'GITHUB_RUN_ID': '120'})
+        self.env.start()
+        self.addCleanup(self.env.stop)
+
+    def test_draft_report_validates_and_posts_canonical_event(self):
+        audit(self.gh, 20, 'b' * 64, 'draft', 90)
+        self.assertEqual(len(self.gh.calls), 2)
+        self.assertEqual(self.gh.calls[-1][0], 'POST')
+        body = self.gh.calls[-1][2]['body']
+        self.assertEqual(body, 'core8-run ' + 'b' * 64 +
+                         ' draft https://github.com/V1P3eR1/Core8-AI/actions/runs/120 '
+                         'https://github.com/V1P3eR1/Core8-AI/pull/90')
+
+    def test_unverified_scope_cannot_report_success(self):
+        self.gh.item['body'] = 'Scope SHA256: ' + 'c' * 64
+        with self.assertRaisesRegex(Stop, 'unverified_draft_pr'):
+            audit(self.gh, 20, 'b' * 64, 'draft', 90)
+        self.assertFalse(any(c[0] == 'POST' for c in self.gh.calls))
+
+    def test_non_draft_pr_cannot_report(self):
+        self.gh.item['draft'] = False
+        with self.assertRaisesRegex(Stop, 'unverified_draft_pr'):
+            audit(self.gh, 20, 'b' * 64, 'draft', 90)
+        self.assertFalse(any(c[0] == 'POST' for c in self.gh.calls))
+
+    def test_foreign_repository_cannot_report(self):
+        self.gh.item['head']['repo']['full_name'] = 'other/repo'
+        with self.assertRaisesRegex(Stop, 'unverified_draft_pr'):
+            audit(self.gh, 20, 'b' * 64, 'draft', 90)
+
+    def test_wrong_branch_cannot_report(self):
+        self.gh.item['head']['ref'] = 'unreviewed-branch'
+        with self.assertRaisesRegex(Stop, 'unverified_draft_pr'):
+            audit(self.gh, 20, 'b' * 64, 'draft', 90)
+
+    def test_draft_requires_number(self):
+        with self.assertRaisesRegex(Stop, 'invalid_draft_pr_number'):
+            audit(self.gh, 20, 'b' * 64, 'draft')
+
+    def test_non_draft_event_refuses_pr_number(self):
+        with self.assertRaisesRegex(Stop, 'unexpected_draft_pr_number'):
+            audit(self.gh, 20, 'b' * 64, 'review', 90)
+
+    def test_invalid_run_identity_blocks_without_api(self):
+        os.environ['GITHUB_RUN_ID'] = 'invalid'
+        with self.assertRaisesRegex(Stop, 'invalid_audit_event'):
+            audit(self.gh, 20, 'b' * 64, 'draft', 90)
+        self.assertEqual(self.gh.calls, [])
 
 
 if __name__ == '__main__':
