@@ -13,8 +13,8 @@ from pathlib import PurePosixPath
 MAX_PATCH_BYTES = 256 * 1024
 MAX_FILES = 30
 ALLOWED_ROOTS = ("apps/", "docs/")
-BLOCKED_PARTS = {".git", ".github", "node_modules", "__pycache__", ".env", "secrets", "credentials"}
-BLOCKED_SUFFIXES = (".pem", ".key", ".p12", ".pfx", ".sqlite", ".db")
+BLOCKED_PARTS = {".git", ".github", ".claude", ".next", ".venv", "node_modules", "__pycache__", ".env", "secrets", "credentials"}
+BLOCKED_SUFFIXES = (".pem", ".key", ".p12", ".pfx", ".sqlite", ".sqlite3", ".db", ".zip", ".tar", ".exe", ".dll", ".so", ".bat", ".ps1", ".sh")
 SECRET_PATTERNS = (
     re.compile(rb"-----BEGIN [A-Z ]*PRIVATE KEY-----"),
     re.compile(rb"(?:sk-ant-|sk-proj-|ghp_|github_pat_|ntn_)[A-Za-z0-9_-]{12,}"),
