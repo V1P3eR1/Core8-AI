@@ -38,6 +38,49 @@ test('log survives a restart and keeps the same head hash', () => {
   assert.equal(again.nextLeadId(), 'L-0002');
 });
 
+test('synthetic backup snapshot restores audit hash and deduplication after restart', () => {
+  const source = tmpDir();
+  const restoredDir = tmpDir();
+  const original = openStore(source);
+  const submissionId = 'synthetic-backup-2026';
+  original.append('lead_added', 'L-0001', {
+    text: 'Fictional lead for restore testing', channel: 'website_form',
+    source: 'form_email', submissionId, verified: 'verified',
+    consent: { given: true, textId: 'he-v1' },
+    contact: { name: 'Fictional', email: 'fictional@example.invalid' }
+  });
+  original.append('triage_completed', 'L-0001', {
+    engine: 'rules', category: 'demo_request', urgency: 'normal',
+    language: 'en', draft: 'Synthetic draft only', flags: []
+  });
+  const head = original.verify().head;
+  const snapshot = fs.readFileSync(original.file);
+  // Standalone data-folder fixture: simulate an offline backup and restore,
+  // never mounting or reading the real pilot's production data.
+  fs.writeFileSync(path.join(restoredDir, 'events.jsonl'), snapshot, { mode: 0o600 });
+  const restored = openStore(restoredDir);
+  assert.equal(restored.verify().head, head);
+  assert.equal(restored.hasSubmission(submissionId), true,
+    'replayed lead must not be imported twice after restoration');
+  assert.equal(restored.leads()[0].status, 'needs_review');
+  assert.equal(restored.nextLeadId(), 'L-0002');
+  assert.equal(restored.leads()[0].contact.email, 'fictional@example.invalid');
+  assert.notEqual(restored.file, original.file);
+  restored.append('decision_recorded', 'L-0001', {
+    action: 'approve', finalText: 'Synthetic approval only', reason: null
+  });
+  assert.equal(restored.verify().ok, true);
+  assert.equal(original.verify().head, head, 'restore must not mutate original data');
+});
+
+test('tampered synthetic backup is rejected before any new lead writes', () => {
+  const original = seeded(tmpDir());
+  const restoredDir = tmpDir();
+  const content = fs.readFileSync(original.file, 'utf8').replace('demo_request', 'pricing');
+  fs.writeFileSync(path.join(restoredDir, 'events.jsonl'), content, { mode: 0o600 });
+  assert.throws(() => openStore(restoredDir), /failed integrity check/);
+});
+
 test('editing, deleting or reordering a line is detected and blocks further writes', () => {
   for (const tamper of [
     (lines) => { lines[1] = lines[1].replace('demo_request', 'pricing'); return lines; },
