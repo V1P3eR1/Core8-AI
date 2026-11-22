@@ -35,6 +35,20 @@ class CloudWorkflowGuards(unittest.TestCase):
         self.assertIn('python tools/handoff/bridge.py sync\n', self.sync)
         self.assertIn('APPLY: ${{ github.event_name == \'schedule\' || inputs.apply }}', self.sync)
 
+    def test_scheduled_sync_is_explicitly_write_capable(self):
+        # Safety regression: turning on the flag is NOT a dry-run-only operation.
+        self.assertIn("schedule:", self.sync)
+        self.assertIn("cron: '*/15 * * * *'", self.sync)
+        self.assertIn("github.event_name == 'schedule' || inputs.apply", self.sync)
+        self.assertIn('if [ "$APPLY" = "true" ]; then', self.sync)
+
+    def test_bridge_rejects_redirects_and_rechecks_export_approval(self):
+        self.assertIn("class NoRedirect(HTTPRedirectHandler)", self.bridge)
+        self.assertIn("def redirect_request(self, *args, **kwargs):", self.bridge)
+        self.assertIn("return None", self.bridge)
+        self.assertIn("page = self.notion.call('GET', f'/pages/{original[\"id\"]}')", self.bridge)
+        self.assertIn("if not eligible(page):", self.bridge)
+
     def test_paid_claude_gate_and_isolation(self):
         self.assertIn("vars.CORE8_CLAUDE_ENABLED == 'true'", self.claude)
         self.assertIn("environment: core8-claude", self.claude)
