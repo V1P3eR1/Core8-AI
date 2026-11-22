@@ -5,7 +5,7 @@
 ## Source of truth and safety
 
 - GitHub: code, issues, PRs, CI evidence and immutable release identifiers. Never use a floating feature branch as a production release (#48).
-- Notion: business task queue, decisions and synchronized status via the **existing** #15 approval-gated handoff; do not create a second task bridge. Notion connector access was unavailable during this review; verify its task queue before enabling sync.
+- Notion: business task queue, decisions and synchronized status via the **existing** #15 approval-gated handoff; do not create a second task bridge. Notion connector was reverified on 2026-11-22 using the explicitly selected personal linked account: queue schema and eight rows were readable. This does **not** verify GitHub Actions' separate Notion credential or live write permissions.
 - Obsidian: private knowledge vault; encrypted selective synchronization only, never copy the whole vault into this public repository.
 - Google Drive/private storage: encrypted, access-controlled backups with restore drills; do not replicate secrets or customer databases into public artifacts.
 - LEV personal brand and Core8-AI commercial brand: distinct accounts, assets, permissions, content calendars and lead data.
@@ -22,7 +22,7 @@
 | CRM and lead intake | #14 / #31 / #32 | Staging with synthetic data | Tenant-scoped DB and consent records | No live leads or outbound messages without approval |
 | Customer demos | #24 / #26 | Static hosted preview when approved | Synthetic fixtures only | Demo labels; no live third-party integration |
 | Obsidian private vault | User preference, local paths not inspected | Encrypted private sync | Vault revisions | Owner selects scope/provider; never public Git |
-| Notion task queue | #15 docs; connector failed at review | Existing hosted Notion | Task approvals and state | Reconnect correct account; validate sync idempotency |
+| Notion task queue | Live personal connector read verified 2026-11-22; 8 rows; #17/#20 mapping | Existing hosted Notion | Task approvals and state | Reconnect correct account; validate sync idempotency |
 | Backup and monitoring | No verified deployment/runtime inventory in this review | Private encrypted backups, uptime checks | Snapshots, logs, alert routing | Owner chooses provider/retention; test restoration |
 
 ## Migration gates and evidence
@@ -35,11 +35,11 @@
 
 ## First acceptance checklist
 
-- [ ] Notion queue and Claude ↔ ChatGPT synchronization page reviewed with working access
-- [ ] No duplicate bridge or issue created
+- [x] Notion Integration task queue schema and rows read with working personal account; synchronization page title located (full page content review still pending)
+- [x] No duplicate bridge or issue created during this audit; existing bridge reused
 - [ ] Branch protection and workflow permissions independently checked
 - [ ] Harmless hosted run produces a reviewable artifact and link
-- [ ] CI validates proposed PR and a different human approves it
+- [x] Synthetic contract CI and secret-scan passed on commit `a894ae0` (Actions runs 45015660709 and 45015660643); independent human review remains outstanding
 - [ ] No production or third-party side effects
 - [ ] Backup restore tested with synthetic data
 - [ ] Laptop and desktop can be offline without breaking the *approved* hosted test
@@ -49,3 +49,12 @@
 No activation of paid Claude runs, GitHub Actions with elevated permissions, credential changes, deployment, merge, DNS, publishing, customer-data transfer or production operations. Each requires its own approval and verified prerequisites.
 
 References: #11, #15, #24, #38, #47, #48, `docs/HANDOFF.md`, `docs/LAUNCH_READINESS.md`.
+
+## Read-only live reconciliation (2026-11-22)
+
+- The existing Notion Integration task queue schema was fetched through the personal connector; eight rows were read. This is direct provider read evidence, **not** a newly executed sync.
+- Notion #17 mapping: `Closed - unverified`; GitHub issue #17 independently confirmed closed. Notion #20 mapping: `Review`; GitHub issue #20 independently confirmed open, with exact-scope digest embedded. A Review state is **not** proof of accepted/tested code.
+- Last sync shown by Notion for both: `2026-11-22 08:51 UTC`. No proof yet that the schedule is still running, nor that GitHub Actions can reach Notion now.
+- Both cloud CI jobs on commit `a894ae0` passed: [secret-scan #173](https://github.com/V1P3eR1/Core8-AI/actions/runs/45015660643) and [synthetic-contract #3](https://github.com/V1P3eR1/Core8-AI/actions/runs/45015660709).
+- Business Notion connection search returned zero Core8 matches, not an authentication error; business workspace access to this specific queue remains unproven.
+- **Next non-paid gate:** review sync workflow's actual deployed configuration and a dry-run run log. No workflow execution or secrets are needed to document existing evidence. Actual Notion write round-trip requires separately scoped operational authorization and environment access.
