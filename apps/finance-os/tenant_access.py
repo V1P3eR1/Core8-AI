@@ -50,6 +50,8 @@ def require_finance_permission(principal: VerifiedFinancePrincipal, *,
         raise FinanceAccessDenied("Finance access denied")
     if type(principal.enabled) is not bool or not principal.enabled:
         raise FinanceAccessDenied("Finance access denied")
+    if not isinstance(action, str) or not isinstance(principal.role, str):
+        raise FinanceAccessDenied("Finance access denied")
     if action not in ACTIONS or action not in ROLE_ACTIONS.get(principal.role, ()):
         raise FinanceAccessDenied("Finance access denied")
     if principal.tenant_id != tenant_id:
