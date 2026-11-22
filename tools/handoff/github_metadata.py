@@ -22,6 +22,13 @@ class MetadataRejected(ValueError):
     pass
 
 
+class _NoRedirect(request.HTTPRedirectHandler):
+    """Do not follow redirects while an API bearer token is attached."""
+
+    def redirect_request(self, req, fp, code, msg, headers, newurl):
+        raise MetadataRejected("github_redirect_refused")
+
+
 def _timestamp(value):
     if not isinstance(value, str) or not value.endswith("Z"):
         raise MetadataRejected("invalid_timestamp")
@@ -43,7 +50,7 @@ def github_readonly_get(endpoint, token):
         "X-GitHub-Api-Version": "2022-11-28",
     }, method="GET")
     try:
-        with request.urlopen(req, timeout=12) as response:
+        with request.build_opener(_NoRedirect).open(req, timeout=12) as response:
             if response.geturl() != url:
                 raise MetadataRejected("unexpected_api_redirect")
             raw = response.read(MAX_JSON_BYTES + 1)
