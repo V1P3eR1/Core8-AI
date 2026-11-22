@@ -123,10 +123,10 @@ class ReleasePreflightTests(unittest.TestCase):
         marker = base / "docker_mutation"
         docker = fakebin / "docker"
         docker.write_text(
-            "#!/bin/sh\\n"
-            "if [ \\"$1\\" = \\"compose\\" ] && [ \\"$2\\" = \\"version\\" ]; then exit 0; fi\\n"
-            "touch \\"$FAKE_DOCKER_MUTATION_MARKER\\"\\n"
-            "exit 99\\n"
+            '#!/bin/sh\n'
+            'if [ "$1" = "compose" ] && [ "$2" = "version" ]; then exit 0; fi\n'
+            'touch "$FAKE_DOCKER_MUTATION_MARKER"\n'
+            'exit 99\n'
         )
         docker.chmod(0o755)
         before = git(self.checkout, "rev-parse", "HEAD")
