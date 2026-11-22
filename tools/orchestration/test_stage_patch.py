@@ -77,7 +77,7 @@ class StagePatchTests(unittest.TestCase):
 
     def test_reject_symlink(self):
         patch = self.patch().replace(b"new file mode 100644", b"new file mode 120000")
-        with self.assertRaisesRegex(StageRejected, "patch_forbidden_file_mode"):
+        with self.assertRaisesRegex(StageRejected, "patch_nonregular_mode"):
             self.apply(patch)
 
     def test_reject_secret(self):
@@ -86,7 +86,7 @@ class StagePatchTests(unittest.TestCase):
 
     def test_reject_bad_hunk(self):
         patch = self.patch().replace(b"@@ -0,0 +1 @@", b"@@ -0,1 +1 @@")
-        with self.assertRaisesRegex(StageRejected, "git_apply_failed"):
+        with self.assertRaisesRegex(StageRejected, "patch_truncated_hunk"):
             self.apply(patch)
 
     def test_reject_overwrite(self):
