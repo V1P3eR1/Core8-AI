@@ -168,6 +168,24 @@ test('mailbox configuration without a signing key is refused at startup', () => 
   }), /CORE8_LEAD_SECRET/);
 });
 
+test('public mailbox rejects plaintext IMAP, but local synthetic IMAP remains testable', () => {
+  const { hashPassword } = require('../lib/auth.cjs');
+  const mailbox = { host: '127.0.0.1', port: 143,
+    user: 'synthetic@example.invalid', pass: 'fake-pass-only', useTls: false };
+  assert.throws(() => createApp({
+    dataDir: tmpDir(), quiet: true, leadSecret: SECRET,
+    auth: { publicHost: 'agent.example.invalid', passwordHash: hashPassword('synthetic passphrase only') },
+    mailbox
+  }), /requires TLS/);
+  assert.throws(() => createApp({
+    dataDir: tmpDir(), quiet: true, leadSecret: SECRET, bindHost: '0.0.0.0',
+    auth: { publicHost: 'agent.example.invalid', passwordHash: hashPassword('synthetic passphrase only') },
+    mailbox
+  }), /requires TLS/);
+  const local = createApp({ dataDir: tmpDir(), quiet: true, leadSecret: SECRET, mailbox });
+  assert.equal(local.config.mailbox.enabled, true);
+});
+
 test('fixture produced by the PHP form handler parses and verifies', () => {
   const file = path.join(__dirname, 'fixtures', 'php-lead-email.txt');
   const r = I.parseLeadEmail(fs.readFileSync(file, 'utf8'), { secret: 'handler-test-secret-not-real' });
