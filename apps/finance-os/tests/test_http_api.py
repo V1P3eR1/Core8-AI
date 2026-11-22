@@ -43,6 +43,19 @@ class TestFinanceWebhookHTTP(unittest.TestCase):
                            "created":1795340000,"data":{"object":{"id":"in_1"}}}).encode()
     def test_unauthenticated_finance_denied(self):
         self.assertEqual(self.client.get("/finance/overview").status_code,503)
+    def test_finance_endpoint_denies_untrusted_tenant_and_role_headers(self):
+        for headers in (
+            {"X-Tenant-ID": "tenant_alpha", "X-Role": "operator"},
+            {"Authorization": "Bearer fake_unsigned_token",
+             "X-Tenant-ID": "tenant_alpha", "X-Role": "operator"},
+            {"X-User-ID": "user_123", "X-Tenant-ID": "core8",
+             "X-Is-Admin": "true"},
+        ):
+            with self.subTest(headers=headers):
+                response = self.client.get("/finance/overview", headers=headers)
+                self.assertEqual(response.status_code, 503)
+                self.assertNotIn("customer", response.text.lower())
+
     def test_health_fail_closed_when_live_enabled(self):
         with patch.dict(os.environ, {"ENABLE_STRIPE_WRITES":"true"}):
             with self.assertRaises(RuntimeError):
