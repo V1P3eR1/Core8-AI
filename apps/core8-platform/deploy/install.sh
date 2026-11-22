@@ -1,23 +1,45 @@
 #!/usr/bin/env bash
-# One-shot installer for a fresh Hostinger "Docker on Ubuntu 24.04" VPS.
-#   curl -fsSL https://raw.githubusercontent.com/V1P3eR1/Core8-AI/feature/social-manager/apps/core8-platform/deploy/install.sh | DOMAIN=srv2179387.hstgr.cloud bash
-# Re-running is safe: it pulls the latest code and rebuilds. Secrets in .env.production are never overwritten.
+# Explicit, operator-approved release installer for the Hostinger VPS.
+# WARNING: installing/migrating production requires independently verified backups,
+# a reviewed release SHA and a human approval. Do not run this script unattended.
+# Never pipe a floating-branch script from curl into bash.
 set -euo pipefail
+die() { printf 'ERROR: %s\\n' "$*" >&2; exit 1; }
+
+# Every denial below happens before any git fetch/checkout, apt, Docker, firewall
+# or other host mutation. Missing or ambiguous inputs MUST fail closed.
+[[ "${CORE8_DEPLOY_APPROVED:-}" == "YES" ]] || die "CORE8_DEPLOY_APPROVED=YES is required (human approval)"
+[[ "${BACKUP_VERIFIED:-}" == "YES" ]] || die "BACKUP_VERIFIED=YES is required (operator's verified backup attestation)"
+[[ -n "${RELEASE_SHA:-}" && "$RELEASE_SHA" =~ ^[a-fA-F0-9]{40}$ ]] || die "a full 40-character RELEASE_SHA is required"
+[[ -z "${BRANCH:-}" ]] || die "mutable BRANCH deployments are no longer supported"
 DOMAIN="${DOMAIN:?set DOMAIN=your.host.name}"
-BRANCH="${BRANCH:-feature/social-manager}"
 ROOT="${ROOT:-/opt/core8}"
 APP="$ROOT/apps/core8-platform"
+command -v git >/dev/null || die "git required"
+command -v docker >/dev/null || die "docker required"
+docker compose version >/dev/null 2>&1 || die "docker compose plugin required"
 
-echo "==> Core8 install  domain=$DOMAIN branch=$BRANCH root=$ROOT"
-command -v docker >/dev/null || { echo "docker missing — use Hostinger's Docker template or install docker first"; exit 1; }
-docker compose version >/dev/null 2>&1 || { echo "docker compose plugin missing"; exit 1; }
-command -v git >/dev/null || (apt-get update -qq && apt-get install -y -qq git)
-
-if [ -d "$ROOT/.git" ]; then
-  git -C "$ROOT" fetch -q origin && git -C "$ROOT" checkout -q "$BRANCH" && git -C "$ROOT" pull -q
+# Do not try to repair or overwrite modified build inputs; Git-ignored runtime
+# .env.production remains outside version control.
+if [[ -d "$ROOT/.git" ]]; then
+  [[ -z "$(git -C "$ROOT" status --porcelain --untracked-files=normal)" ]] || die "checkout has dirty/untracked build inputs"
+  # Only explicitly fetched main is trusted as a source of release ancestry.
+  git -C "$ROOT" fetch --no-tags origin +refs/heads/main:refs/remotes/origin/main
 else
-  git clone -q --branch "$BRANCH" https://github.com/V1P3eR1/Core8-AI.git "$ROOT"
+  [[ ! -e "$ROOT" ]] || die "ROOT exists without Git checkout: refusing to overwrite"
+  git clone --no-checkout https://github.com/V1P3eR1/Core8-AI.git "$ROOT"
+  git -C "$ROOT" fetch --no-tags origin +refs/heads/main:refs/remotes/origin/main
 fi
+main_sha="$(git -C "$ROOT" rev-parse --verify refs/remotes/origin/main^{commit})"
+target_sha="$(git -C "$ROOT" rev-parse --verify "$RELEASE_SHA^{commit}" 2>/dev/null)" || die "release SHA not available in verified main history"
+[[ "$target_sha" == "$RELEASE_SHA" ]] || die "RELEASE_SHA did not resolve exactly"
+git -C "$ROOT" merge-base --is-ancestor "$RELEASE_SHA" "$main_sha" || die "release not reachable from fetched origin/main"
+previous_sha="$(git -C "$ROOT" rev-parse --verify HEAD 2>/dev/null || true)"
+printf 'Approved release candidate: %s (main %s), prior %s\\n' "$target_sha" "$main_sha" "${previous_sha:-none}"
+git -C "$ROOT" checkout --detach "$RELEASE_SHA"
+[[ "$(git -C "$ROOT" rev-parse HEAD)" == "$RELEASE_SHA" ]] || die "checkout SHA mismatch"
+# Important: BACKUP_VERIFIED is an assertion, not proof. The operator must
+# separately test database/media restoration before using this installer.
 
 ENV="$APP/backend/.env.production"
 if [ ! -f "$ENV" ]; then
