@@ -25,7 +25,7 @@ def receive_once(conn, *, delivery_id, raw_body, timestamp, signature_hex,
         return {"ok": False, "reason": "invalid_registry"}
     # Verify cryptographic provenance before reserving a receipt.
     from credential_rotation_demo import verify_rotating_credential
-    verified = verify_rotating_credential(credential, timestamp, raw_body, signature_hex, now=now)
+    verified = verify_rotating_credential(credential, timestamp, raw_body, signature_hex, now=now, delivery_id=delivery_id)
     if not verified["ok"]:
         return verified
     # Receipt and lead must share one SQLite transaction; no nested transaction.
