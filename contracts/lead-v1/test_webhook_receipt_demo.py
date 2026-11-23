@@ -48,6 +48,15 @@ class WebhookReceiptTests(unittest.TestCase):
         self.assertEqual(self.receive(delivery="D2",raw=make_body(name="Changed"),
                                       lead_id="L2")["reason"],"payload_conflict")
         self.assertEqual(self.counts(),(1,1,1))
+    def test_delivery_header_tampering_rejected(self):
+        raw=make_body()
+        signed_for_d1=signature(SECRET,NOW,raw,delivery_id="D1")
+        self.assertEqual(self.receive(delivery="D2",signature_hex=signed_for_d1)["reason"],"signature_mismatch")
+        self.assertEqual(self.counts(),(0,0,0))
+    def test_legacy_unbound_signature_rejected(self):
+        raw=make_body()
+        self.assertEqual(self.receive(signature_hex=signature(SECRET,NOW,raw))["reason"],"signature_mismatch")
+        self.assertEqual(self.counts(),(0,0,0))
     def test_invalid_signature_does_not_consume_receipt(self):
         self.assertEqual(self.receive(signature_hex="0"*64)["reason"],"signature_mismatch")
         self.assertEqual(self.counts(),(0,0,0))
