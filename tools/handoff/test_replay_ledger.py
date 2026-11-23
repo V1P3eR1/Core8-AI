@@ -75,6 +75,8 @@ class LedgerTests(unittest.TestCase):
 
     def test_migration_blocks_preexisting_duplicate_task(self):
         import sqlite3
+        # Emulate two historical reservations made before the unique index.
+        self.ledger.reserve(**self.args)
         with sqlite3.connect(self.path) as db:
             db.execute("DROP INDEX reservations_one_task")
             db.execute("INSERT INTO reservations VALUES (?, ?, ?, ?, ?, 'RESERVED')",
