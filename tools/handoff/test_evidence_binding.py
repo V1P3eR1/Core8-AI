@@ -20,9 +20,10 @@ class EvidenceBindingTests(unittest.TestCase):
             "run_event": "issue_comment", "expired": False,
             "archive_sha256": "d" * 64, "created_at": "2026-11-23T08:10:00Z",
             "expires_at": "2026-11-30T08:10:00Z"}
-        self.gate = dict(self.approval, run_id=123, artifact_id=789,
-                         head_sha="c" * 40, task_revision=1,
-                         approved_at="2026-11-23T08:00:00Z")
+        self.gate = dict({key: value for key, value in self.approval.items()
+                          if key != "comment_created_at"},
+                         run_id=123, artifact_id=789, head_sha="c" * 40,
+                         task_revision=1, approved_at="2026-11-23T08:00:00Z")
 
     def check(self):
         return bind_review_evidence(self.approval, self.run, self.gate, now=NOW)
