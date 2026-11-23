@@ -35,6 +35,7 @@ def render_html(health):
     items = health.get("items")
     if not isinstance(items, list) or len(items) > MAX_ITEMS:
         raise DashboardError("invalid_items")
+    demo = health.get("demo") is True
     counts = Counter()
     rows = []
     seen = set()
@@ -56,8 +57,10 @@ def render_html(health):
         if not names:
             names = "—"
         url = f"https://github.com/{REPO}/pull/{number}"
+        link = (f'<span>דוגמה #{number}</span>' if demo else
+                f'<a href="{url}" rel="noopener noreferrer">PR #{number}</a>')
         rows.append(
-            f'<tr><td><a href="{url}" rel="noopener noreferrer">PR #{number}</a></td>'
+            f'<tr><td>{link}</td>'
             f'<td><span class="status {color}">{label}</span></td>'
             f'<td dir="ltr"><code>{sha[:10]}</code></td>'
             f'<td class="checks">{names}</td></tr>'
@@ -67,6 +70,7 @@ def render_html(health):
         for s in ORDER
     )
     rows_html = "\n".join(rows) or '<tr><td colspan="4">לא נמצאו Pull Requests לבדיקה.</td></tr>'
+    demo_notice = ('<p class="demo-warning" role="status">דמו סינתטי בלבד · אין כאן נתוני GitHub חיים, תקלות אמיתיות או אישורי ביצוע.</p>' if demo else '')
     return f"""<!doctype html>
 <html lang="he" dir="rtl">
 <head>
@@ -89,21 +93,21 @@ th{{color:var(--muted);font-size:.82rem}}tr:last-child td{{border-bottom:0}}a{{c
 .status{{padding:4px 9px;border-radius:100px;background:#25344a;display:inline-block;white-space:nowrap}}
 .failure{{color:#ffaaaa}}.warning{{color:#ffdf9b}}.pending{{color:#c8c0ff}}.review{{color:#9ee7bf}}
 .checks{{max-width:360px;overflow-wrap:anywhere}}code{{font-family:ui-monospace,monospace;font-size:.86rem}}
-footer{{color:var(--muted);border-top:1px solid var(--border);margin-top:35px;padding-top:18px;font-size:.85rem}}
+footer{{color:var(--muted);border-top:1px solid var(--border);margin-top:35px;padding-top:18px;font-size:.85rem}}\n.demo-warning{{background:#3d291e;border:1px solid #f6bb75;color:#ffe0b5;padding:12px 16px;border-radius:10px;font-weight:700}}
 </style>
 </head>
 <body>
 <main>
 <div class="kicker">CORE8-AI · ENGINEERING CONTROL</div>
 <h1>מרכז בקרת הפיתוח</h1>
-<p>תמונת מצב מתוך GitHub CI. התצוגה לקריאה בלבד; הצלחת בדיקה אינה אישור למיזוג, פריסה או חיוב כספי.</p>
+<p>תמונת מצב לצפייה בלבד; הצלחת בדיקה אינה אישור למיזוג, פריסה או חיוב כספי.</p>\n{demo_notice}
 <section class="metrics" aria-label="סיכום סטטוסים">{cards}</section>
 <h2>בדיקות Pull Requests · {len(items)} פריטים</h2>
 <div class="panel"><table>
 <thead><tr><th scope="col">בקשת שינוי</th><th scope="col">מצב CI</th><th scope="col">גרסה</th><th scope="col">בדיקות שנכשלו</th></tr></thead>
 <tbody>{rows_html}</tbody>
 </table></div>
-<footer>מקור: GitHub checks. מידע אישי, אישורי Notion, סודות ונתוני לקוחות אינם משולבים בדוח.
+<footer>מקור: {("נתונים סינתטיים בלבד" if demo else "GitHub checks")}. מידע אישי, אישורי Notion, סודות ונתוני לקוחות אינם משולבים בדוח.
 אין כאן ריצה אוטונומית של Claude Code או עדכון לסטטוס משימות.</footer>
 </main>
 </body>
