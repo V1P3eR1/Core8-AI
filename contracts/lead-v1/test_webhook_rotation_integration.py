@@ -24,7 +24,7 @@ class RotatingReceiptTests(unittest.TestCase):
     def receive(self,key,delivery="D1",now=NOW):
         return receive_once(
             self.db,delivery_id=delivery,raw_body=BODY,timestamp=NOW,
-            signature_hex=signature(key,NOW,BODY),credential_id="key",
+            signature_hex=signature(key,NOW,BODY,delivery_id=delivery),credential_id="key",
             credential_registry=self.registry,now=now,lead_id="L1")
     def test_previous_key_creates_lead_during_grace(self):
         self.assertTrue(self.receive(OLD)["ok"])
