@@ -136,6 +136,49 @@ class OidcCandidateTests(unittest.TestCase):
         with self.assertRaises(FinanceAccessDenied):
             self.verify(self.signed(), jwks={"keys":[]})
 
+    def test_reject_excessive_lifetime_and_bad_time_types(self):
+        now = int(time.time())
+        for claims in (
+            {**self.claims(), "exp": now + 7200},
+            {**self.claims(), "exp": now},
+            {**self.claims(), "iat": True},
+            {**self.claims(), "nbf": "0"},
+            {**self.claims(), "exp": float(now + 300)},
+            {**self.claims(), "nbf": now + 400, "exp": now + 200},
+        ):
+            with self.subTest(claims=claims):
+                with self.assertRaises(FinanceAccessDenied):
+                    self.verify(self.signed(claims))
+
+    def test_reject_unsafe_issuer_and_critical_jwt_headers(self):
+        for issuer in (
+            "https://issuer.example.test@evil.example.test",
+            "https://issuer.example.test?override=true",
+            "https://issuer.example.test#fragment",
+            "https://",
+            "http://issuer.example.test",
+        ):
+            with self.subTest(issuer=issuer):
+                with self.assertRaises(FinanceAccessDenied):
+                    self.verify(self.signed(), issuer=issuer)
+        with self.assertRaises(FinanceAccessDenied):
+            self.verify(self.signed(headers={"crit": ["b64"]}))
+
+    def test_reject_weak_rsa_signing_key(self):
+        weak = rsa.generate_private_key(public_exponent=65537, key_size=1024)
+        public = weak.public_key().public_numbers()
+        def b64(value):
+            return base64.urlsafe_b64encode(
+                value.to_bytes((value.bit_length() + 7) // 8, "big")
+            ).rstrip(b"=").decode()
+        jwks = {"keys": [{
+            "kty": "RSA", "kid": "weak-ci", "use": "sig", "alg": "RS256",
+            "n": b64(public.n), "e": b64(public.e),
+        }]}
+        token = self.signed(key=weak, headers={"kid": "weak-ci"})
+        with self.assertRaises(FinanceAccessDenied):
+            self.verify(token, jwks=jwks)
+
     def test_reject_missing_configuration_and_oversized_token(self):
         with self.assertRaises(FinanceAccessDenied):
             self.verify(self.signed(), issuer="http://insecure")
