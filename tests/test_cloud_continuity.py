@@ -129,6 +129,22 @@ class ContinuityContract(unittest.TestCase):
         with self.assertRaises(ValueError):
             checkpoint(self.db, "already-reviewed", "running")
 
+    def test_failed_job_cannot_resume_without_new_revision(self):
+        claim(self.db, "failed-once")
+        checkpoint(self.db, "failed-once", "running")
+        checkpoint(self.db, "failed-once", "failed")
+        with self.assertRaisesRegex(ValueError, "new approved job revision"):
+            checkpoint(self.db, "failed-once", "running")
+        self.assertEqual(read_state(self.db, "failed-once"), "failed")
+
+    def test_review_job_cannot_be_marked_failed_after_review(self):
+        claim(self.db, "review-finished")
+        checkpoint(self.db, "review-finished", "running")
+        checkpoint(self.db, "review-finished", "review")
+        with self.assertRaises(ValueError):
+            checkpoint(self.db, "review-finished", "failed")
+        self.assertEqual(read_state(self.db, "review-finished"), "review")
+
     def test_queued_job_cannot_skip_running_for_review(self):
         claim(self.db, "skipped-step")
         with self.assertRaises(ValueError):
