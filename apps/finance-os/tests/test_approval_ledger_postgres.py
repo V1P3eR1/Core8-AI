@@ -438,6 +438,42 @@ class ApprovalLedgerPostgresTests(unittest.TestCase):
                     with self.assertRaises(FinanceAccessDenied):
                         audit_outbox_health(db, namespace=ns, max_attempts=attempts)
 
+    def test_signed_sqlite_receiver_end_to_end_with_outbox_dispatch(self):
+        from tempfile import TemporaryDirectory
+        from audit_dispatch_candidate import dispatch_one
+        from audit_receiver_sqlite_candidate import SQLiteAuditReceiverCandidate
+        from signed_audit_transport_candidate import (
+            SignedAuditReceiverCandidate, SignedAuditSinkCandidate,
+        )
+        self.assertTrue(self.consume())
+        key = b"synthetic-audit-end-to-end-signing-key-32-bytes-min"
+        with TemporaryDirectory() as directory:
+            dbpath = str(Path(directory) / "audit-sink.sqlite")
+            raw = SQLiteAuditReceiverCandidate(dbpath)
+            raw.initialize_test_store()
+            receiver = SignedAuditReceiverCandidate(
+                receiver=raw, namespace=self.namespace, verification_key=key,
+            )
+            sender = SignedAuditSinkCandidate(
+                receiver=receiver, namespace=self.namespace, signing_key=key,
+            )
+            with psycopg.connect(self.dsn, autocommit=True) as db:
+                self.assertEqual(
+                    dispatch_one(db, namespace=self.namespace, sink=sender),
+                    "delivered",
+                )
+                self.assertEqual(
+                    dispatch_one(db, namespace=self.namespace, sink=sender),
+                    "idle",
+                )
+            import sqlite3
+            with sqlite3.connect(dbpath) as receiver_db:
+                self.assertEqual(
+                    receiver_db.execute(
+                        "SELECT count(*) FROM received_audit_candidate"
+                    ).fetchone()[0], 1,
+                )
+
     def test_provisioning_cannot_overwrite_existing_approval(self):
         with psycopg.connect(self.dsn, autocommit=True) as db:
             with self.assertRaises(FinanceAccessDenied):
