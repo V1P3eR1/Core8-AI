@@ -114,3 +114,23 @@ historical reservations; reconcile them with audit evidence manually.
 This remains an OFFLINE, local-disk replay guard. It is not a cloud-distributed
 or cross-runner atomic lock; production activation needs a durable, shared
 transactional store with protected credentials and recovery semantics.
+
+
+## Atomic local ledger initialization hardening (2026-11-23)
+
+SQLite schema setup and the per-task uniqueness index are now created in
+one `BEGIN IMMEDIATE` transaction. This avoids the initialization window
+between creating a legacy-compatible table and adding the unique index, and
+rolls back the migration when existing task-digest duplicates are detected.
+A symbolic-link database file path is refused. These checks protect the
+local review-only ledger and do not establish security of parent directories
+or make the storage durable across different GitHub hosted runners.
+
+Tests cover parallel attempts with distinct run/artifact IDs for the same
+task digest, preservation of duplicate historical rows after a rejected
+migration, and refusal of a symlink database path.
+
+Production deployment still requires an independently managed shared durable
+lock store, authenticated protected-gate data, operational recovery and a
+readiness review. Do not enable privileged publishing solely because the
+local SQLite tests pass.
