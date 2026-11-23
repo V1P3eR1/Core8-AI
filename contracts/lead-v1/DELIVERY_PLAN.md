@@ -64,3 +64,7 @@ Added `credential_rotation_demo.py` with nine tests: active/current secret, boun
 ## Rotated credentials in atomic webhook intake (2026-11-23)
 
 Wired `verify_rotating_credential` into the offline `webhook_receipt_demo.py` before any database mutation. Added six integration tests for old/new key acceptance, expiry, rejection without consuming a receipt, and replay rejection across different valid signatures. Expired request timestamps remain explicit failures. Still **offline-only**; no production credential vault, audit trail or live HTTP endpoint.
+
+## Isolated HTTP contract fixture (2026-11-23)
+
+Added `fastapi_fixture.py` and `test_fastapi_fixture.py` (nine HTTP TestClient scenarios), plus pinned FastAPI/httpx dependencies in the dedicated offline CI workflow. The fixture has its own synthetic credential, ephemeral SQLite database and `/offline-fixture/intake` route. It is **not imported into the production backend**, has no production authorization/membership store, and must not be deployed or publicly exposed. Real deployment requires an authenticated tenant registry, provider-specific signature verification, a reviewed migration and threat-model/security review. HTTP status tests do not imply production readiness.
