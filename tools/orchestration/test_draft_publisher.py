@@ -318,6 +318,19 @@ class DraftPublisherTests(unittest.TestCase):
             call_publish(api, data=original + b" ", hash_value=original_sha)
         self.assertEqual(api.calls, [])
 
+    def test_stale_main_blocks_existing_draft_reuse(self):
+        api = FakeApi(existing=True, main_sha="f" * 40)
+        with self.assertRaisesRegex(PublishBlocked, "base_no_longer_main"):
+            call_publish(api)
+        self.assertEqual([method for method, _, _ in api.calls], ["GET"])
+        self.assertEqual(api.calls[0][1], "git/ref/heads/main")
+
+    def test_current_main_checked_before_any_pr_lookup(self):
+        api = FakeApi(existing=True)
+        self.assertEqual(call_publish(api)["status"], "EXISTING_DRAFT")
+        self.assertEqual(api.calls[0][:2], ("GET", "git/ref/heads/main"))
+        self.assertTrue(all(method == "GET" for method, _, _ in api.calls))
+
     def test_stale_main_blocks_before_any_write(self):
         api = FakeApi(main_sha="f" * 40)
         with self.assertRaisesRegex(PublishBlocked, "base_no_longer_main"):
