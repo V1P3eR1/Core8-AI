@@ -68,3 +68,12 @@ that an external provider, credential, role or WORM archive was configured.
 **Forbidden without explicit approval:** merging PR #64, deploying to production,
 changing production DB/KMS/identity settings, enabling Finance API/Stripe live
 writes, or sending production financial records to an audit destination.
+
+
+## Audit key-state crash/restart recovery candidate — 2026-11-23
+
+- [audit_key_state_candidate.py](../audit_key_state_candidate.py) adds a canonical HMAC-authenticated **metadata-only** snapshot for the in-memory audit signing keyring. It stores active and verification-only key IDs, removed-key tombstones, namespace, generation and independently keyed secret-identity proofs. **It does not serialize delivery secret bytes.** To restore it, the caller must supply trusted independently provisioned secret bytes and a matching independently verified minimum generation.
+- `recover_audit_keyring_with_floor` insists on the `IndependentGenerationFloor` abstract contract and fails closed on invalid, missing or inconsistent floor values or provider errors. Import requires the snapshot generation to match the provided trusted floor exactly; this is stricter than accepting any older signed state. The abstract type does **not** authenticate its implementation: a fake or untrusted floor must never be passed from user-controlled code.
+- [tests/test_audit_key_state_candidate.py](../tests/test_audit_key_state_candidate.py) covers reboot with tombstone preservation, overlap verification keys, proof mismatch on incorrect secret, signed-state mutation, namespace substitution, older/newer generation mismatch, malformed provider response and floor-service outage.
+- **Verified:** [Finance OS CI #149 SUCCESS](https://github.com/V1P3eR1/Core8-AI/actions/runs/45190622078), [Secret Scan #634 SUCCESS](https://github.com/V1P3eR1/Core8-AI/actions/runs/45190626642), commit `4506309`. Floor-adapter regressions passed in [Finance OS CI #151 SUCCESS](https://github.com/V1P3eR1/Core8-AI/actions/runs/45190943699) with [Secret Scan #637 SUCCESS](https://github.com/V1P3eR1/Core8-AI/actions/runs/45190943843), tested commit `6f943f1`.
+- **Release is BLOCKED:** No durable separate audit-key state store, independently administered authenticated floor, production KMS, secret provisioning or credential rotation has been configured. A MAC-signed backup alone **cannot** prevent rollback if the attacker also restores the floor. Requires review of independent storage and tested operator recovery.
