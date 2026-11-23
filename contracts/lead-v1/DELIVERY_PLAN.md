@@ -20,13 +20,17 @@
 | P9 | Cross-module integration and pilot | P8 | receptionist/social adapters, consent provenance, operator UAT, privacy review | Not started |
 | P10 | Production readiness | P9 | security review, observability, backups, rollback, owner sign-off | Not started |
 
+## Verified architecture discovery (2026-11-23)
+
+Main branch currently uses **SQLite via aiosqlite** in `apps/core8-platform/backend/database.py`; `apps/core8-platform/backend/requirements.txt` has `aiosqlite` but no PostgreSQL driver, and `apps/core8-platform/backend/alembic.ini` was not found. Therefore `postgres-idempotency.proposal.sql` **must not be applied to the current backend**. Treat PostgreSQL as a separately evaluated migration path. A SQLite-compatible isolated prototype and explicit migration decision must precede any backend changes. The Social Manager also has admin-only access and internal tables lacking tenant IDs, so it must not be presumed ready for multi-tenant lead ingestion.
+
 ## Immediate implementation sequence
 
 1. **P1 correctness:** completed in draft: malformed consent now fails closed; verify latest CI.
 2. **P0 robustness:** extend malformed-input tests, ensure validator does not throw for unexpected shapes.
 3. **P5 verification:** add SQL contract tests that statically verify uniqueness and transactional design; this is *not* a substitute for real DB tests.
-4. **P6 preparation:** inspect current FastAPI/PostgreSQL schema and migrations before creating a compatible, isolated test-only implementation.
-5. **P6 execution:** run PostgreSQL concurrency tests in CI or an isolated environment; only after schema compatibility is established.
+4. **P6 preparation:** inspect current FastAPI/SQLite schema and decide whether to add an isolated SQLite prototype first or separately introduce PostgreSQL; no production schema changes without review.
+5. **P6 execution:** run SQLite concurrency/idempotency tests in a disposable environment; only then evaluate PostgreSQL concurrency tests as a separate track.
 6. **P7–P10:** implement sequentially with independent review and explicit authorization for external/production effects.
 
 ## Required integration decisions
