@@ -35,7 +35,7 @@ async def intake(request: Request,
             credential_registry=_REGISTRY,
             now=request.app.state.fixture_now,
             lead_id="synthetic-" + x_demo_delivery_id)
-    except (sqlite3.Error, ValueError):
+    except (sqlite3.Error, ValueError, TypeError, OverflowError):
         raise HTTPException(status_code=500, detail="fixture_error")
     if result.get("ok"):
         return result
