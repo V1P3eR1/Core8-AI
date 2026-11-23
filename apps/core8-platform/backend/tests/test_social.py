@@ -133,7 +133,7 @@ def test_worker_refuses_publication_without_valid_approval(s):
     asyncio.run(execute("UPDATE sm_approvals SET status='invalidated' WHERE content_item_id=?", (item["id"],)))
     s.tick()
     row = asyncio.run(fetch_one("SELECT state, last_error FROM sm_publications WHERE id=?", (pub["id"],)))
-    assert row["state"] == "failed" and "approval" in row["last_error"]
+    assert row["state"] == "cancelled" and row["last_error"] == "human_approval_required"
     assert ig.mock_provider().published == []
 
 
