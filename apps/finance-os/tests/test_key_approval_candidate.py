@@ -83,6 +83,8 @@ class KeyApprovalCandidateTests(unittest.TestCase):
             {"approver": ServerVerifiedOperator("security_456", "security_approver", False)},
             {"requester": "manager_123"},
             {"approver": None},
+            {"requester": ServerVerifiedOperator("manager_123", [])},
+            {"approver": ServerVerifiedOperator("security_456", {})},
         ]
         for args in cases:
             with self.subTest(args=args):
