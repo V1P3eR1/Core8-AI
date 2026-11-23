@@ -128,3 +128,26 @@ def import_audit_keyring_state(blob, *, namespace, state_signing_key,
         )
     except Exception:
         raise FinanceAccessDenied("Finance audit state denied") from None
+
+
+def recover_audit_keyring_with_floor(blob, *, namespace, state_signing_key,
+                                     pinned_secrets, floor):
+    """Require the independently administered generation-floor contract.
+
+    The floor object and its read() implementation must be independently
+    trusted; the mere isinstance check does NOT attest a fake provider.
+    """
+    from external_floor_candidate import IndependentGenerationFloor
+    if (not isinstance(floor, IndependentGenerationFloor)
+            or type(namespace) is not str or not _NS.fullmatch(namespace)):
+        raise FinanceAccessDenied("Finance audit state denied")
+    try:
+        minimum = floor.read(namespace)
+    except Exception:
+        raise FinanceAccessDenied("Finance audit state denied") from None
+    if type(minimum) is not int or minimum < 1:
+        raise FinanceAccessDenied("Finance audit state denied")
+    return import_audit_keyring_state(
+        blob, namespace=namespace, state_signing_key=state_signing_key,
+        minimum_generation=minimum, pinned_secrets=pinned_secrets,
+    )
