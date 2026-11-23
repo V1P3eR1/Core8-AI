@@ -97,6 +97,25 @@ class ReadOnlyRlsIntegration(unittest.TestCase):
                             with db.transaction():
                                 db.execute("INSERT INTO finance_rls_role_bindings(db_role,organization_id) VALUES (%s,%s)",
                                            (role, tenant_b if role == ROLE_A else tenant_a))
+            # Simulate pooled connection reuse with sequential transactions.
+            # SET LOCAL ROLE must not leak the prior tenant into a new
+            # transaction on the *same* connection. The CI superuser can
+            # SET ROLE only to test restricted identity behavior here.
+            with psycopg.connect(dsn, autocommit=True) as pooled:
+                for role, expected_id in ((ROLE_A, event_a), (ROLE_B, event_b)):
+                    with pooled.transaction():
+                        pooled.execute("SET LOCAL ROLE " + role)
+                        active_role = pooled.execute("SELECT current_user").fetchone()[0]
+                        self.assertEqual(active_role, role)
+                        observed = {r[0] for r in pooled.execute(
+                            "SELECT event_id FROM finance_stripe_event_inbox WHERE event_id IN (%s,%s)",
+                            (event_a, event_b)
+                        ).fetchall()}
+                        self.assertEqual(observed, {expected_id})
+                    # After transaction close, previous role identity must
+                    # reset. No finance data is queried under the admin role.
+                    restored = pooled.execute("SELECT current_user").fetchone()[0]
+                    self.assertNotIn(restored, (ROLE_A, ROLE_B))
         finally:
             # Remove security policies first, then tenant fixtures and test roles.
             # Keep this test confined to disposable CI; cleanup is not a
