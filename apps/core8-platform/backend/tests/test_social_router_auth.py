@@ -66,3 +66,30 @@ def test_schedule_without_date_cannot_queue_nonexistent_item(api, headers_kind, 
         headers=headers,
     )
     assert response.status_code == expected, response.text
+
+
+def test_combined_schedule_request_does_not_mutate_existing_synthetic_item(api):
+    """A rejected combined request cannot silently edit the schedule or create approval."""
+    created = api.c.post(
+        "/api/social/items",
+        json={"format": "image", "title": "Synthetic schedule review", "caption": "Test only"},
+        headers=api.admin,
+    )
+    assert created.status_code == 201, created.text
+    item_id = created.json()["id"]
+    before = api.c.get(f"/api/social/items/{item_id}", headers=api.admin)
+    assert before.status_code == 200, before.text
+
+    rejected = api.c.post(
+        f"/api/social/items/{item_id}/schedule",
+        json={"scheduled_for": "2026-12-03T10:00"},
+        headers=api.admin,
+    )
+    assert rejected.status_code == 409, rejected.text
+
+    after = api.c.get(f"/api/social/items/{item_id}", headers=api.admin)
+    assert after.status_code == 200, after.text
+    assert after.json()["scheduled_for"] == before.json()["scheduled_for"]
+    assert after.json()["status"] == before.json()["status"]
+    assert after.json()["approvals"] == before.json()["approvals"]
+    assert after.json()["publications"] == before.json()["publications"]
