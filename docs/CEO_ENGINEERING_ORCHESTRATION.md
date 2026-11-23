@@ -129,6 +129,12 @@ The connected private Notion integration was used to **read**, not export, the e
 
 The explicitly approved and merged `observe` job, **if** later enabled via `CORE8_DEV_LOOP_ENABLED=true`, would upload three read-only artifacts: JSON, Markdown and HTML. This PR's own pull-request run executes synthetic contract tests only, so no live dashboard artifact should be claimed before a post-merge observation actually runs. To view it when activated, open the relevant GitHub Actions observation run, download `core8-dev-loop-report`, and open the HTML file locally. No hosting, user login, production API, automatic PR execution or status mutation has been activated.
 
+### Bounded live repository-wide snapshot (draft PR #61)
+
+The `repo-wide-preview` CI job on the explicitly trusted same-repository orchestration branch reads the current GitHub list of open PRs and their head-SHA check runs, **up to 20 PRs**, without using Notion, paying for AI, editing issues or deploying. It emits separate JSON, Markdown and offline RTL HTML files as `core8-dashboard-REPO-LIVE-SNAPSHOT` in the PR's GitHub Actions artifacts. It validates metadata and refuses ambiguous/truncated check pages. If the PR listing exceeds the cap, both dashboard formats explicitly flag **partial coverage** rather than claiming to show every active PR.
+
+This job is a **point-in-time snapshot**, not an authenticated live SaaS dashboard or persistent monitoring process. The PR itself remains a draft and the scheduled main-branch observer remains separately gated by `CORE8_DEV_LOOP_ENABLED`. GitHub CI checks, Notion approvals, production deployments and customer tenancy must remain distinct security boundaries.
+
 ### Safe activation checklist
 
 1. Inspect this PR diff and successful `Core8 development loop (read-only)` CI, security review, codeowners and actions-policy compatibility.
