@@ -48,7 +48,7 @@ class NoRedirect(request.HTTPRedirectHandler):
 
 
 def get_json(endpoint, token=None):
-    if not re.fullmatch(r"/(?:pulls/[1-9][0-9]*|actions/runs\\?head_sha=[a-f0-9]{40}&per_page=100)", endpoint):
+    if not re.fullmatch(r"/(?:pulls/[1-9][0-9]*|actions/runs\?head_sha=[a-f0-9]{40}&per_page=100)", endpoint):
         raise SnapshotBlocked("invalid_endpoint")
     headers = {"Accept": "application/vnd.github+json",
                "X-GitHub-Api-Version": "2022-11-28",
