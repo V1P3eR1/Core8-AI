@@ -152,6 +152,57 @@ class JwksStorePostgresTests(unittest.TestCase):
         with self.assertRaises(FinanceAccessDenied):
             self.recover()
 
+    def test_external_floor_rejects_full_database_snapshot_rollback(self):
+        from external_floor_candidate import (
+            IndependentGenerationFloor, recover_with_external_floor,
+            rotate_with_external_floor,
+        )
+
+        class TestFloor(IndependentGenerationFloor):
+            def __init__(self):
+                self.version = 1
+
+            def read(self, namespace):
+                return self.version
+
+            def compare_and_advance(self, namespace, expected_generation, next_generation):
+                if self.version != expected_generation:
+                    return False
+                self.version = next_generation
+                return True
+
+        floor = TestFloor()
+        # Preserve a valid, signed database snapshot before rotating.
+        with psycopg.connect(self.dsn, autocommit=True) as db:
+            old_generation, old_snapshot = db.execute(
+                """SELECT generation, signed_snapshot
+                   FROM finance_jwks_store_candidate WHERE namespace=%s""",
+                (self.namespace,),
+            ).fetchone()
+            self.assertEqual(rotate_with_external_floor(
+                db, namespace=self.namespace, signing_key=SECRET,
+                floor=floor, expected_generation=1,
+                proposed_jwks={"keys": [self.new]},
+            ), 2)
+        self.assertEqual(floor.version, 2)
+        with psycopg.connect(self.dsn, autocommit=True) as db:
+            # Simulate administrator restoring an older valid signed row.
+            # The independent floor is intentionally NOT rolled back.
+            db.execute(
+                """UPDATE finance_jwks_store_candidate
+                   SET generation=%s, signed_snapshot=%s
+                   WHERE namespace=%s""",
+                (old_generation, old_snapshot, self.namespace),
+            )
+        with psycopg.connect(self.dsn, autocommit=True) as db:
+            with self.assertRaises(FinanceAccessDenied):
+                recover_with_external_floor(
+                    db, namespace=self.namespace, signing_key=SECRET,
+                    floor=floor,
+                )
+        # Restoring the newer database row would be the proper direction of
+        # recovery. Never lower the external watermark to match old data.
+
     def test_bootstrap_cannot_overwrite_existing_registry(self):
         with psycopg.connect(self.dsn, autocommit=True) as db:
             with self.assertRaises(FinanceAccessDenied):
