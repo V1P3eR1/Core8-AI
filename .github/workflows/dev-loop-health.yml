@@ -81,6 +81,43 @@ jobs:
             core8-dev-loop-dashboard.html
           retention-days: 7
           if-no-files-found: error
+  repo-wide-preview:
+    # Bounded current GitHub PR metadata only, on explicitly trusted PR branch.
+    if: >-
+      github.event_name == 'pull_request' &&
+      github.event.pull_request.head.repo.full_name == github.repository &&
+      github.head_ref == 'feature/ceo-engineering-orchestration-v1'
+    needs: contract
+    runs-on: ubuntu-24.04
+    timeout-minutes: 7
+    permissions:
+      contents: read
+      pull-requests: read
+      checks: read
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Capture up to 20 open PRs and current check runs
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: python tools/orchestration/repo_live_preview.py
+      - name: Render bounded repo snapshot
+        run: |
+          python tools/orchestration/dashboard_report.py core8-dev-loop-report.json
+          python tools/orchestration/browser_dashboard.py core8-dev-loop-report.json
+      - uses: actions/upload-artifact@v4
+        with:
+          name: core8-dashboard-REPO-LIVE-SNAPSHOT
+          path: |
+            core8-dev-loop-report.json
+            core8-dev-loop-report.md
+            core8-dev-loop-dashboard.html
+          retention-days: 7
+          if-no-files-found: error
   observe:
     # Explicit budget/operations switch; never begin hourly runs just by merging.
     if: >-
