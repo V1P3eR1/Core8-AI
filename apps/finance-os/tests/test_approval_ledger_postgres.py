@@ -46,11 +46,15 @@ class ApprovalLedgerPostgresTests(unittest.TestCase):
                 elif command.strip():
                     # Initial comment paragraph includes the CREATE FUNCTION.
                     db.execute(command)
+            outbox_sql = (Path(__file__).resolve().parents[1] / "sql" /
+                          "key_audit_outbox_candidate.sql").read_text()
+            db.execute(outbox_sql)
 
     @classmethod
     def tearDownClass(cls):
         if READY:
             with psycopg.connect(cls.dsn) as db:
+                db.execute("DROP TABLE IF EXISTS finance_key_audit_outbox_candidate")
                 db.execute("DROP TABLE IF EXISTS finance_key_approval_audit_candidate")
                 db.execute("DROP TABLE IF EXISTS finance_key_approval_candidate")
 
@@ -207,6 +211,55 @@ class ApprovalLedgerPostgresTests(unittest.TestCase):
                         db.execute(statement, values)
         self.assertEqual(self.audit_count(), 1)
         self.assertFalse(self.consume())
+
+    def test_approval_consumption_creates_matching_outbox_in_same_commit(self):
+        self.assertTrue(self.consume())
+        with psycopg.connect(self.dsn) as db:
+            item = db.execute(
+                """SELECT a.id, a.approval_id, o.event_id, o.payload, o.delivered_at
+                     FROM finance_key_approval_audit_candidate a
+                     JOIN finance_key_audit_outbox_candidate o ON o.audit_id=a.id
+                     WHERE a.approval_id=%s""", (self.approval.approval_id,)
+            ).fetchone()
+        self.assertIsNotNone(item)
+        self.assertEqual(item[2], "finance-approval-audit-" + str(item[0]))
+        self.assertEqual(item[3]["approval_id"], self.approval.approval_id)
+        self.assertEqual(item[3]["action"], "consumed")
+        self.assertIsNone(item[4])
+        self.assertFalse(self.consume())
+
+    def test_failure_to_enqueue_prevents_approval_consumption(self):
+        with psycopg.connect(self.dsn, autocommit=True) as db:
+            # A missing outbox simulates a broken audit-export subsystem.
+            # Trigger fails, so approval and its audit event roll back.
+            db.execute("ALTER TABLE finance_key_audit_outbox_candidate RENAME TO finance_key_audit_outbox_missing")
+            try:
+                with self.assertRaises(psycopg.Error):
+                    PostgresApprovalCandidate(
+                        db, namespace=self.namespace
+                    ).consume(self.approval.approval_id, self.approval)
+            finally:
+                db.execute("ALTER TABLE finance_key_audit_outbox_missing RENAME TO finance_key_audit_outbox_candidate")
+        self.assertEqual(self.audit_count(), 0)
+        self.assertTrue(self.consume())
+        self.assertEqual(self.audit_count(), 1)
+
+    def test_two_concurrent_consumers_create_one_outbox_event(self):
+        barrier = threading.Barrier(2)
+        def attempt(_):
+            barrier.wait(timeout=10)
+            return self.consume()
+        with concurrent.futures.ThreadPoolExecutor(max_workers=2) as pool:
+            result = list(pool.map(attempt, range(2)))
+        self.assertCountEqual(result, [True, False])
+        with psycopg.connect(self.dsn) as db:
+            count = db.execute(
+                """SELECT count(*) FROM finance_key_audit_outbox_candidate o
+                     JOIN finance_key_approval_audit_candidate a ON a.id=o.audit_id
+                     WHERE a.approval_id=%s""",
+                (self.approval.approval_id,),
+            ).fetchone()[0]
+        self.assertEqual(count, 1)
 
     def test_provisioning_cannot_overwrite_existing_approval(self):
         with psycopg.connect(self.dsn, autocommit=True) as db:
