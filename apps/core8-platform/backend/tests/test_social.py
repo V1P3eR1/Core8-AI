@@ -161,7 +161,9 @@ def test_auto_publish_respects_category(s):
     allowed = _needs_review_item(s, pillar="whatsapp_agents")
     pubs = asyncio.run(publishing.auto_schedule_candidates())
     ids = {p["content_item_id"] for p in pubs}
-    assert allowed["id"] in ids and blocked["id"] not in ids
+    # Auto workers must never mint human approvals, even for allowed categories.
+    assert ids == set()
+    assert s.item(allowed["id"])["status"] == "needs_review"
     assert s.item(blocked["id"])["status"] == "needs_review"
 
 
@@ -172,7 +174,9 @@ def test_auto_publish_respects_time_window_and_flags(s):
     flagged = _needs_review_item(s, when="2020-01-01T09:40", caption="הלקוחות שלנו חסכו 40% בחודש")
     pubs = asyncio.run(publishing.auto_schedule_candidates())
     ids = {p["content_item_id"] for p in pubs}
-    assert inside["id"] in ids
+    # A time-window match is not a substitute for explicit human approval.
+    assert ids == set()
+    assert s.item(inside["id"])["status"] == "needs_review"
     assert outside["id"] not in ids
     assert flagged["id"] not in ids
     assert "customers" in s.item(flagged["id"])["sensitive_flags"]
