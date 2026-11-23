@@ -117,6 +117,12 @@ The connected private Notion integration was used to **read**, not export, the e
 
 **Remaining gap:** the hourly workflow currently fetches GitHub check runs only; it does not retrieve private Notion tasks because the private connector credentials must not be put into a public-repository CI context without a reviewed design. Cross-source reconciliation is a tested library contract, **not an activated scheduled sync**. Verified source identity, isolated secrets and an explicit write approval gate must precede any live status updates.
 
+### Human-readable engineering report artifact (added in draft)
+
+`tools/orchestration/dashboard_report.py` now renders a bounded, Markdown-safe management summary from the pre-existing read-only GitHub CI report. It shows per-PR current head SHA, failure/pending/incomplete evidence status, sanitized check names and links, with no AI execution or approval capabilities. Optional *pre-audited* Notion reconciliation metadata may be summarized as **counts only**, not private Scope/Acceptance/task identifiers. Tests cover untrusted Markdown/HTML injection, duplicate PRs, invalid states, private task data omission and fail-closed schemas. The scheduled `observe` job is configured to attach both `core8-dev-loop-report.json` and `core8-dev-loop-report.md` when explicitly enabled after approved merge.
+
+**Limitations:** no live Notion reads in GitHub CI, no customer data, no persistent dashboard service, no feedback writes to the Notion source, and no running engineering agent. A passing contract job on the draft PR only verifies local synthetic tests, *not* successful scheduled reporting.
+
 ### Safe activation checklist
 
 1. Inspect this PR diff and successful `Core8 development loop (read-only)` CI, security review, codeowners and actions-policy compatibility.
