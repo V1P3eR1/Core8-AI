@@ -230,16 +230,22 @@ class ApprovalLedgerPostgresTests(unittest.TestCase):
 
     def test_failure_to_enqueue_prevents_approval_consumption(self):
         with psycopg.connect(self.dsn, autocommit=True) as db:
-            # A missing outbox simulates a broken audit-export subsystem.
+            # A rejected outbox insert simulates a broken audit-export subsystem.
             # Trigger fails, so approval and its audit event roll back.
-            db.execute("ALTER TABLE finance_key_audit_outbox_candidate RENAME TO finance_key_audit_outbox_missing")
+            db.execute(
+                "ALTER TABLE finance_key_audit_outbox_candidate "
+                "ADD CONSTRAINT ci_block_outbox CHECK (false) NOT VALID"
+            )
             try:
-                with self.assertRaises(psycopg.Error):
+                with self.assertRaises(psycopg.errors.CheckViolation):
                     PostgresApprovalCandidate(
                         db, namespace=self.namespace
                     ).consume(self.approval.approval_id, self.approval)
             finally:
-                db.execute("ALTER TABLE finance_key_audit_outbox_missing RENAME TO finance_key_audit_outbox_candidate")
+                db.execute(
+                    "ALTER TABLE finance_key_audit_outbox_candidate "
+                    "DROP CONSTRAINT ci_block_outbox"
+                )
         self.assertEqual(self.audit_count(), 0)
         self.assertTrue(self.consume())
         self.assertEqual(self.audit_count(), 1)
