@@ -10,6 +10,8 @@
 - `/finance/overview` remains disabled with HTTP 503 even if a caller supplies `Authorization`, `X-Tenant-ID`, `X-Role` or `X-Is-Admin`.
 - Merchant ingress is **not user authorization**: the Stripe webhook uses an independently configured, single merchant-to-tenant binding after raw-payload signature verification; this does not confer customer-facing access.
 - PostgreSQL composite foreign keys prevent mismatched tenant assignment in the operational activity table, **not** arbitrary cross-tenant SELECT access.
+- `tenant_queries.py` now contains a **non-routed**, read-only aggregate query that calls `require_finance_permission` *before* querying and applies `WHERE organization_id = %s` with a positional parameter. This is defense in depth for the prototype, not a claim that caller-supplied `VerifiedFinancePrincipal` objects are authenticated.
+- Real PostgreSQL tests with two synthetic tenants, and unit tests rejecting invalid principals before SQL, passed in [Finance OS CI #55](https://github.com/V1P3eR1/Core8-AI/actions/runs/45130043934); [secret scan #341](https://github.com/V1P3eR1/Core8-AI/actions/runs/45130043925) passed. **RLS and verified identity remain TBD.**
 
 ## Contract for a future verified identity adapter (NOT IMPLEMENTED)
 
