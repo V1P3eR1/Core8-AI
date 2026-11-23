@@ -5,10 +5,13 @@ header URLs or request input. Does not expose any finance API or grant tenant
 membership. No live identity provider is configured by this candidate.
 """
 import re
+import time
+from urllib.parse import urlsplit
 from membership_candidate import TrustedSubject
 from tenant_access import FinanceAccessDenied, SUBJECT_RE
 
 MAX_TOKEN_BYTES = 8192
+MAX_TOKEN_LIFETIME_SECONDS = 900  # candidate policy; provider review required
 KID_RE = re.compile(r"^[A-Za-z0-9._:-]{1,128}$")
 
 
@@ -27,7 +30,10 @@ def verify_oidc_jwt(token: str, *, issuer: str, audience: str,
         if (not isinstance(token, str) or not token or
                 len(token.encode("utf-8")) > MAX_TOKEN_BYTES):
             raise ValueError("invalid token length")
-        if (not isinstance(issuer, str) or not issuer.startswith("https://") or
+        parsed_issuer = urlsplit(issuer) if isinstance(issuer, str) else None
+        if (parsed_issuer is None or parsed_issuer.scheme != "https" or
+                not parsed_issuer.hostname or parsed_issuer.username or
+                parsed_issuer.password or parsed_issuer.query or parsed_issuer.fragment or
                 not isinstance(audience, str) or not audience or
                 not isinstance(jwks, dict) or
                 not isinstance(jwks.get("keys"), list) or
@@ -43,7 +49,7 @@ def verify_oidc_jwt(token: str, *, issuer: str, audience: str,
         kid = header.get("kid")
         if not isinstance(kid, str) or not KID_RE.fullmatch(kid):
             raise ValueError("unrecognized key id")
-        if any(x in header for x in ("jku", "jwk", "x5u")):
+        if "crit" in header or any(x in header for x in ("jku", "jwk", "x5u")):
             raise ValueError("untrusted token key source")
         matching = [key for key in jwks["keys"]
                     if isinstance(key, dict) and key.get("kid") == kid and
@@ -53,6 +59,8 @@ def verify_oidc_jwt(token: str, *, issuer: str, audience: str,
         if len(matching) != 1:
             raise ValueError("missing or duplicate signing key")
         public_key = jwt.algorithms.RSAAlgorithm.from_jwk(matching[0])
+        if public_key.key_size < 2048:
+            raise ValueError("weak signing key")
         claims = jwt.decode(
             token, key=public_key, algorithms=["RS256"],
             issuer=issuer, audience=audience,
@@ -64,6 +72,15 @@ def verify_oidc_jwt(token: str, *, issuer: str, audience: str,
                 "verify_iss": True, "verify_aud": True,
             },
         )
+        issued_at, expires_at, not_before = (
+            claims.get("iat"), claims.get("exp"), claims.get("nbf")
+        )
+        if any(type(value) is not int for value in (issued_at, expires_at, not_before)):
+            raise ValueError("numeric date claims must be integer seconds")
+        if (expires_at <= issued_at or
+                expires_at - issued_at > MAX_TOKEN_LIFETIME_SECONDS or
+                not_before > expires_at):
+            raise ValueError("token lifetime outside policy")
         # This candidate requires a separately configured access-token profile.
         # A signed ID token is identity evidence for an OAuth client, not a
         # finance API access token. Provider-specific token types still need
