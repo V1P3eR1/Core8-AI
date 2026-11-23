@@ -42,3 +42,10 @@
 - **Important limitation:** The tested CI administrator is a superuser and may `SET ROLE` for fixtures. Live application credentials must be separate non-owner, non-superuser, non-BYPASSRLS roles without the ability to `SET ROLE` into another tenant. Provisioning identity-to-database-role mapping requires verified server-side membership, audited least privilege, migrations and a separate ingress/worker policy. The prototype currently has none of these capabilities.
 - The candidate purposefully has **no write policy**, so applying it to a deployed writer/worker would break normal ingestion. Do not run its DDL on a shared, deployed or production database. Do not infer broad tenant isolation from an isolated SQL demonstration.
 - Before any release: test unauthorized SQL SELECT and mutation across joins, connection-pool role reset, role-grant escalation, migration rollback, background worker execution and idempotent Stripe webhook ingress under distinct least-privilege roles. Keep `/finance/overview` disabled pending verified identity and authorization.
+
+
+## Connection reuse / session identity regression — 2026-11-23
+
+- [test_rls_postgres.py](../tests/test_rls_postgres.py) now checks sequential, transaction-scoped `SET LOCAL ROLE` switching on **one reused physical PostgreSQL connection** in disposable CI. Each synthetic tenant sees only its own event ID, and `current_user` resets when its transaction closes. This catches accidental transaction-level role leakage in the tested scenario.
+- [Finance OS CI #60](https://github.com/V1P3eR1/Core8-AI/actions/runs/45139232196) **SUCCESS**, [secret scan #373](https://github.com/V1P3eR1/Core8-AI/actions/runs/45139232177) **SUCCESS** on commit `abdb130`.
+- This is **not** testing a production connection pool, actual OIDC identities or live role provisioning. Application credentials must never be granted the ability to `SET ROLE` into arbitrary tenants; using pooled sessions requires explicit isolation controls, reviewed lifecycle cleanup, and penetration tests before exposure.
