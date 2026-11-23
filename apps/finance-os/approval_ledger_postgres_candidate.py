@@ -5,7 +5,6 @@ must belong to a separately authenticated/authorized administrative service.
 A fabricated StoredKeyApproval is not proof of human approval or identity.
 Never expose this ledger via a request handler or grant API users SQL writes.
 """
-from datetime import datetime, timezone
 import re
 from key_approval_candidate import IndependentApprovalLedger, StoredKeyApproval
 from tenant_access import FinanceAccessDenied
@@ -53,41 +52,37 @@ def provision_test_approval(conn, *, namespace, approval):
 
 
 class PostgresApprovalCandidate(IndependentApprovalLedger):
-    """Consume once using one SQL row lock + same-transaction audit insert.
+    """Consume once using a conditional SQL update + same-transaction audit insert.
 
-    Use autocommit connections, or ensure any enclosing transaction commits
+    Expiry uses PostgreSQL server clock, never request-provided time.\n    Use autocommit connections, or ensure any enclosing transaction commits
     BEFORE performing external watermark CAS. This sandbox adapter does NOT
     provide atomic commits across PostgreSQL, approvals and external floor.
     """
 
-    def __init__(self, conn, *, namespace, now=None):
+    def __init__(self, conn, *, namespace):
         if type(namespace) is not str or not _NS.fullmatch(namespace):
             raise FinanceAccessDenied("Finance key approval denied")
         self.conn = conn
         self.namespace = namespace
-        self.now = now
 
     def consume(self, approval_id, expected):
         _validate(expected)
         if type(approval_id) is not str or approval_id != expected.approval_id:
             return False
-        instant = self.now
-        if instant is None:
-            instant = int(datetime.now(timezone.utc).timestamp())
-        if type(instant) is not int:
-            return False
         with self.conn.transaction():
             row = self.conn.execute(
                 """UPDATE finance_key_approval_candidate
-                     SET consumed_at=now()
+                     SET consumed_at=clock_timestamp()
                    WHERE approval_id=%s AND namespace=%s
                      AND requester_subject=%s AND approver_subject=%s
                      AND proposal_sha256=%s AND expires_at=%s
-                     AND expires_at > %s AND consumed_at IS NULL
+                     AND to_timestamp(expires_at) > clock_timestamp()
+                     AND to_timestamp(expires_at) <= clock_timestamp() + interval '15 minutes'
+                     AND consumed_at IS NULL
                    RETURNING approval_id""",
                 (approval_id, self.namespace, expected.requester_subject,
                  expected.approver_subject, expected.proposal_sha256,
-                 expected.expires_at, instant),
+                 expected.expires_at),
             ).fetchone()
             if row is None:
                 return False
