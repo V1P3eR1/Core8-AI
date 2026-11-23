@@ -32,7 +32,8 @@ def git(root, *args, data=None):
     env = {"PATH": os.defpath, "HOME": "/nonexistent", "LC_ALL": "C",
            "GIT_CONFIG_NOSYSTEM": "1", "GIT_CONFIG_GLOBAL": "/dev/null",
            "GIT_TERMINAL_PROMPT": "0"}
-    cmd = ["git", "-c", "core.hooksPath=/dev/null", "-c", "protocol.allow=never",
+    cmd = ["git", "-c", "core.hooksPath=/dev/null", "-c", "core.fsmonitor=false",
+           "--no-optional-locks", "-c", "protocol.allow=never",
            "-C", str(root), *args]
     try:
         p = subprocess.run(cmd, input=data, stdout=subprocess.PIPE,
@@ -61,7 +62,14 @@ def stage(repo, patch, artifact_hash, base_sha, approved_scope_hash, bundle_outp
         raise StageRejected("not_a_git_checkout")
     if git(repo, "rev-parse", "HEAD").strip().decode() != base_sha:
         raise StageRejected("base_sha_mismatch")
-    if git(repo, "status", "--porcelain", "--untracked-files=all"):
+    # The supplied checkout must be the actual worktree root, not a nested
+    # directory whose HEAD appears valid but changes how paths are resolved.
+    top = Path(os.fsdecode(git(repo, "rev-parse", "--show-toplevel")).strip()).resolve()
+    if top != repo:
+        raise StageRejected("not_worktree_root")
+    # --ignored catches files hidden by a repository-local .gitignore; those
+    # files must not influence any review, even if Git would normally skip them.
+    if git(repo, "status", "--porcelain", "--untracked-files=all", "--ignored"):
         raise StageRejected("dirty_source")
     with tempfile.TemporaryDirectory(prefix="core8-review-") as temp:
         target = Path(temp)
