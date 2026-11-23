@@ -24,8 +24,8 @@ def receive_once(conn, *, delivery_id, raw_body, timestamp, signature_hex,
     if not isinstance(tenant, str) or not tenant or not isinstance(source, str) or not source:
         return {"ok": False, "reason": "invalid_registry"}
     # Verify cryptographic provenance before reserving a receipt.
-    from webhook_signature_demo import verify
-    verified = verify(credential.get("secret"), timestamp, raw_body, signature_hex, now=now)
+    from credential_rotation_demo import verify_rotating_credential
+    verified = verify_rotating_credential(credential, timestamp, raw_body, signature_hex, now=now)
     if not verified["ok"]:
         return verified
     # Receipt and lead must share one SQLite transaction; no nested transaction.
