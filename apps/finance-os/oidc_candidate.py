@@ -13,7 +13,8 @@ KID_RE = re.compile(r"^[A-Za-z0-9._:-]{1,128}$")
 
 
 def verify_oidc_jwt(token: str, *, issuer: str, audience: str,
-                    jwks: dict, leeway_seconds: int = 30) -> TrustedSubject:
+                    jwks: dict, leeway_seconds: int = 30,
+                    expected_token_use: str = "access") -> TrustedSubject:
     """Validate pinned issuer, audience, RSA signature and time claims.
 
     The issuer, audience and JWKS arguments MUST be independently configured
@@ -63,6 +64,12 @@ def verify_oidc_jwt(token: str, *, issuer: str, audience: str,
                 "verify_iss": True, "verify_aud": True,
             },
         )
+        # This candidate requires a separately configured access-token profile.
+        # A signed ID token is identity evidence for an OAuth client, not a
+        # finance API access token. Provider-specific token types still need
+        # review before selecting an identity provider.
+        if expected_token_use != "access" or claims.get("token_use") != "access":
+            raise ValueError("not an access token")
         subject = claims.get("sub")
         if not isinstance(subject, str) or not SUBJECT_RE.fullmatch(subject):
             raise ValueError("invalid subject")
