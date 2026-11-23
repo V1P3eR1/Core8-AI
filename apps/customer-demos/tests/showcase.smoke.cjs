@@ -23,6 +23,19 @@ const {chromium} = require(process.env.PLAYWRIGHT_MODULE || 'playwright');
     const color = await page.locator('header p').first().evaluate(el => getComputedStyle(el).color);
     assert.equal(color,'rgb(34, 34, 34)');
     await page.pdf({path:path.join(out,'showcase-a4.pdf'),format:'A4',printBackground:true});
-    console.log('Review mobile-390.png and showcase-a4.pdf in',out);
+    // Separate desktop pass: verify the bilingual panels remain reachable
+    // and there is no horizontal overflow in a normal review viewport.
+    const desktop = await browser.newPage({viewport:{width:1280,height:900},offline:true});
+    await desktop.goto(pathToFileURL(path.resolve(__dirname,'../../../docs/customer-showcase/index.html')).href);
+    await desktop.evaluate(() => document.fonts.ready);
+    assert.equal(await desktop.locator('article').count(), 5);
+    assert.equal(await desktop.locator('article .en[lang=en][dir=ltr]').count(), 5);
+    assert.equal(await desktop.locator('html').getAttribute('dir'), 'rtl');
+    assert.ok(await desktop.evaluate(() => document.documentElement.scrollWidth <= innerWidth),
+      'horizontal overflow on 1280px desktop');
+    assert.ok(await desktop.getByText('Start with the business problem').isVisible());
+    await desktop.screenshot({path:path.join(out,'desktop-1280.png'),fullPage:true});
+    await desktop.close();
+    console.log('Review mobile-390.png, desktop-1280.png and showcase-a4.pdf in',out);
   } finally { await browser.close(); }
 })().catch(err => { console.error(err); process.exitCode = 1; });
