@@ -30,6 +30,8 @@ SUITES = {
     74: "Orchestration staging offline unit tests",
     64: "Finance OS sandbox unit tests",
     81: "backend-tests",
+    82: "customer-demos-ci",
+    83: "customer-demos-ci",
     84: "social-content-draft-contract",
     85: "lead-contract-offline",
 }
@@ -114,11 +116,8 @@ def summarize_pr(pr, runs, number):
         else:
             records[name] = "unknown"
     required_suite = SUITES.get(number, DEFAULT_SUITE)
-    policy_missing = number in (82, 83)
     required = {"secret-scan", required_suite}
-    if policy_missing:
-        check_state = "suite_policy_missing"
-    elif not records:
+    if not records:
         check_state = "no_runs"
     elif not required.issubset(records):
         check_state = "missing_required_workflows"
