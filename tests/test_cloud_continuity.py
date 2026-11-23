@@ -88,6 +88,13 @@ class ContinuityContract(unittest.TestCase):
             results = list(pool.map(claim_worker, [(self.db, 'same-task')] * 16))
         self.assertEqual(sum(results), 1)
 
+    def test_first_use_concurrent_claims_have_one_winner(self):
+        # Exercise the uninitialized database, including concurrent schema creation.
+        with ProcessPoolExecutor(max_workers=4) as pool:
+            results = list(pool.map(claim_worker, [(self.db, 'first-task')] * 16))
+        self.assertEqual(sum(results), 1)
+        self.assertEqual(read_state(self.db, "first-task"), "queued")
+
     def test_missing_state_is_keyerror(self):
         with self.assertRaises(KeyError):
             read_state(self.db, 'missing')
