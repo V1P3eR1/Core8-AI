@@ -256,32 +256,13 @@ async def set_emergency_pause(active: bool, actor: str) -> dict:
 # ── Automatic mode (worker-triggered) ──────────────────────────────────────
 
 async def auto_schedule_candidates(actor: str = "worker:auto") -> list[dict]:
-    """In automatic mode, approve+queue items in 'needs_review' that pass EVERY auto gate.
-    Items with sensitive flags never pass. Returns the publications created."""
-    pub = await _pub_settings()
-    if pub.get("mode") != "automatic" or pub.get("emergency_pause"):
-        return []
-    out = []
-    for item in await fetch_all("SELECT id FROM sm_content_items WHERE status='needs_review' AND is_demo=0 "
-                                "AND scheduled_for IS NOT NULL ORDER BY scheduled_for"):
-        full = await get_item(item["id"])
-        acct = await connected_account()
-        if not acct:
-            break
-        if full.get("account_id") != acct["ig_user_id"]:
-            continue
-        # approval is created by the system *only* after all auto gates pass
-        pre = await gate_report(full, for_auto=True)
-        blocking = [c["code"] for c in pre["checks"] if not c["ok"] and c["code"] != "approval"]
-        if blocking:
-            continue
-        await create_approval(await get_item_raw(full["id"]), actor)
-        try:
-            out.append(await schedule_item(full["id"], actor))
-        except GateError as e:
-            await audit(actor, "auto_schedule_blocked", "content_item", full["id"], {"code": e.code, "msg": str(e)})
-    return out
+    """Fail closed: workers may not manufacture human approval or queue unapproved content.
 
+    Automatic publishing remains disabled until a separately reviewed and explicit
+    human-approval policy is implemented. Already-approved items are scheduled
+    through the existing explicit schedule endpoint, not this worker.
+    """
+    return []
 
 # ── Worker: claim + run one publication ────────────────────────────────────
 
