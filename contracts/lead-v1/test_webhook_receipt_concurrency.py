@@ -31,7 +31,7 @@ class ConcurrentWebhookReceiptTests(unittest.TestCase):
                     barrier.wait(timeout=10)
                     result=receive_once(
                         connection,delivery_id="D1",raw_body=BODY,
-                        timestamp=NOW,signature_hex=signature(SECRET,NOW,BODY),
+                        timestamp=NOW,signature_hex=signature(SECRET,NOW,BODY,delivery_id="D1"),
                         credential_id="key",credential_registry=REGISTRY,
                         now=NOW,lead_id=f"L{index}")
                     with lock: results.append(result)
@@ -61,7 +61,7 @@ class ConcurrentWebhookReceiptTests(unittest.TestCase):
                 registry={"key":dict(REGISTRY["key"],tenant_id=tenant)}
                 result=receive_once(
                     conn,delivery_id="D1",raw_body=BODY,timestamp=NOW,
-                    signature_hex=signature(SECRET,NOW,BODY),credential_id="key",
+                    signature_hex=signature(SECRET,NOW,BODY,delivery_id="D1"),credential_id="key",
                     credential_registry=registry,now=NOW,lead_id="L-"+tenant)
                 self.assertTrue(result["ok"])
             self.assertEqual(conn.execute("SELECT COUNT(*) FROM demo_receipts").fetchone()[0],2)
