@@ -12,7 +12,8 @@ class EvidenceBindingTests(unittest.TestCase):
         self.approval = {
             "repo": REPO, "issue_number": 62, "comment_id": 456,
             "approver_id": 999, "task_uuid": TASK,
-            "task_digest": "a" * 64, "issue_body_sha256": "b" * 64}
+            "task_digest": "a" * 64, "issue_body_sha256": "b" * 64,
+            "comment_created_at": "2026-11-23T08:05:00Z"}
         self.run = {
             "repo": REPO, "run_id": 123, "artifact_id": 789, "approver_id": 999,
             "head_sha": "c" * 40, "run_conclusion": "success",
@@ -58,6 +59,29 @@ class EvidenceBindingTests(unittest.TestCase):
     def test_unexpected_gate_key(self):
         self.gate["override"] = True
         with self.assertRaises(EvidenceBlocked): self.check()
+    def test_comment_after_artifact_creation_is_rejected(self):
+        self.approval["comment_created_at"] = "2026-11-23T08:20:00Z"
+        with self.assertRaisesRegex(EvidenceBlocked, "approval_or_artifact_time_mismatch"):
+            self.check()
+
+    def test_comment_before_private_approval_is_rejected(self):
+        self.approval["comment_created_at"] = "2026-11-23T07:59:59Z"
+        with self.assertRaisesRegex(EvidenceBlocked, "approval_or_artifact_time_mismatch"):
+            self.check()
+
+    def test_missing_comment_creation_time_is_rejected(self):
+        self.approval.pop("comment_created_at")
+        with self.assertRaisesRegex(EvidenceBlocked, "invalid_provenance_time"):
+            self.check()
+
+    def test_malformed_comment_creation_time_is_rejected(self):
+        self.approval["comment_created_at"] = "2026-11-23T08:05:00+03:00"
+        with self.assertRaisesRegex(EvidenceBlocked, "invalid_provenance_time"):
+            self.check()
+
+    def test_comment_between_approval_and_artifact_accepted(self):
+        self.assertEqual(self.check()["status"], "BOUND_FOR_REVIEW_ONLY")
+
     def test_approval_after_creation(self):
         self.gate["approved_at"] = "2026-11-23T09:00:00Z"
         with self.assertRaises(EvidenceBlocked): self.check()
