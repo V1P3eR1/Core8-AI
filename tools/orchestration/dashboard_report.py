@@ -45,6 +45,7 @@ def render(health, notion=None):
     items = health.get("items")
     if not isinstance(items, list) or len(items) > MAX_ITEMS:
         raise DashboardError("invalid_health_items")
+    demo = health.get("demo") is True
     counts = {k: 0 for k in VALID_STATES}
     rows = []
     seen = set()
@@ -62,13 +63,15 @@ def render(health, notion=None):
         if not isinstance(checks, list):
             raise DashboardError("invalid_check_list")
         visible = ", ".join(_text(x, 60) for x in checks[:3])
+        pr_label = f"Demo #{n}" if demo else f"[#{n}](https://github.com/{REPO}/pull/{n})"
         rows.append(
-            f"| [#{n}](https://github.com/{REPO}/pull/{n}) | "
+            f"| {pr_label} | "
             f"{VALID_STATES[status]} | \`{sha[:10]}\` | "
             f"{visible or '-'} |"
         )
     lines = [
         "# Core8-AI engineering control — observation only",
+        *(["", "**SYNTHETIC DEMO DATA — NOT LIVE GITHUB CHECKS.**"] if demo else []),
         "",
         f"**GitHub PRs checked:** {len(items)}. This report does not approve code, "
         "authorize model spending, merge or deploy anything.",
