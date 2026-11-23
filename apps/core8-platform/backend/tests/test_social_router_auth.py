@@ -95,8 +95,7 @@ def test_combined_schedule_request_does_not_mutate_existing_synthetic_item(api):
     assert after.json()["publications"] == before.json()["publications"]
 
 
-@pytest.mark.asyncio
-async def test_auto_scheduler_never_creates_worker_approvals(monkeypatch):
+def test_auto_scheduler_never_creates_worker_approvals(monkeypatch):
     """Even automatic mode must not mint approvals without human review."""
     from social import publishing
 
@@ -106,4 +105,5 @@ async def test_auto_scheduler_never_creates_worker_approvals(monkeypatch):
     monkeypatch.setattr(publishing, "create_approval", forbidden)
     monkeypatch.setattr(publishing, "schedule_item", forbidden)
     monkeypatch.setattr(publishing, "_pub_settings", forbidden)
-    assert await publishing.auto_schedule_candidates() == []
+    import asyncio
+    assert asyncio.run(publishing.auto_schedule_candidates()) == []
