@@ -24,12 +24,12 @@ async def intake(request: Request,
         timestamp = int(x_demo_timestamp)
     except ValueError:
         raise HTTPException(status_code=400, detail="invalid_timestamp")
-    if request.headers.get("content-length"):
-        try:
-            if int(request.headers["content-length"]) > 65536:
-                raise HTTPException(status_code=413, detail="request_too_large")
-        except ValueError:
+    declared_length = request.headers.get("content-length")
+    if declared_length is not None:
+        if not declared_length.isascii() or not declared_length.isdecimal():
             raise HTTPException(status_code=400, detail="invalid_content_length")
+        if len(declared_length) > 8 or int(declared_length) > 65536:
+            raise HTTPException(status_code=413, detail="request_too_large")
     body = bytearray()
     async for chunk in request.stream():
         body.extend(chunk)
