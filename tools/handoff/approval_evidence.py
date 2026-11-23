@@ -1,11 +1,26 @@
 """Read-only issue/comment scope evidence; NOT an independent Notion approval."""
 import hashlib
 import re
+from datetime import datetime, timezone
 from github_provenance import EvidenceBlocked, REPO, positive
 
 HEX64 = re.compile(r"^[a-f0-9]{64}$")
 UUID = re.compile(r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$")
 PREFIX = "https://api.github.com/repos/" + REPO + "/issues/"
+UTC_TIMESTAMP = re.compile(r"^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}(?:\\.[0-9]{1,9})?Z$")
+
+
+def valid_utc_timestamp(value):
+    """Reject ambiguous offsets, invalid dates and timestamps with no timezone."""
+    if not isinstance(value, str) or not UTC_TIMESTAMP.fullmatch(value):
+        return False
+    try:
+        stamp = datetime.fromisoformat(value[:-1].split(".")[0] + "+00:00")
+    except ValueError:
+        return False
+    return stamp.tzinfo == timezone.utc
+
+
 
 
 def verify_issue_comment(issue, comment, *, issue_number, comment_id, approver_id,
@@ -36,7 +51,7 @@ def verify_issue_comment(issue, comment, *, issue_number, comment_id, approver_i
             or comment.get("issue_url") != PREFIX + str(issue_number)
             or comment.get("body") != "/core8-implement " + task_digest
             or comment.get("performed_via_github_app") not in (None, False)
-            or not isinstance(comment.get("created_at"), str)
+            or not valid_utc_timestamp(comment.get("created_at"))
             or comment.get("updated_at") != comment["created_at"]
             or type(user.get("id")) is not int or user["id"] != approver_id
             or user.get("type") != "User"):
