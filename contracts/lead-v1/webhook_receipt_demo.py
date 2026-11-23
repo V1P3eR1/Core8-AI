@@ -3,8 +3,6 @@
 Unlike lead idempotency, this rejects a repeated signed delivery entirely.
 Only an isolated SQLite fixture; no production migrations or HTTP endpoints.
 """
-import sqlite3
-from signed_intake_demo import signed_intake
 
 def setup_receipts(conn):
     conn.execute("""CREATE TABLE IF NOT EXISTS demo_receipts (
@@ -30,10 +28,7 @@ def receive_once(conn, *, delivery_id, raw_body, timestamp, signature_hex,
     verified = verify(credential.get("secret"), timestamp, raw_body, signature_hex, now=now)
     if not verified["ok"]:
         return verified
-    # Savepoint allows the existing signed_intake to manage its own transaction.
-    # The receipt must be written in the SAME transaction as the lead. To avoid
-    # nested transactions, use a disposable temporary connection's schema and
-    # implement both writes below.
+    # Receipt and lead must share one SQLite transaction; no nested transaction.
     import json
     from offline_intake_demo import canonical_payload_digest
     try:
