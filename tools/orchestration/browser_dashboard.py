@@ -9,6 +9,7 @@ import json
 from pathlib import Path
 import sys
 from dashboard_report import DashboardError, MAX_ITEMS, MAX_SIZE, REPO, SCHEMA, SHA, VALID_STATES
+from snapshot_metadata import metadata
 
 LABELS = {
     "needs_human_triage": ("תקלה לבדיקה", "failure"),
@@ -35,6 +36,7 @@ def render_html(health):
     items = health.get("items")
     if not isinstance(items, list) or len(items) > MAX_ITEMS:
         raise DashboardError("invalid_items")
+    meta = metadata(health)
     demo = health.get("demo") is True
     counts = Counter()
     rows = []
@@ -73,6 +75,13 @@ def render_html(health):
     demo_notice = ('<p class="demo-warning" role="status">דמו סינתטי בלבד · אין כאן נתוני GitHub חיים, תקלות אמיתיות או אישורי ביצוע.</p>' if demo else '')
     coverage_notice = ('<p class="demo-warning" role="status">דוח חלקי: המעקב מוגבל ל־20 בקשות שינוי. אין להסיק שיתר ה־PRs נבדקו.</p>'
                        if health.get("coverage") == "partial" else '')
+    source_notice = ('<p class="snapshot-note">מקור: ' + meta["source_label"] +
+                     ' · מועד צילום: ' + (meta["observed_at"] or 'לא צוין') +
+                     ' · הדוח סטטי ואינו מתעדכן מעצמו.</p>')
+    freshness_notice = ('<p class="demo-warning" role="status">הנתונים היו בני יותר מ־15 דקות בעת יצירת הקובץ. יש לרענן את הבדיקה לפני החלטה.</p>'
+                        if meta["freshness"] == "stale_at_render" else
+                        '<p class="demo-warning" role="status">זמן צילום לא אומת. אין לראות בדוח מצב חי.</p>'
+                        if meta["freshness"] == "unknown" else '')
     return f"""<!doctype html>
 <html lang="he" dir="rtl">
 <head>
@@ -95,7 +104,7 @@ th{{color:var(--muted);font-size:.82rem}}tr:last-child td{{border-bottom:0}}a{{c
 .status{{padding:4px 9px;border-radius:100px;background:#25344a;display:inline-block;white-space:nowrap}}
 .failure{{color:#ffaaaa}}.warning{{color:#ffdf9b}}.pending{{color:#c8c0ff}}.review{{color:#9ee7bf}}
 .checks{{max-width:360px;overflow-wrap:anywhere}}code{{font-family:ui-monospace,monospace;font-size:.86rem}}
-footer{{color:var(--muted);border-top:1px solid var(--border);margin-top:35px;padding-top:18px;font-size:.85rem}}\n.demo-warning{{background:#3d291e;border:1px solid #f6bb75;color:#ffe0b5;padding:12px 16px;border-radius:10px;font-weight:700}}
+footer{{color:var(--muted);border-top:1px solid var(--border);margin-top:35px;padding-top:18px;font-size:.85rem}}\n.snapshot-note{{font-size:.85rem;color:var(--muted)}}\n.demo-warning{{background:#3d291e;border:1px solid #f6bb75;color:#ffe0b5;padding:12px 16px;border-radius:10px;font-weight:700}}
 </style>
 </head>
 <body>
@@ -104,6 +113,8 @@ footer{{color:var(--muted);border-top:1px solid var(--border);margin-top:35px;pa
 <h1>מרכז בקרת הפיתוח</h1>
 <p>תמונת מצב לצפייה בלבד; הצלחת בדיקה אינה אישור למיזוג, פריסה או חיוב כספי.</p>\n{demo_notice}
 {coverage_notice}
+{freshness_notice}
+{source_notice}
 <section class="metrics" aria-label="סיכום סטטוסים">{cards}</section>
 <h2>בדיקות Pull Requests · {len(items)} פריטים</h2>
 <div class="panel"><table>
