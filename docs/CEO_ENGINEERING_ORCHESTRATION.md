@@ -123,6 +123,12 @@ The connected private Notion integration was used to **read**, not export, the e
 
 **Limitations:** no live Notion reads in GitHub CI, no customer data, no persistent dashboard service, no feedback writes to the Notion source, and no running engineering agent. A passing contract job on the draft PR only verifies local synthetic tests, *not* successful scheduled reporting.
 
+### Offline Hebrew browser dashboard (PR #61, November 23)
+
+`tools/orchestration/browser_dashboard.py` now converts the sanitized GitHub check snapshot to a standalone, RTL Hebrew `core8-dev-loop-dashboard.html` report. It has a responsive count summary, PR links, current head SHA and CI states, no JavaScript, no network-dependent CSS/assets and a restrictive content security policy. Untrusted check names are HTML-escaped and capped. **Private Notion fields never enter this HTML report**. Synthetic privacy/injection and malformed-input tests live in `test_browser_dashboard.py`.
+
+The explicitly approved and merged `observe` job, **if** later enabled via `CORE8_DEV_LOOP_ENABLED=true`, would upload three read-only artifacts: JSON, Markdown and HTML. This PR's own pull-request run executes synthetic contract tests only, so no live dashboard artifact should be claimed before a post-merge observation actually runs. To view it when activated, open the relevant GitHub Actions observation run, download `core8-dev-loop-report`, and open the HTML file locally. No hosting, user login, production API, automatic PR execution or status mutation has been activated.
+
 ### Safe activation checklist
 
 1. Inspect this PR diff and successful `Core8 development loop (read-only)` CI, security review, codeowners and actions-policy compatibility.
