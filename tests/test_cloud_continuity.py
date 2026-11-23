@@ -20,14 +20,30 @@ def claim(db_path: Path, key: str) -> bool:
 
 
 def checkpoint(db_path: Path, key: str, status: str) -> None:
+    allowed = {
+        "queued": {"running", "blocked"},
+        "running": {"review", "blocked", "failed"},
+        "review": set(),
+        "blocked": set(),
+        "failed": set(),
+    }
     if status not in {"running", "review", "blocked", "failed"}:
         raise ValueError("unsupported state")
     connection = sqlite3.connect(db_path, timeout=10)
     try:
         with connection:
-            result = connection.execute("UPDATE jobs SET status = ? WHERE idempotency_key = ?", (status, key))
-            if result.rowcount != 1:
+            row = connection.execute("SELECT status FROM jobs WHERE idempotency_key = ?", (key,)).fetchone()
+            if row is None:
                 raise KeyError(key)
+            previous = row[0]
+            if status not in allowed.get(previous, set()):
+                raise ValueError("transition requires a new approved job revision")
+            result = connection.execute(
+                "UPDATE jobs SET status = ? WHERE idempotency_key = ? AND status = ?",
+                (status, key, previous),
+            )
+            if result.rowcount != 1:
+                raise ValueError("concurrent transition conflict")
     finally:
         connection.close()
 
@@ -87,9 +103,30 @@ class ContinuityContract(unittest.TestCase):
         claim(self.db, "needs-approval")
         claim(self.db, "independent-job")
         checkpoint(self.db, "needs-approval", "blocked")
+        checkpoint(self.db, "independent-job", "running")
         checkpoint(self.db, "independent-job", "review")
         self.assertEqual(read_state(self.db, "needs-approval"), "blocked")
         self.assertEqual(read_state(self.db, "independent-job"), "review")
+
+    def test_blocked_job_cannot_resume_without_new_revision(self):
+        claim(self.db, "requires-owner-approval")
+        checkpoint(self.db, "requires-owner-approval", "blocked")
+        with self.assertRaisesRegex(ValueError, "new approved job revision"):
+            checkpoint(self.db, "requires-owner-approval", "running")
+        self.assertEqual(read_state(self.db, "requires-owner-approval"), "blocked")
+
+    def test_review_cannot_return_to_running(self):
+        claim(self.db, "already-reviewed")
+        checkpoint(self.db, "already-reviewed", "running")
+        checkpoint(self.db, "already-reviewed", "review")
+        with self.assertRaises(ValueError):
+            checkpoint(self.db, "already-reviewed", "running")
+
+    def test_queued_job_cannot_skip_running_for_review(self):
+        claim(self.db, "skipped-step")
+        with self.assertRaises(ValueError):
+            checkpoint(self.db, "skipped-step", "review")
+        self.assertEqual(read_state(self.db, "skipped-step"), "queued")
 
     def test_invalid_transition_rejected(self):
         claim(self.db, "synthetic-task-3")
