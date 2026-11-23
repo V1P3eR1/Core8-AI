@@ -68,6 +68,13 @@ class BrowserDashboardTests(unittest.TestCase):
         self.assertIn("דוגמה #901001", html)
         self.assertNotIn("/pull/901001", html)
 
+    def test_partial_repo_snapshot_is_not_presented_as_complete(self):
+        data = sample([pr()])
+        data["coverage"] = "partial"
+        output = render_html(data)
+        self.assertIn("דוח חלקי", output)
+        self.assertIn("יתר ה־PRs", output)
+
     def test_too_many_rows_refused(self):
         with self.assertRaises(DashboardError):
             render_html(sample([pr(i + 1) for i in range(61)]))
