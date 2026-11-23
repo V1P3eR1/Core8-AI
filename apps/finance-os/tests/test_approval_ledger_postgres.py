@@ -129,6 +129,25 @@ class ApprovalLedgerPostgresTests(unittest.TestCase):
         self.assertTrue(self.consume())
         self.assertEqual(self.audit_count(), 1)
 
+    def test_server_clock_rejects_expired_and_far_future_approval(self):
+        from dataclasses import replace
+        with psycopg.connect(self.dsn, autocommit=True) as db:
+            for delta in (-60, 7200):
+                with self.subTest(delta=delta):
+                    expiry = int(time.time()) + delta
+                    db.execute(
+                        "UPDATE finance_key_approval_candidate SET expires_at=%s WHERE approval_id=%s",
+                        (expiry, self.approval.approval_id),
+                    )
+                    candidate = replace(self.approval, expires_at=expiry)
+                    self.assertFalse(self.consume(approval=candidate))
+            db.execute(
+                "UPDATE finance_key_approval_candidate SET expires_at=%s WHERE approval_id=%s",
+                (self.approval.expires_at, self.approval.approval_id),
+            )
+        self.assertEqual(self.audit_count(), 0)
+        self.assertTrue(self.consume())
+
     def test_provisioning_cannot_overwrite_existing_approval(self):
         with psycopg.connect(self.dsn, autocommit=True) as db:
             with self.assertRaises(FinanceAccessDenied):
