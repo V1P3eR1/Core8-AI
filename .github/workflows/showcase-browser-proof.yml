@@ -1,0 +1,29 @@
+name: Showcase browser proof
+on:
+  push:
+    branches: [docs/customer-showcase-kit]
+    paths:
+      - docs/customer-showcase/index.html
+      - apps/customer-demos/tests/showcase.smoke.cjs
+      - .github/workflows/showcase-browser-proof.yml
+permissions:
+  contents: read
+jobs:
+  render:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Prepare browser tooling outside the project
+        run: npm install --prefix "$RUNNER_TEMP/qa" --ignore-scripts --no-audit --no-fund playwright-core@1.56.1
+      - name: Check Hebrew mobile layout and print to PDF
+        run: |
+          PLAYWRIGHT_MODULE="$RUNNER_TEMP/qa/node_modules/playwright-core" CHROME_PATH="$(command -v google-chrome)" node apps/customer-demos/tests/showcase.smoke.cjs showcase-evidence
+      - uses: actions/upload-artifact@v4
+        with:
+          name: showcase-proof-${{ github.sha }}
+          path: showcase-evidence/
+          if-no-files-found: error
+          retention-days: 7
