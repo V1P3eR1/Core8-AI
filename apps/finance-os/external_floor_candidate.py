@@ -70,6 +70,13 @@ def rotate_with_external_floor(conn, *, namespace, signing_key, floor,
     )
     if registry.snapshot()[0] != current:
         raise FinanceAccessDenied("Finance key configuration denied")
+    # Preflight before touching the independent high-watermark. An invalid
+    # JWK, retired kid or malformed retirement list must not permanently
+    # strand the database behind an otherwise unnecessary floor advance.
+    # The transactional database writer independently validates again.
+    registry.preview_replace(
+        proposed_jwks, generation=expected_generation + 1, retire=retire
+    )
     try:
         advanced = floor.compare_and_advance(
             namespace, expected_generation, expected_generation + 1
