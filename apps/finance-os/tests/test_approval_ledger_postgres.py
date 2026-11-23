@@ -36,6 +36,16 @@ class ApprovalLedgerPostgresTests(unittest.TestCase):
                                   if not line.lstrip().startswith("--")).strip()
                 if clean:
                     db.execute(clean)
+            guard_sql = (Path(__file__).resolve().parents[1] / "sql" /
+                         "key_approval_audit_guard_candidate.sql").read_text()
+            # PL/pgSQL function has internal semicolons; separate by blank
+            # paragraphs rather than splitting the function on semicolons.
+            for command in guard_sql.split("\n\n"):
+                if command.strip() and not command.lstrip().startswith("--"):
+                    db.execute(command)
+                elif command.strip():
+                    # Initial comment paragraph includes the CREATE FUNCTION.
+                    db.execute(command)
 
     @classmethod
     def tearDownClass(cls):
@@ -57,12 +67,9 @@ class ApprovalLedgerPostgresTests(unittest.TestCase):
             provision_test_approval(db, namespace=self.namespace,
                                    approval=self.approval)
 
-    def tearDown(self):
-        with psycopg.connect(self.dsn) as db:
-            db.execute("DELETE FROM finance_key_approval_audit_candidate WHERE approval_id=%s",
-                       (self.approval.approval_id,))
-            db.execute("DELETE FROM finance_key_approval_candidate WHERE approval_id=%s",
-                       (self.approval.approval_id,))
+    # CI uses unique approval IDs per test. Retain records until the entire
+    # disposable test table is dropped at tearDownClass, because audit entries
+    # must never be deleted during ordinary operations.
 
     def consume(self, *, approval=None, namespace=None):
         approval = approval or self.approval
@@ -183,6 +190,23 @@ class ApprovalLedgerPostgresTests(unittest.TestCase):
                 db.execute(sql.SQL("DROP ROLE {}").format(sql.Identifier(role)))
         self.assertEqual(self.audit_count(), 0)
         self.assertTrue(self.consume())
+
+    def test_consumed_audit_cannot_be_updated_deleted_or_truncated(self):
+        self.assertTrue(self.consume())
+        with psycopg.connect(self.dsn, autocommit=True) as db:
+            attempts = [
+                ("UPDATE finance_key_approval_audit_candidate SET action='consumed' WHERE approval_id=%s",
+                 (self.approval.approval_id,)),
+                ("DELETE FROM finance_key_approval_audit_candidate WHERE approval_id=%s",
+                 (self.approval.approval_id,)),
+                ("TRUNCATE finance_key_approval_audit_candidate", ()),
+            ]
+            for statement, values in attempts:
+                with self.subTest(statement=statement):
+                    with self.assertRaises(psycopg.errors.InsufficientPrivilege):
+                        db.execute(statement, values)
+        self.assertEqual(self.audit_count(), 1)
+        self.assertFalse(self.consume())
 
     def test_provisioning_cannot_overwrite_existing_approval(self):
         with psycopg.connect(self.dsn, autocommit=True) as db:
