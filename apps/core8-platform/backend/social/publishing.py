@@ -321,7 +321,7 @@ async def run_publication(pub: dict, worker_id: str = "worker") -> dict:
         approval = await check_item_approval(await get_item_raw(item["id"]))
         active = approval.get("approval") or {}
         if (not approval.get("valid") or active.get("id") != pub.get("approval_id")
-                or (active.get("approved_by") or "").startswith("worker:")):
+                or (active.get("approved_by") or "").startswith(("worker:", "system:"))):
             await _set_state(pub_id, "cancelled", last_error="human_approval_required", error_class="permanent")
             await set_status(item["id"], "paused", worker_id, "Human approval required for this publication")
             return await fetch_one("SELECT * FROM sm_publications WHERE id=?", (pub_id,))
@@ -383,7 +383,7 @@ async def _is_auto(pub: dict) -> bool:
     if not pub.get("approval_id"):
         return False
     row = await fetch_one("SELECT approved_by FROM sm_approvals WHERE id=?", (pub["approval_id"],))
-    return bool(row and (row["approved_by"] or "").startswith("worker:"))
+    return bool(row and (row["approved_by"] or "").startswith(("worker:", "system:")))
 
 
 async def _credentials(mode: str, item: dict) -> tuple[str, str]:
