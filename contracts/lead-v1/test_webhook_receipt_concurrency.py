@@ -62,7 +62,7 @@ class ConcurrentWebhookReceiptTests(unittest.TestCase):
                 result=receive_once(
                     conn,delivery_id="D1",raw_body=BODY,timestamp=NOW,
                     signature_hex=signature(SECRET,NOW,BODY),credential_id="key",
-                    credential_registry=registry,now=NOW,lead_id="L1")
+                    credential_registry=registry,now=NOW,lead_id="L-"+tenant)
                 self.assertTrue(result["ok"])
             self.assertEqual(conn.execute("SELECT COUNT(*) FROM demo_receipts").fetchone()[0],2)
             self.assertEqual(conn.execute("SELECT COUNT(*) FROM demo_leads").fetchone()[0],2)
