@@ -135,6 +135,18 @@ The `repo-wide-preview` CI job on the explicitly trusted same-repository orchest
 
 This job is a **point-in-time snapshot**, not an authenticated live SaaS dashboard or persistent monitoring process. The PR itself remains a draft and the scheduled main-branch observer remains separately gated by `CORE8_DEV_LOOP_ENABLED`. GitHub CI checks, Notion approvals, production deployments and customer tenancy must remain distinct security boundaries.
 
+### Private-side combined control dashboard — 2026-11-23
+
+**Verified outside public CI:** The existing personal-account Notion integration exposed nine Core8 integration tasks (7 Awaiting approval, 1 Review, 1 Closed - unverified; 3 linked to GitHub issues). GitHub reported 30 open PRs (29 drafts). A standalone **private local HTML snapshot** combining these *aggregates* was produced and delivered separately to the user, with no private task titles, Scope, approval URLs, secrets or tenant data in GitHub. These counts are point-in-time observations, not continuous monitoring or approval evidence.
+
+**Reusable offline implementation:** `private_task_summary.py` validates a previously collected, private-only reconciliation audit; `private_dashboard.py` renders aggregate counts alongside a sanitized GitHub CI report. Neither module performs an API call or a Notion write. `private_dashboard.py` explicitly refuses execution when `GITHUB_ACTIONS=true`. Example on an operator-controlled PRIVATE machine, with locally verified sanitized inputs:
+
+```bash
+python tools/orchestration/private_dashboard.py private-counts.json github-health.json core8-private.html
+```
+
+The input files and resulting HTML must remain in an access-controlled private location, **not** under GitHub repository paths or CI artifact uploads. This is an offline operator-run pipeline, **not** an authenticated multi-user SaaS private dashboard or an auto-refreshing sync. A future hosted version requires OIDC/RBAC, server-side tenant boundaries, scoped secrets, durable audit, dedicated data retention policy and read-only service-to-service credentials. Do not enable Notion-to-GitHub exports or agent actions based solely on these aggregate snapshots.
+
 ### Safe activation checklist
 
 1. Inspect this PR diff and successful `Core8 development loop (read-only)` CI, security review, codeowners and actions-policy compatibility.
