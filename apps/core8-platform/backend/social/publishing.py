@@ -305,6 +305,13 @@ async def run_publication(pub: dict, worker_id: str = "worker") -> dict:
     item = await get_item(pub["content_item_id"])
     provider = get_provider(pub["mode"])
     try:
+        # Historical worker-created approvals are not human consent. Cancel them
+        # before any provider action, including retries of already-claimed rows.
+        if await _is_auto(pub):
+            await _set_state(pub_id, "cancelled", last_error="human_approval_required", error_class="permanent")
+            if item:
+                await set_status(item["id"], "paused", worker_id, "Human approval required")
+            return await fetch_one("SELECT * FROM sm_publications WHERE id=?", (pub_id,))
         if not item:
             raise ProviderError("content item missing", retryable=False)
         # Re-check every gate at execution time (settings may have changed since queueing).
