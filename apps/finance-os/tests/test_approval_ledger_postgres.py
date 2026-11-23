@@ -49,6 +49,9 @@ class ApprovalLedgerPostgresTests(unittest.TestCase):
             outbox_sql = (Path(__file__).resolve().parents[1] / "sql" /
                           "key_audit_outbox_candidate.sql").read_text()
             db.execute(outbox_sql)
+            upgrade_sql = (Path(__file__).resolve().parents[1] / "sql" /
+                           "key_audit_dispatch_candidate.sql").read_text()
+            db.execute(upgrade_sql)
 
     @classmethod
     def tearDownClass(cls):
@@ -266,6 +269,101 @@ class ApprovalLedgerPostgresTests(unittest.TestCase):
                 (self.approval.approval_id,),
             ).fetchone()[0]
         self.assertEqual(count, 1)
+
+    def test_dispatch_ack_only_once_with_mocked_external_sink(self):
+        from audit_dispatch_candidate import dispatch_one, claim_next
+        self.assertTrue(self.consume())
+        calls = []
+        class Sink:
+            def accept(self, event_id, payload):
+                calls.append((event_id, payload))
+                return True
+        with psycopg.connect(self.dsn, autocommit=True) as db:
+            self.assertEqual(dispatch_one(db, namespace=self.namespace, sink=Sink()), "delivered")
+            self.assertIsNone(claim_next(db, namespace=self.namespace))
+        self.assertEqual(len(calls), 1)
+        self.assertEqual(calls[0][1]["approval_id"], self.approval.approval_id)
+        self.assertEqual(self.audit_count(), 1)
+
+    def test_dispatch_failed_sink_retries_after_backoff(self):
+        from audit_dispatch_candidate import dispatch_one, claim_next
+        self.assertTrue(self.consume())
+        class FailSink:
+            def accept(self, event_id, payload):
+                raise RuntimeError("synthetic destination offline")
+        with psycopg.connect(self.dsn, autocommit=True) as db:
+            self.assertEqual(
+                dispatch_one(db, namespace=self.namespace, sink=FailSink(),
+                             backoff_seconds=30), "retry"
+            )
+            self.assertIsNone(claim_next(db, namespace=self.namespace))
+            row = db.execute(
+                """SELECT o.delivered_at, o.delivery_attempts
+                     FROM finance_key_audit_outbox_candidate o
+                     JOIN finance_key_approval_audit_candidate a ON a.id=o.audit_id
+                    WHERE a.approval_id=%s""",
+                (self.approval.approval_id,),
+            ).fetchone()
+            self.assertIsNone(row[0])
+            self.assertEqual(row[1], 1)
+            db.execute(
+                """UPDATE finance_key_audit_outbox_candidate o
+                      SET next_attempt_at=clock_timestamp()-interval '1 second'
+                     FROM finance_key_approval_audit_candidate a
+                    WHERE a.id=o.audit_id AND a.approval_id=%s""",
+                (self.approval.approval_id,),
+            )
+            class OkSink:
+                def accept(self, event_id, payload):
+                    return True
+            self.assertEqual(
+                dispatch_one(db, namespace=self.namespace, sink=OkSink()),
+                "delivered",
+            )
+        self.assertEqual(self.audit_count(), 1)
+
+    def test_expired_lease_can_be_reclaimed_and_stale_ack_denied(self):
+        from audit_dispatch_candidate import claim_next, ack_claim
+        self.assertTrue(self.consume())
+        with psycopg.connect(self.dsn, autocommit=True) as db:
+            first = claim_next(db, namespace=self.namespace)
+            self.assertIsNotNone(first)
+            db.execute(
+                """UPDATE finance_key_audit_outbox_candidate
+                      SET lease_until=clock_timestamp()-interval '1 second'
+                    WHERE audit_id=%s""", (first.audit_id,),
+            )
+            second = claim_next(db, namespace=self.namespace)
+            self.assertIsNotNone(second)
+            self.assertNotEqual(first.lease_token, second.lease_token)
+            self.assertFalse(ack_claim(db, first))
+            self.assertTrue(ack_claim(db, second))
+            self.assertFalse(ack_claim(db, second))
+
+    def test_two_dispatch_claimers_do_not_claim_same_row(self):
+        from audit_dispatch_candidate import claim_next
+        self.assertTrue(self.consume())
+        barrier = threading.Barrier(2)
+        def take(_):
+            with psycopg.connect(self.dsn, autocommit=True) as db:
+                barrier.wait(timeout=10)
+                return claim_next(db, namespace=self.namespace)
+        with concurrent.futures.ThreadPoolExecutor(max_workers=2) as pool:
+            claims = list(pool.map(take, range(2)))
+        self.assertEqual(sum(claim is not None for claim in claims), 1)
+
+    def test_dispatch_namespace_isolation_and_invalid_arguments(self):
+        from audit_dispatch_candidate import claim_next, dispatch_one
+        self.assertTrue(self.consume())
+        with psycopg.connect(self.dsn, autocommit=True) as db:
+            self.assertIsNone(claim_next(db, namespace="other_namespace"))
+            for invalid in ("../bad", None, ""):
+                with self.subTest(invalid=invalid):
+                    with self.assertRaises(FinanceAccessDenied):
+                        claim_next(db, namespace=invalid)
+            with self.assertRaises(FinanceAccessDenied):
+                dispatch_one(db, namespace=self.namespace, sink=object())
+            self.assertIsNotNone(claim_next(db, namespace=self.namespace))
 
     def test_provisioning_cannot_overwrite_existing_approval(self):
         with psycopg.connect(self.dsn, autocommit=True) as db:
