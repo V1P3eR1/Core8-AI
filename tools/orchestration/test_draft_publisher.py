@@ -331,6 +331,32 @@ class DraftPublisherTests(unittest.TestCase):
         self.assertEqual(api.calls[0][:2], ("GET", "git/ref/heads/main"))
         self.assertTrue(all(method == "GET" for method, _, _ in api.calls))
 
+    def test_main_advances_before_branch_creation_fails_closed(self):
+        class AdvancingMain(FakeApi):
+            def __init__(self):
+                super().__init__()
+                self.main_reads = 0
+
+            def call(self, method, path, payload=None):
+                if method == "GET" and path == "git/ref/heads/main":
+                    self.main_reads += 1
+                    return {"object": {"sha": BASE if self.main_reads == 1 else "f" * 40}}
+                return super().call(method, path, payload)
+
+        api = AdvancingMain()
+        with self.assertRaisesRegex(PublishBlocked, "base_advanced_during_publish"):
+            call_publish(api)
+        self.assertEqual(api.main_reads, 2)
+        self.assertFalse(any(method == "POST" and path in ("git/refs", "pulls")
+                             for method, path, _ in api.calls))
+
+    def test_successful_publish_checks_main_twice(self):
+        api = FakeApi()
+        self.assertEqual(call_publish(api)["status"], "CREATED_DRAFT")
+        checks = [path for method, path, _ in api.calls
+                  if method == "GET" and path == "git/ref/heads/main"]
+        self.assertEqual(len(checks), 2)
+
     def test_stale_main_blocks_before_any_write(self):
         api = FakeApi(main_sha="f" * 40)
         with self.assertRaisesRegex(PublishBlocked, "base_no_longer_main"):
