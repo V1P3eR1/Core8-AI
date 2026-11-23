@@ -20,7 +20,21 @@ CHAINS = {
     "offline_review": (72, 73, 78),
     "callback": (77, 79),
     "release_safety": (55, 70),
+    "finance_sandbox": (64,),
+    "product_workstreams": (81, 82, 83, 84, 85),
+    "continuity": (80,),
 }
+SUITES = {
+    55: "release preflight (offline)", 70: "release preflight (offline)",
+    67: "Orchestration staging offline unit tests",
+    74: "Orchestration staging offline unit tests",
+    64: "Finance OS sandbox unit tests",
+    81: "backend-tests",
+    84: "social-content-draft-contract",
+    85: "lead-contract-offline",
+}
+# Missing suite policy is itself not green; never substitute an arbitrary job.
+DEFAULT_SUITE = "Handoff contract tests"
 CHECKS = frozenset({"success", "failure", "cancelled", "timed_out", "neutral", "skipped", "action_required", "stale"})
 
 
@@ -34,7 +48,7 @@ class NoRedirect(request.HTTPRedirectHandler):
 
 
 def get_json(endpoint, token=None):
-    if not re.fullmatch(r"/(?:pulls/[1-9][0-9]*|commits/[a-f0-9]{40}/check-runs)", endpoint):
+    if not re.fullmatch(r"/(?:pulls/[1-9][0-9]*|actions/runs\\?head_sha=[a-f0-9]{40}&per_page=100)", endpoint):
         raise SnapshotBlocked("invalid_endpoint")
     headers = {"Accept": "application/vnd.github+json",
                "X-GitHub-Api-Version": "2022-11-28",
@@ -60,61 +74,59 @@ def get_json(endpoint, token=None):
     return result
 
 
-def summarize_pr(pr, checks, number):
-    """Redacted, bounded, fail-closed metadata. No body, title or task scope."""
+def summarize_pr(pr, runs, number):
+    """Redacted workflow-run evidence (not job names). Never grants approval."""
     if type(pr.get("number")) is not int or pr["number"] != number:
         raise SnapshotBlocked("pr_identity_mismatch")
     head = pr.get("head") or {}
     base = pr.get("base") or {}
-    repo = (head.get("repo") or {}).get("full_name")
-    if repo != REPO:
+    if (head.get("repo") or {}).get("full_name") != REPO:
         raise SnapshotBlocked("unexpected_head_repository")
     sha = head.get("sha")
     if not isinstance(sha, str) or not re.fullmatch(r"[a-f0-9]{40}", sha):
         raise SnapshotBlocked("invalid_pr_head")
-    if not isinstance(checks, dict) or not isinstance(checks.get("check_runs"), list):
-        raise SnapshotBlocked("checks_missing")
-    total = checks.get("total_count")
-    if type(total) is not int or total != len(checks["check_runs"]):
-        # The GitHub check-runs endpoint paginates by default. A partial page
-        # must NEVER be classified as all green.
-        raise SnapshotBlocked("incomplete_check_inventory")
+    if not isinstance(runs, dict) or not isinstance(runs.get("workflow_runs"), list):
+        raise SnapshotBlocked("runs_missing")
+    total = runs.get("total_count")
+    if type(total) is not int or total != len(runs["workflow_runs"]):
+        raise SnapshotBlocked("incomplete_workflow_inventory")
     records = {}
-    for c in checks["check_runs"]:
-        if not isinstance(c, dict) or not isinstance(c.get("name"), str):
-            raise SnapshotBlocked("invalid_check")
-        check_sha = c.get("head_sha")
-        if not isinstance(check_sha, str) or check_sha != sha:
-            raise SnapshotBlocked("check_head_sha_mismatch")
-        app = c.get("app")
-        if not isinstance(app, dict) or app.get("slug") != "github-actions":
-            raise SnapshotBlocked("untrusted_check_provider")
-        name = c["name"]
-        if name in records:  # Duplicate latest-name ambiguity must not falsely turn green.
-            raise SnapshotBlocked("duplicate_check_names")
-        conclusion = c.get("conclusion")
-        status = c.get("status")
+    for item in runs["workflow_runs"]:
+        if not isinstance(item, dict):
+            raise SnapshotBlocked("invalid_workflow_run")
+        if item.get("head_sha") != sha or (
+                item.get("head_repository") or {}).get("full_name") != REPO:
+            raise SnapshotBlocked("workflow_provenance_mismatch")
+        if item.get("event") != "pull_request":
+            # A push run is not evidence that PR-triggered protections passed.
+            continue
+        name = item.get("name")
+        if not isinstance(name, str) or not name or len(name) > 120:
+            raise SnapshotBlocked("invalid_workflow_name")
+        if name in records:
+            raise SnapshotBlocked("duplicate_workflow_names")
+        status = item.get("status")
+        conclusion = item.get("conclusion")
         if status != "completed":
             records[name] = "pending"
         elif conclusion in CHECKS:
             records[name] = conclusion
         else:
             records[name] = "unknown"
-    # A single unrelated green check must not masquerade as the required
-    # review gates. Each tracked PR needs its expected test suite AND secret scan.
-    suite = ("release preflight (offline)" if number in (55, 70) else
-             "Orchestration staging offline unit tests" if number in (67, 74) else
-             "Handoff contract tests")
-    required = {"secret-scan", suite}
-    if not records:
-        check_state = "no_checks"
+    required_suite = SUITES.get(number, DEFAULT_SUITE)
+    policy_missing = number in (82, 83)
+    required = {"secret-scan", required_suite}
+    if policy_missing:
+        check_state = "suite_policy_missing"
+    elif not records:
+        check_state = "no_runs"
     elif not required.issubset(records):
-        check_state = "missing_required_checks"
+        check_state = "missing_required_workflows"
     elif any(records[k] == "pending" for k in required):
         check_state = "pending"
     elif any(records[k] != "success" for k in required):
         check_state = "needs_review"
-    elif any(value != "success" for value in records.values()):
+    elif any(v != "success" for v in records.values()):
         check_state = "needs_review"
     else:
         check_state = "passed"
@@ -124,7 +136,6 @@ def summarize_pr(pr, checks, number):
     merged = pr.get("merged_at") is not None
     if merged and state != "closed":
         raise SnapshotBlocked("inconsistent_merge_state")
-    # Historical green checks are not a readiness signal on closed PRs.
     if state == "closed":
         check_state = "historical_only"
     return {
@@ -148,8 +159,8 @@ def make_snapshot(fetch, *, checked_at):
             sha = (pr.get("head") or {}).get("sha")
             if not isinstance(sha, str) or not re.fullmatch(r"[a-f0-9]{40}", sha):
                 raise SnapshotBlocked("invalid_pr_head")
-            checks = fetch(f"/commits/{sha}/check-runs")
-            group.append(summarize_pr(pr, checks, number))
+            runs = fetch(f"/actions/runs?head_sha={sha}&per_page=100")
+            group.append(summarize_pr(pr, runs, number))
         grouped[name] = group
     return {
         "schema": 1, "repository": REPO, "checked_at": checked_at,
