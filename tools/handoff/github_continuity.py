@@ -86,6 +86,9 @@ def summarize_pr(pr, checks, number):
         check_sha = c.get("head_sha")
         if not isinstance(check_sha, str) or check_sha != sha:
             raise SnapshotBlocked("check_head_sha_mismatch")
+        app = c.get("app")
+        if not isinstance(app, dict) or app.get("slug") != "github-actions":
+            raise SnapshotBlocked("untrusted_check_provider")
         name = c["name"]
         if name in records:  # Duplicate latest-name ambiguity must not falsely turn green.
             raise SnapshotBlocked("duplicate_check_names")
