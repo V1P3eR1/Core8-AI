@@ -178,15 +178,18 @@ class Bridge:
                             draft = re.fullmatch(
                                 r'core8-run ([a-f0-9]{64}) draft '
                                 r'https://github.com/V1P3eR1/Core8-AI/actions/runs/[1-9][0-9]* '
-                                r'https://github.com/V1P3eR1/Core8-AI/pull/[1-9][0-9]*',
+                                r'https://github.com/V1P3eR1/Core8-AI/pull/([1-9][0-9]*) '
+                                r'([0-9a-f]{40})',
                                 entry)
                             if match and match[1] == sha:
                                 status = {'started': 'In progress', 'review': 'Review',
                                           'failed': 'Blocked'}[match[2]]
                             elif draft and draft[1] == sha:
-                                pr_number = int(entry.rsplit('/pull/', 1)[1])
+                                pr_number = int(draft[2])
+                                expected_head_sha = draft[3]
                                 try:
-                                    verify_live_draft_pr(self.gh, pr_number, sha)
+                                    verify_live_draft_pr(self.gh, pr_number, sha,
+                                                         expected_head_sha=expected_head_sha)
                                 except Stop:
                                     # A stale/closed/altered PR cannot remain in Review.
                                     # Preserve the last verified non-draft audit state.
@@ -238,7 +241,7 @@ class Bridge:
         return number, data
 
 
-def verify_live_draft_pr(gh, pr_number, sha):
+def verify_live_draft_pr(gh, pr_number, sha, expected_head_sha=None):
     """Fresh read-only verification; a bot audit comment is not current PR state."""
     pr = gh.call('GET', PREFIX + f'/pulls/{int(pr_number)}')
     head = pr.get('head') or {}
@@ -260,6 +263,8 @@ def verify_live_draft_pr(gh, pr_number, sha):
     if (not isinstance(head_sha, str) or not re.fullmatch(r'[0-9a-f]{40}', head_sha)
             or not isinstance(base_sha, str) or not re.fullmatch(r'[0-9a-f]{40}', base_sha)):
         raise Stop('unverified_draft_commit')
+    if expected_head_sha is not None and head_sha != expected_head_sha:
+        raise Stop('draft_head_changed')
     main_ref = gh.call('GET', PREFIX + '/git/ref/heads/main')
     if (main_ref.get('object') or {}).get('sha') != base_sha:
         raise Stop('stale_draft_base')
@@ -267,6 +272,7 @@ def verify_live_draft_pr(gh, pr_number, sha):
     parents = commit.get('parents') or []
     if len(parents) != 1 or parents[0].get('sha') != base_sha:
         raise Stop('unverified_draft_parent')
+    return head_sha
 
 
 def audit(gh, number, sha, state, pr_number=None):
@@ -280,8 +286,8 @@ def audit(gh, number, sha, state, pr_number=None):
     if state == 'draft':
         if type(pr_number) not in (str, int) or not re.fullmatch(r'[1-9][0-9]*', str(pr_number)):
             raise Stop('invalid_draft_pr_number')
-        verify_live_draft_pr(gh, int(pr_number), sha)
-        pr_link = f' https://github.com/{REPO}/pull/{int(pr_number)}'
+        verified_head = verify_live_draft_pr(gh, int(pr_number), sha)
+        pr_link = f' https://github.com/{REPO}/pull/{int(pr_number)} {verified_head}'
     elif pr_number is not None:
         raise Stop('unexpected_draft_pr_number')
     gh.call('POST', PREFIX + f'/issues/{int(number)}/comments',
