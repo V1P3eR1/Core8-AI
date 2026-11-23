@@ -20,10 +20,10 @@ def fake_pr(n):
 
 def fake_checks():
     return {"total_count": 4, "check_runs": [
-        {"name": "Handoff contract tests", "status": "completed", "conclusion": "success"},
-        {"name": "Orchestration staging offline unit tests", "status": "completed", "conclusion": "success"},
-        {"name": "release preflight (offline)", "status": "completed", "conclusion": "success"},
-        {"name": "secret-scan", "status": "completed", "conclusion": "success"},
+        {"name": "Handoff contract tests", "head_sha": SHA, "status": "completed", "conclusion": "success"},
+        {"name": "Orchestration staging offline unit tests", "head_sha": SHA, "status": "completed", "conclusion": "success"},
+        {"name": "release preflight (offline)", "head_sha": SHA, "status": "completed", "conclusion": "success"},
+        {"name": "secret-scan", "head_sha": SHA, "status": "completed", "conclusion": "success"},
     ]}
 
 
@@ -61,7 +61,7 @@ class ContinuityTests(unittest.TestCase):
 
     def test_unrelated_success_cannot_replace_required_ci(self):
         checks = {"total_count": 1, "check_runs": [
-            {"name": "unit-tests", "status": "completed", "conclusion": "success"}]}
+            {"name": "unit-tests", "head_sha": SHA, "status": "completed", "conclusion": "success"}]}
         self.assertEqual(
             summarize_pr(fake_pr(74), checks, 74)["check_state"],
             "missing_required_checks")
@@ -99,6 +99,12 @@ class ContinuityTests(unittest.TestCase):
     def test_mismatched_check_run_sha_fails_closed(self):
         checks = fake_checks()
         checks["check_runs"][0]["head_sha"] = "f" * 40
+        with self.assertRaisesRegex(SnapshotBlocked, "check_head_sha_mismatch"):
+            summarize_pr(fake_pr(74), checks, 74)
+
+    def test_missing_check_run_sha_blocks(self):
+        checks = fake_checks()
+        del checks["check_runs"][0]["head_sha"]
         with self.assertRaisesRegex(SnapshotBlocked, "check_head_sha_mismatch"):
             summarize_pr(fake_pr(74), checks, 74)
 
