@@ -56,7 +56,8 @@ def verify_issue_comment(issue, comment, *, issue_number, comment_id, approver_i
         raise EvidenceBlocked("approval_comment_mismatch")
     return {"repo": REPO, "issue_number": issue_number, "comment_id": comment_id,
             "approver_id": approver_id, "task_uuid": task_uuid,
-            "task_digest": task_digest, "issue_body_sha256": expected_issue_body_sha256}
+            "task_digest": task_digest, "issue_body_sha256": expected_issue_body_sha256,
+            "comment_created_at": comment["created_at"]}
 
 
 def fetch_verified_issue_comment(reader, *, issue_number, comment_id, approver_id,
