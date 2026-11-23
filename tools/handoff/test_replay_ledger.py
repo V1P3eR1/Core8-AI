@@ -99,6 +99,48 @@ class LedgerTests(unittest.TestCase):
         with self.assertRaises(ReplayBlocked):
             ReplayLedger(":memory:")
 
+    def test_symlink_ledger_path_rejected(self):
+        redirected = Path(self.tmp.name) / "redirected.sqlite3"
+        redirected.symlink_to(self.path)
+        with self.assertRaisesRegex(ReplayBlocked, "persistent_storage_required"):
+            ReplayLedger(redirected)
+
+    def test_concurrent_distinct_artifacts_same_task_only_one_wins(self):
+        outcomes = []
+        lock = threading.Lock()
+
+        def worker(i):
+            args = {**self.args, "run_id": 1000 + i, "artifact_id": 2000 + i}
+            try:
+                ReplayLedger(self.path).reserve(**args)
+                outcome = "reserved"
+            except ReplayBlocked:
+                outcome = "blocked"
+            with lock:
+                outcomes.append(outcome)
+
+        threads = [threading.Thread(target=worker, args=(i,)) for i in range(8)]
+        for thread in threads:
+            thread.start()
+        for thread in threads:
+            thread.join()
+        self.assertEqual(outcomes.count("reserved"), 1)
+        self.assertEqual(outcomes.count("blocked"), 7)
+
+    def test_failed_migration_preserves_historical_rows(self):
+        import sqlite3
+        self.ledger.reserve(**self.args)
+        with sqlite3.connect(self.path) as db:
+            db.execute("DROP INDEX reservations_one_task")
+            db.execute("INSERT INTO reservations VALUES (?, ?, ?, ?, ?, 'RESERVED')",
+                       (self.args["repo"], 444, 555, self.args["task_digest"],
+                        "d" * 64))
+        with self.assertRaisesRegex(ReplayBlocked, "ambiguous_existing_task_reservations"):
+            ReplayLedger(self.path)
+        with sqlite3.connect(self.path) as db:
+            count = db.execute("SELECT COUNT(*) FROM reservations").fetchone()[0]
+        self.assertEqual(count, 2)
+
     def test_parallel_reservation_exactly_one_wins(self):
         outcomes = []
         lock = threading.Lock()
