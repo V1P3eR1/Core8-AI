@@ -262,6 +262,52 @@ class AuditKeyringStorePostgresTests(unittest.TestCase):
                     signing_key=MAC, trusted_key_material=MATERIAL,
                 )
 
+    def test_file_backed_floor_interoperates_with_postgres_and_restart(self):
+        from tempfile import TemporaryDirectory
+        from sqlite_generation_floor_candidate import SQLiteGenerationFloorCandidate
+        from audit_external_floor_candidate import (
+            rotate_audit_with_floor, recover_audit_with_floor,
+        )
+        with TemporaryDirectory() as directory:
+            floor_path = str(Path(directory) / "separate-floor.sqlite")
+            floor = SQLiteGenerationFloorCandidate(path=floor_path)
+            floor.initialize_test_store()
+            floor.provision_test_namespace(self.namespace)
+            with psycopg.connect(self.dsn, autocommit=True) as db:
+                old_snapshot = db.execute(
+                    """SELECT generation, signed_snapshot
+                         FROM finance_audit_keyring_store_candidate
+                        WHERE namespace=%s""", (self.namespace,),
+                ).fetchone()
+                ring = recover_audit_with_floor(
+                    db, namespace=self.namespace, floor=floor,
+                    signing_key=MAC, trusted_key_material=MATERIAL,
+                )
+                ring.rotate(expected_generation=1, new_active=NEW)
+                self.assertEqual(rotate_audit_with_floor(
+                    db, namespace=self.namespace, floor=floor,
+                    signing_key=MAC, trusted_key_material=MATERIAL,
+                    expected_generation=1, new_registry=ring,
+                ), 2)
+                reopened_floor = SQLiteGenerationFloorCandidate(path=floor_path)
+                self.assertEqual(reopened_floor.read(self.namespace), 2)
+                self.assertEqual(recover_audit_with_floor(
+                    db, namespace=self.namespace, floor=reopened_floor,
+                    signing_key=MAC, trusted_key_material=MATERIAL,
+                ).active_kid, NEW.kid)
+                # Database rollback alone cannot revive the old signed row.
+                db.execute(
+                    """UPDATE finance_audit_keyring_store_candidate
+                          SET generation=%s, signed_snapshot=%s
+                        WHERE namespace=%s""",
+                    (old_snapshot[0], old_snapshot[1], self.namespace),
+                )
+                with self.assertRaises(FinanceAccessDenied):
+                    recover_audit_with_floor(
+                        db, namespace=self.namespace, floor=reopened_floor,
+                        signing_key=MAC, trusted_key_material=MATERIAL,
+                    )
+
     def test_invalid_transition_and_reused_key_material_fail_closed(self):
         ring = self.restore(1)
         ring.rotate(expected_generation=1, new_active=NEW)
