@@ -134,3 +134,33 @@ Production deployment still requires an independently managed shared durable
 lock store, authenticated protected-gate data, operational recovery and a
 readiness review. Do not enable privileged publishing solely because the
 local SQLite tests pass.
+
+
+## Cross-runner PostgreSQL reservation adapter (2026-11-23)
+
+The draft-only `tools/handoff/postgres_replay_ledger.py` implements a shared
+PostgreSQL reservation store as an alternative to the local SQLite ledger.
+The table has independent uniqueness constraints on `(repo, task_digest)` and
+`(repo, run_id, artifact_id)`. A transaction inserts with
+`ON CONFLICT DO NOTHING RETURNING state`; an already used task/run cannot
+be reserved twice, even by distinct runners. The consuming transition is
+conditional on exact digest/run/artifact/patch and `RESERVED` state.
+Ambiguous network outcomes must be reconciled against the database; the
+adapter intentionally does not auto-release or blindly retry reservations.
+
+CI now runs an **isolated disposable PostgreSQL 16 service** and psycopg client
+via the `postgres-integration` job. Five live integration tests cover
+reservation persistence, consumption, refusal to reuse a task with another
+artifact, refusal of wrong-patch consumption, and 12 concurrent connections
+competing for one task digest (exactly one commit). The normal offline test
+suite additionally exercises parameter validation and SQL contract using a
+SQLite test double. The local test-double suite is not itself PostgreSQL proof.
+
+Production limitations: the test database credentials embedded in CI are
+synthetic and scoped ONLY to a disposable CI service. A real deployment must
+use its own isolated PostgreSQL instance, least-privilege runtime role,
+separate schema migration role, encrypted connections, backups, access audits,
+durable recovery/reconciliation, and proof of authentication of the protected
+approval record. The new adapter is **not** wired to the paid Claude workflow,
+Draft PR publisher, or external production environment, and never authorizes
+a merge/deployment. The broken ChatGPT Notion account link remains independent.
