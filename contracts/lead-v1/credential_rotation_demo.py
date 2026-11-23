@@ -14,6 +14,8 @@ def verify_rotating_credential(credential, timestamp, raw_body, signature_hex, *
     primary = verify(current, timestamp, raw_body, signature_hex, now=now)
     if primary["ok"]:
         return {"ok": True, "key_version": "current"}
+    if primary["reason"] != "signature_mismatch":
+        return primary
     # Do not use an expired or malformed previous-key grace period.
     if not isinstance(previous_until, int) or isinstance(previous_until, bool):
         return {"ok": False, "reason": "signature_mismatch"}
