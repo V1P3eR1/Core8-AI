@@ -272,6 +272,24 @@ class ContractTests(unittest.TestCase):
         with self.assertRaisesRegex(Stop, 'already_attempted'):
             self.b.gate(event, '123')
 
+    def test_revoked_public_export_blocks_approval_gate(self):
+        event = self.event()
+        self.f.page['properties']['Public export']['checkbox'] = False
+        with self.assertRaisesRegex(Stop, 'approval_revoked'):
+            self.b.gate(event, '123')
+
+    def test_missing_approval_evidence_blocks_gate(self):
+        event = self.event()
+        self.f.page['properties']['Approval evidence']['url'] = None
+        with self.assertRaisesRegex(Stop, 'approval_revoked'):
+            self.b.gate(event, '123')
+
+    def test_approval_digest_cannot_be_reused_after_acceptance_change(self):
+        event = self.event()
+        self.f.page['properties']['Acceptance']['rich_text'][0]['plain_text'] = 'Changed acceptance criteria'
+        with self.assertRaisesRegex(Stop, 'stale_or_modified_scope'):
+            self.b.gate(event, '123')
+
     def test_approval_command_exact(self):
         event = self.event()
         event['comment']['body'] += '\nextra instruction'
