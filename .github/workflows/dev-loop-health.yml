@@ -41,6 +41,46 @@ jobs:
             core8-dev-loop-dashboard.html
           retention-days: 7
           if-no-files-found: error
+  live-preview:
+    # Live evidence on the explicitly trusted same-repository draft branch.
+    # Read-only token; never execute PR bodies or private Notion scopes.
+    if: >-
+      github.event_name == 'pull_request' &&
+      github.event.pull_request.head.repo.full_name == github.repository &&
+      github.head_ref == 'feature/ceo-engineering-orchestration-v1'
+    needs: contract
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      pull-requests: read
+      checks: read
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Fetch current PR head check evidence (read-only)
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          CORE8_PREVIEW_PR: ${{ github.event.pull_request.number }}
+          CORE8_PREVIEW_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: python tools/orchestration/pr_live_preview.py
+      - name: Render current-head snapshot in Markdown and HTML
+        run: |
+          python tools/orchestration/dashboard_report.py core8-dev-loop-report.json
+          python tools/orchestration/browser_dashboard.py core8-dev-loop-report.json
+      - uses: actions/upload-artifact@v4
+        with:
+          name: core8-dashboard-LIVE-PR-SNAPSHOT
+          path: |
+            core8-dev-loop-report.json
+            core8-dev-loop-report.md
+            core8-dev-loop-dashboard.html
+          retention-days: 7
+          if-no-files-found: error
   observe:
     # Explicit budget/operations switch; never begin hourly runs just by merging.
     if: >-
