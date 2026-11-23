@@ -23,6 +23,7 @@ class Fake:
         self.page = p or page()
         self.issues, self.comments, self.writes = [], [], []
         self.fail_patch = False
+        self.draft_closed = False
 
     def all(self, path):
         return copy.deepcopy(self.comments if path.endswith('/comments') else self.issues)
@@ -30,6 +31,22 @@ class Fake:
     def call(self, method, path, data=None):
         if path.endswith('/query'):
             return {'results': [copy.deepcopy(self.page)], 'has_more': False}
+        if method == 'GET' and path.endswith('/pulls/90'):
+            if self.draft_closed:
+                return {'state': 'closed', 'draft': True}
+            task_sha = digest(payload(self.page))
+            return {
+                'state': 'open', 'draft': True,
+                'html_url': 'https://github.com/V1P3eR1/Core8-AI/pull/90',
+                'head': {'ref': 'core8-review/' + 'a' * 24,
+                         'sha': 'c' * 40, 'repo': {'full_name': 'V1P3eR1/Core8-AI'}},
+                'base': {'ref': 'main', 'sha': 'd' * 40},
+                'body': 'Scope SHA256: ' + task_sha,
+            }
+        if method == 'GET' and path.endswith('/git/ref/heads/main'):
+            return {'object': {'sha': 'd' * 40}}
+        if method == 'GET' and path.endswith('/git/commits/' + 'c' * 40):
+            return {'parents': [{'sha': 'd' * 40}]}
         if method == 'GET':
             if '/issues/comments/' in path:
                 return copy.deepcopy(self.approval)
@@ -164,6 +181,35 @@ class ContractTests(unittest.TestCase):
         self.b.sync()
         self.assertEqual(
             self.f.writes[-1][2]['properties']['Status']['select']['name'], 'Review')
+
+    def test_closed_draft_status_does_not_remain_review(self):
+        self.export()
+        sha = digest(payload(self.f.page))
+        self.f.comments = [{
+            'user': {'login': 'github-actions[bot]'},
+            'body': f'core8-run {sha} draft '
+                    'https://github.com/V1P3eR1/Core8-AI/actions/runs/123 '
+                    'https://github.com/V1P3eR1/Core8-AI/pull/90'}]
+        self.f.draft_closed = True
+        self.b.sync()
+        self.assertEqual(
+            self.f.writes[-1][2]['properties']['Status']['select']['name'], 'Queued')
+
+    def test_closing_draft_after_previous_review_revokes_mirrored_review(self):
+        self.export()
+        sha = digest(payload(self.f.page))
+        self.f.comments = [{
+            'user': {'login': 'github-actions[bot]'},
+            'body': f'core8-run {sha} draft '
+                    'https://github.com/V1P3eR1/Core8-AI/actions/runs/123 '
+                    'https://github.com/V1P3eR1/Core8-AI/pull/90'}]
+        self.b.sync()
+        self.assertEqual(
+            self.f.writes[-1][2]['properties']['Status']['select']['name'], 'Review')
+        self.f.draft_closed = True
+        self.b.sync()
+        self.assertEqual(
+            self.f.writes[-1][2]['properties']['Status']['select']['name'], 'Queued')
 
     def test_draft_without_pr_link_not_mirrored(self):
         self.export()
