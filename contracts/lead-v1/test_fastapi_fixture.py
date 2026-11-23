@@ -62,6 +62,18 @@ class FastApiFixtureTests(unittest.TestCase):
                                            "x-demo-delivery-id":"D-missing",
                                            "x-demo-credential-id":"demo"})
         self.assertEqual(response.status_code,401)
+    def test_delivery_header_tamper_rejected_over_http(self):
+        payload={"submission_id":"S1","name":"Synthetic Contact","consent":True}
+        raw=json.dumps(payload).encode()
+        response=self.send(delivery="D2",payload=payload,
+                           signature_override=signature(_SECRET,NOW,raw,delivery_id="D1"))
+        self.assertEqual(response.status_code,401)
+        self.assertEqual(self.app.state.fixture_db.execute("SELECT COUNT(*) FROM demo_receipts").fetchone()[0],0)
+    def test_legacy_signature_rejected_over_http(self):
+        payload={"submission_id":"S1","name":"Synthetic Contact","consent":True}
+        raw=json.dumps(payload).encode()
+        response=self.send(payload=payload,signature_override=signature(_SECRET,NOW,raw))
+        self.assertEqual(response.status_code,401)
     def test_invalid_timestamp_rejected(self):
         raw=json.dumps({"submission_id":"S1","name":"Synthetic","consent":True}).encode()
         response=self.client.post("/offline-fixture/intake",content=raw,
