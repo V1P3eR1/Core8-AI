@@ -15,7 +15,7 @@
 
 ## Blocking findings before any public endpoint
 
-**P0 — Delivery ID not authenticated.** Current `webhook_signature_demo.signature` signs `timestamp + "." + raw_body` but **does not sign `delivery_id`**. An attacker with a valid signed payload could change the delivery-ID header and bypass the *delivery receipt* uniqueness check; lead submission idempotency still protects against duplicate lead rows for the same submission ID. Fix by authenticating delivery identity under an explicitly versioned provider-specific signature protocol (or by deriving receipt identity from a cryptographically authenticated provider event ID). Add tamper tests. Do not claim full cryptographic replay protection until resolved.
+**Addressed in offline custom protocol — delivery identity bound to HMAC.** The receipt path now uses the domain-separated `core8-delivery-v2` signature, which binds timestamp, length-prefixed delivery ID and raw body. Both current and previous rotating keys verify that identity. Tests reject altered delivery headers and legacy unbound signatures. **Still not a production provider adapter:** real providers must be verified against their documented native signing protocol; never assume their signatures authenticate the delivery ID.
 
 **P0 — Tenant membership and production credentials absent.** Production JWT has no verified tenant membership binding. Require server-side tenant membership authorization for dashboard actions; map inbound provider credentials to tenants using a protected server-side store, never a request-body claim. Define rotation/revocation and audited access.
 
