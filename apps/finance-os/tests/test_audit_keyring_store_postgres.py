@@ -308,6 +308,67 @@ class AuditKeyringStorePostgresTests(unittest.TestCase):
                         signing_key=MAC, trusted_key_material=MATERIAL,
                     )
 
+    def test_read_only_floor_diagnostics_cover_recovery_states(self):
+        from tempfile import TemporaryDirectory
+        from sqlite_generation_floor_candidate import SQLiteGenerationFloorCandidate
+        from audit_floor_diagnostics_candidate import diagnose_audit_keyring
+        with TemporaryDirectory() as directory:
+            floor = SQLiteGenerationFloorCandidate(
+                path=str(Path(directory) / "separate-floor.sqlite")
+            )
+            floor.initialize_test_store()
+            floor.provision_test_namespace(self.namespace)
+            with psycopg.connect(self.dsn, autocommit=True) as db:
+                def check():
+                    return diagnose_audit_keyring(
+                        db, floor=floor, namespace=self.namespace,
+                        signing_key=MAC, trusted_key_material=MATERIAL,
+                    )
+                self.assertEqual(check().status, "healthy")
+                self.assertTrue(floor.compare_and_advance(self.namespace, 1, 2))
+                result = check()
+                self.assertEqual((result.status, result.floor_generation,
+                                  result.database_generation),
+                                 ("floor_ahead", 2, 1))
+                self.assertEqual(floor.read(self.namespace), 2)
+                db.execute(
+                    """UPDATE finance_audit_keyring_store_candidate
+                          SET generation=3 WHERE namespace=%s""",
+                    (self.namespace,),
+                )
+                self.assertEqual(check().status, "database_ahead")
+                db.execute(
+                    """UPDATE finance_audit_keyring_store_candidate
+                          SET generation=2, signed_snapshot=%s
+                        WHERE namespace=%s""",
+                    (b"corrupt", self.namespace),
+                )
+                self.assertEqual(check().status, "snapshot_invalid")
+                db.execute(
+                    "DELETE FROM finance_audit_keyring_store_candidate WHERE namespace=%s",
+                    (self.namespace,),
+                )
+                self.assertEqual(check().status, "missing_database_state")
+                self.assertEqual(floor.read(self.namespace), 2)
+
+    def test_floor_diagnostics_do_not_trust_invalid_floor(self):
+        from audit_floor_diagnostics_candidate import diagnose_audit_keyring
+        from external_floor_candidate import IndependentGenerationFloor
+        class BadFloor(IndependentGenerationFloor):
+            def read(self, namespace):
+                return None
+        with psycopg.connect(self.dsn, autocommit=True) as db:
+            with self.assertRaises(FinanceAccessDenied):
+                diagnose_audit_keyring(
+                    db, floor=BadFloor(), namespace=self.namespace,
+                    signing_key=MAC, trusted_key_material=MATERIAL,
+                )
+            with self.assertRaises(FinanceAccessDenied):
+                diagnose_audit_keyring(
+                    db, floor=object(), namespace=self.namespace,
+                    signing_key=MAC, trusted_key_material=MATERIAL,
+                )
+
     def test_invalid_transition_and_reused_key_material_fail_closed(self):
         ring = self.restore(1)
         ring.rotate(expected_generation=1, new_active=NEW)
