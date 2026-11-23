@@ -1,0 +1,35 @@
+name: customer-showcase-browser
+
+on:
+  pull_request:
+    paths:
+      - "docs/customer-showcase/**"
+      - "apps/customer-demos/tests/showcase.smoke.cjs"
+      - ".github/workflows/customer-showcase-browser.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  chromium-visual-smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Install pinned Playwright in demo workspace without changing manifests
+        run: npm install --prefix apps/customer-demos --no-save --no-package-lock --ignore-scripts --no-audit --no-fund playwright@1.56.1
+      - name: Install sandbox browser dependencies
+        run: ./apps/customer-demos/node_modules/.bin/playwright install --with-deps chromium
+      - name: Exercise offline mobile RTL and A4 print behavior
+        env:
+          EVIDENCE_DIR: ${{ runner.temp }}/customer-showcase-browser-evidence
+        run: |
+          node apps/customer-demos/tests/showcase.smoke.cjs "$EVIDENCE_DIR"
+          echo 'Playwright Chromium mobile 390px / RTL / print assertions passed.' >> "$GITHUB_STEP_SUMMARY"
+          echo 'Evidence kept only in ephemeral runner filesystem, not uploaded.' >> "$GITHUB_STEP_SUMMARY"
+          echo 'Browser smoke is a synthetic demonstration, not a launch or accessibility certification.' >> "$GITHUB_STEP_SUMMARY"
