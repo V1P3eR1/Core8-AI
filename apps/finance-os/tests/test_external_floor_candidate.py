@@ -41,6 +41,15 @@ class FakeRegistry:
     def snapshot(self):
         return self.generation, {"keys": [{"kid": "ci"}]}
 
+    def preview_replace(self, jwks, *, generation, retire=()):
+        if type(jwks) is not dict or type(jwks.get("keys")) is not list:
+            raise FinanceAccessDenied("Finance key configuration denied")
+        if retire and "ci" in retire:
+            raise FinanceAccessDenied("Finance key configuration denied")
+        if generation != self.generation + 1:
+            raise FinanceAccessDenied("Finance key configuration denied")
+        return True
+
 
 class ExternalFloorPolicyTests(unittest.TestCase):
     def setUp(self):
@@ -115,6 +124,26 @@ class ExternalFloorPolicyTests(unittest.TestCase):
         self.assertEqual(result, 2)
         self.assertEqual(events, ["floor", "db"])
         self.assertEqual(floor.generation, 2)
+
+    def test_invalid_rotation_cannot_advance_external_floor(self):
+        for proposed, retired in ((None, ()), ({"bad": []}, ()),
+                                  ({"keys": []}, ("ci",))):
+            floor = FakeIndependentFloor()
+            with self.subTest(proposed=proposed, retired=retired), patch(
+                "external_floor_candidate.recover_jwks_store",
+                return_value=FakeRegistry(1)
+            ), patch("external_floor_candidate.rotate_jwks_store") as write:
+                with self.assertRaises(FinanceAccessDenied):
+                    rotate_with_external_floor(
+                        self.conn, **self.kwargs, floor=floor,
+                        expected_generation=1, proposed_jwks=proposed,
+                        retire=retired,
+                    )
+                write.assert_not_called()
+            self.assertEqual(floor.generation, 1)
+            self.assertEqual(
+                [entry for entry in floor.calls if entry[0] == "cas"], []
+            )
 
     def test_external_cas_denial_never_writes_database(self):
         self.floor.allow = False
