@@ -83,3 +83,11 @@
 - [Finance OS CI #76 — SUCCESS](https://github.com/V1P3eR1/Core8-AI/actions/runs/45143735890) and [secret scan #419 — SUCCESS](https://github.com/V1P3eR1/Core8-AI/actions/runs/45143732786), tested commit `43dff54`. Tests include overlong/invalid token timestamps, malicious issuer strings, critical JWT headers and a 1024-bit RSA test key.
 - **Important integration constraints:** The 15-minute lifetime is a conservative candidate policy, not a published commitment by any external identity provider. A real issuer may have a different access-token profile; its algorithm, token lifetime, audience, client validation, JWKS rotation, revocation, and operational controls require documented security review. Do not weaken protections merely to make an incompatible provider pass.
 - This is *offline test-only validation*: no real OIDC discovery, network key fetch, finance endpoint authorization, customer data or live Stripe functionality was added.
+
+
+## Pinned JWKS key rotation and emergency key withdrawal — 2026-11-23
+
+- [tests/test_oidc_candidate.py](../tests/test_oidc_candidate.py) now exercises an **offline operator-approved key rotation overlap** using two newly created ephemeral RSA test keys. During overlap both old/new signed tokens verify against the pinned JWKS; after removing the old key, its token is rejected even before its own expiry. It also rejects unknown/duplicate key IDs and a token-supplied `jwk` public key.
+- [Finance OS sandbox CI #78 — SUCCESS](https://github.com/V1P3eR1/Core8-AI/actions/runs/45144128133) and [secret-scan #422 — SUCCESS](https://github.com/V1P3eR1/Core8-AI/actions/runs/45144128151), tested commit `41cd2a2`.
+- These are **unit tests of changed trusted JWKS input**, not an implemented OIDC key lifecycle. A provider-approved rotation process, signed/validated discovery configuration, key refresh bounds, emergency invalidation, replay safety and independent runbook review remain `TBD`. A JWT must never choose its own JWKS URL or signing key.
+- There is no connected identity provider, authenticated finance API or financial transaction enabled by these tests. The PR remains draft-only.
