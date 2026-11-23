@@ -8,6 +8,7 @@ import json
 import re
 import sys
 from pathlib import Path
+from snapshot_metadata import metadata
 
 REPO = "V1P3eR1/Core8-AI"
 SHA = re.compile(r"^[a-f0-9]{40}$")
@@ -42,6 +43,7 @@ def render(health, notion=None):
         raise DashboardError("invalid_health_schema")
     if health.get("mode") != "observe_only":
         raise DashboardError("not_readonly")
+    meta = metadata(health)
     items = health.get("items")
     if not isinstance(items, list) or len(items) > MAX_ITEMS:
         raise DashboardError("invalid_health_items")
@@ -76,6 +78,11 @@ def render(health, notion=None):
         "",
         f"**GitHub PRs checked:** {len(items)}. This report does not approve code, "
         "authorize model spending, merge or deploy anything.",
+        "",
+        f"**Source:** {meta['source_label']}; **Observed at:** {meta['observed_at'] or 'not provided'}.",
+        "**This is a static capture, not an automatically refreshed dashboard.**",
+        *(["**WARNING:** Data was already over 15 minutes old when rendered."] if meta["freshness"] == "stale_at_render" else []),
+        *(["**WARNING:** Capture time is unverified; not evidence of current state.**"] if meta["freshness"] == "unknown" else []),
         "",
         "## Current check states",
         "",
