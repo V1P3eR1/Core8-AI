@@ -1,0 +1,42 @@
+name: customer-demos-ci
+
+on:
+  pull_request:
+    paths:
+      - "apps/customer-demos/**"
+      - "docs/customer-showcase/**"
+      - ".github/workflows/customer-demos-ci.yml"
+  push:
+    branches:
+      - "fix/demo-handoff-simulation-copy"
+    paths:
+      - "apps/customer-demos/**"
+      - ".github/workflows/customer-demos-ci.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  offline-demo-tests:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Verify receptionist demo using only Node built-ins
+        working-directory: apps/customer-demos
+        env:
+          TZ: Asia/Jerusalem
+        run: |
+          npm test
+          node --check receptionist/app.js
+          node --check receptionist/engine.js
+          node --check receptionist/i18n.js
+      - name: Browser coverage disclosure
+        run: |
+          echo 'Browser visual smoke is NOT run by this job. It requires a separately reviewed Playwright environment.' >> "$GITHUB_STEP_SUMMARY"
+          echo 'This is a synthetic, offline, non-production demo. No calendar booking, messaging or deployment.' >> "$GITHUB_STEP_SUMMARY"
