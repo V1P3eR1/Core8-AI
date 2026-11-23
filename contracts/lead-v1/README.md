@@ -26,3 +26,7 @@ node --test contracts/lead-v1/*.test.cjs
 ```
 
 The browser UI uses the same structural validator as Node.js, but its scenario selection and synthetic context are not security controls. Actual tenant authorization, identity verification, consent audit and sending must be implemented on a trusted server with separate review.
+
+## Tenant-scoped deduplication preview
+
+`dedup-preview.cjs` provides a pure, offline duplicate check using the tuple `(trustedTenantId, sourceSystem, sourceSubmissionId)`. A duplicate within one tenant/source is detected; matching submission IDs across tenants or different sources remain distinct. Length-prefixed keys avoid separator collisions. This implementation deliberately stores nothing and does **not** provide concurrency safety, atomic uniqueness, idempotent API semantics, a database unique index, or a tenant authorization boundary. Those are required before live ingestion. Only trusted server context may supply the tenant ID; never use a source payload's claimed tenant as authority.
