@@ -95,3 +95,22 @@ The ChatGPT Notion connector's current account-link error is separate from
 the repository code: restoring its eligible personal account link requires
 external OAuth/account authorization, and a successful GitHub CI run does
 not repair or bypass that identity failure.
+
+
+## Local replay protection: one artifact per task revision (2026-11-23)
+
+The SQLite `ReplayLedger` now enforces uniqueness on `(repo, task_digest)`,
+not only on `(repo, run_id, artifact_id)`. A second run or artifact for
+the same approved task digest is blocked even if both provider IDs differ.
+A genuine changed task scope has a different digest and can be reserved
+independently, subject to fresh upstream approval.
+
+Existing local SQLite ledgers are migrated using a unique index; historical
+duplicate task reservations cause a fail-closed
+`ambiguous_existing_task_reservations` error, **not** automatic deletion,
+replacement or arbitrary selection of a winner. Do not silently discard
+historical reservations; reconcile them with audit evidence manually.
+
+This remains an OFFLINE, local-disk replay guard. It is not a cloud-distributed
+or cross-runner atomic lock; production activation needs a durable, shared
+transactional store with protected credentials and recovery semantics.
