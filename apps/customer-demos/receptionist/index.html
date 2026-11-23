@@ -1,0 +1,107 @@
+<!doctype html>
+<html lang="en" dir="ltr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <!--
+    Core8-AI customer demo: AI receptionist for the fictional "Or Clinic".
+    Fully static and offline. The policy below blocks every network connection
+    the page could attempt; only the four local scripts and one stylesheet load.
+  -->
+  <meta http-equiv="Content-Security-Policy"
+        content="default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'none'; form-action 'none'; base-uri 'none'">
+  <meta name="referrer" content="no-referrer">
+  <meta name="robots" content="noindex, nofollow">
+  <title>Core8-AI — AI receptionist demo (simulation)</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <a class="skip-link" href="#chat-input" data-i18n="ui.skip">Skip to the conversation</a>
+
+  <div class="demo-banner" role="note" data-testid="demo-banner">
+    <span class="demo-banner__dot" aria-hidden="true"></span>
+    <span data-i18n="ui.banner">DEMO / SIMULATION — no messages sent · no bookings created · fictional clinic and people</span>
+  </div>
+
+  <header class="topbar">
+    <div class="brand">
+      <span class="brand__mark" aria-hidden="true">8</span>
+      <span class="brand__name" lang="en" dir="ltr">Core8-AI</span>
+      <span class="brand__tag" data-i18n="ui.brandTag">Customer demo</span>
+    </div>
+    <nav class="controls" aria-label="Demo controls" data-i18n-aria="ui.controls">
+      <div class="lang" role="group" aria-label="Language" data-i18n-aria="ui.language">
+        <button type="button" class="lang__btn" data-lang="he" lang="he" aria-pressed="false">עברית</button>
+        <button type="button" class="lang__btn" data-lang="en" lang="en" aria-pressed="true">English</button>
+      </div>
+      <button type="button" class="btn btn--ghost" id="mobile-toggle" aria-pressed="false" data-testid="mobile-toggle">Mobile preview</button>
+      <button type="button" class="btn btn--ghost" id="reset" data-testid="reset" data-i18n="ui.reset">Reset demo</button>
+    </nav>
+  </header>
+
+  <main id="main">
+    <section class="intro">
+      <h1 data-i18n="ui.h1">AI receptionist for a clinic</h1>
+      <p class="intro__lead" data-i18n="ui.lead"></p>
+      <ol class="stepper" id="stepper" aria-label="Demo progress" data-i18n-aria="ui.progress" data-testid="stepper"></ol>
+    </section>
+
+    <div class="stage" id="stage" data-testid="stage">
+      <section class="card chat" aria-labelledby="chat-title">
+        <header class="chat__head">
+          <span class="chat__avatar" aria-hidden="true">א</span>
+          <div>
+            <h2 id="chat-title" class="chat__name" data-i18n="ui.clinicName">Or Clinic (fictional)</h2>
+            <p class="chat__sub" data-i18n="ui.clinicSub">Virtual receptionist · simulated</p>
+          </div>
+        </header>
+        <div class="chat__log" id="chat-log" role="log" aria-live="polite" aria-relevant="additions" tabindex="0" aria-labelledby="chat-title" data-testid="chat-log"></div>
+        <div class="chat__choices" id="choices" role="group" aria-label="Suggested replies" data-i18n-aria="ui.choices" data-testid="choices"></div>
+        <form class="chat__form" id="chat-form" autocomplete="off" novalidate>
+          <label class="visually-hidden" for="chat-input" data-i18n="ui.inputLabel">Your message</label>
+          <input id="chat-input" name="message" type="text" maxlength="200" autocomplete="off" autocapitalize="sentences" spellcheck="false" aria-describedby="chat-hint" data-testid="chat-input">
+          <button type="submit" class="btn btn--primary" data-i18n="ui.send" data-testid="send">Send</button>
+        </form>
+        <p class="chat__hint" id="chat-hint" data-i18n="ui.inputHint"></p>
+      </section>
+
+      <div class="panels">
+        <section class="card panel" aria-labelledby="p-intent">
+          <h2 id="p-intent" class="panel__title" data-i18n="ui.panelIntent">Inquiry classification</h2>
+          <div id="intent-body" data-testid="intent-panel"></div>
+        </section>
+
+        <section class="card panel" aria-labelledby="p-slots">
+          <h2 id="p-slots" class="panel__title" data-i18n="ui.panelSlots">Hypothetical appointment slots</h2>
+          <div id="slots-body" data-testid="slots-panel"></div>
+        </section>
+
+        <section class="card panel" aria-labelledby="p-lead">
+          <h2 id="p-lead" class="panel__title" data-i18n="ui.panelLead">Lead preview (local draft)</h2>
+          <div id="lead-body" data-testid="lead-panel"></div>
+        </section>
+      </div>
+
+      <section class="card audit" aria-labelledby="p-audit">
+        <h2 id="p-audit" class="panel__title" data-i18n="ui.panelAudit">Step-by-step audit trail</h2>
+        <p class="panel__note" data-i18n="ui.auditNote"></p>
+        <ol class="audit__list" id="audit-list" data-testid="audit-list"></ol>
+      </section>
+    </div>
+  </main>
+
+  <footer class="footer">
+    <p data-i18n="ui.footer1"></p>
+    <p data-i18n="ui.footer2"></p>
+  </footer>
+
+  <noscript>
+    <p class="noscript">This demo needs JavaScript. It runs entirely in your browser and makes no network requests. / ההדגמה דורשת JavaScript. היא רצה כולה בדפדפן ואינה שולחת שום בקשת רשת.</p>
+  </noscript>
+
+  <script src="fixtures.js"></script>
+  <script src="i18n.js"></script>
+  <script src="engine.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
