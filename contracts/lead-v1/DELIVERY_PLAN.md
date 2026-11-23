@@ -48,3 +48,7 @@ Each increment: commit to draft branch → GitHub Actions checks → fix failure
 ## Offline vertical slice (2026-11-23)
 
 Added `offline_intake_demo.py` and `test_offline_intake_demo.py` to compose verified synthetic identity, explicit tenant membership, consent, source-verification fixture, deterministic demo digest and atomic SQLite lead/claim creation. Nine tests cover happy path, idempotent replay, conflicting payload, denied tenant/admin, unsigned source, missing consent and invalid input. **This is not a live FastAPI endpoint**. The `source_verified` boolean and `identity.verified` fixture are not cryptographic verification; never accept these from HTTP payloads. Real signature verification, authenticated membership storage and API integration remain blocked until implemented.
+
+## Offline webhook signature verification (2026-11-23)
+
+Added `webhook_signature_demo.py` and ten offline tests for HMAC-SHA256 over timestamp + exact request bytes, constant-time signature comparison, 5-minute freshness window, limited future clock skew and a 64 KiB body cap. The secret is a **synthetic fixture**. This is not an HTTP endpoint and does not implement tenant-to-credential mapping, durable nonce replay prevention, secret rotation or webhook provider-specific signature formats. Timestamp validation alone does not prevent replays within the allowed window; the existing idempotency claim is a separate requirement. No live webhook ingestion is authorized.
