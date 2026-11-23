@@ -203,7 +203,7 @@ class ApprovalLedgerPostgresTests(unittest.TestCase):
                  (self.approval.approval_id,)),
                 ("DELETE FROM finance_key_approval_audit_candidate WHERE approval_id=%s",
                  (self.approval.approval_id,)),
-                ("TRUNCATE finance_key_approval_audit_candidate", ()),
+                ("TRUNCATE finance_key_approval_audit_candidate CASCADE", ()),
             ]
             for statement, values in attempts:
                 with self.subTest(statement=statement):
