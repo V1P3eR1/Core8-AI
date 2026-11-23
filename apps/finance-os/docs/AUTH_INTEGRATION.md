@@ -75,3 +75,11 @@
 - [Finance OS CI #73 — SUCCESS](https://github.com/V1P3eR1/Core8-AI/actions/runs/45141385728) and [secret scan #416 — SUCCESS](https://github.com/V1P3eR1/Core8-AI/actions/runs/45141385718), commit `c818b6e`.
 - **Provider compatibility gate:** `token_use` is a candidate-specific assertion, not a universal OIDC access-token claim. A real identity provider may use a different token-type profile; adopt its formally verified access-token semantics (including audience/client and token type), and update tests before enabling any API. Never relax token-type discrimination to make a mismatched provider work.
 - The module remains disconnected from HTTP endpoints and financial data access; no actual OIDC discovery, secure key rotation, login, logout or token revocation has been built.
+
+
+## Offline JWT bounds and issuer hardening — 2026-11-23
+
+- The unexposed `oidc_candidate.py` now applies a **candidate-specific maximum signed lifetime of 15 minutes** (`exp - iat <= 900s`), requires integer numeric date claims, rejects malformed HTTPS issuer URLs with credentials/query/fragment, refuses unsupported JWT `crit` headers and RSA verification keys below 2048 bits.
+- [Finance OS CI #76 — SUCCESS](https://github.com/V1P3eR1/Core8-AI/actions/runs/45143735890) and [secret scan #419 — SUCCESS](https://github.com/V1P3eR1/Core8-AI/actions/runs/45143732786), tested commit `43dff54`. Tests include overlong/invalid token timestamps, malicious issuer strings, critical JWT headers and a 1024-bit RSA test key.
+- **Important integration constraints:** The 15-minute lifetime is a conservative candidate policy, not a published commitment by any external identity provider. A real issuer may have a different access-token profile; its algorithm, token lifetime, audience, client validation, JWKS rotation, revocation, and operational controls require documented security review. Do not weaken protections merely to make an incompatible provider pass.
+- This is *offline test-only validation*: no real OIDC discovery, network key fetch, finance endpoint authorization, customer data or live Stripe functionality was added.
