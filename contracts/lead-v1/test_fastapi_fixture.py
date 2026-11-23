@@ -21,7 +21,7 @@ class FastApiFixtureTests(unittest.TestCase):
         headers={
             "x-demo-timestamp":str(timestamp),
             "x-demo-signature":signature_override if signature_override is not None
-                               else signature(key,timestamp,raw),
+                               else signature(key,timestamp,raw,delivery_id=delivery),
             "x-demo-delivery-id":delivery,
             "x-demo-credential-id":credential,
         }
