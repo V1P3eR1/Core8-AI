@@ -7,7 +7,7 @@ from github_provenance import EvidenceBlocked, REPO, positive
 HEX64 = re.compile(r"^[a-f0-9]{64}$")
 UUID = re.compile(r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$")
 PREFIX = "https://api.github.com/repos/" + REPO + "/issues/"
-UTC_TIMESTAMP = re.compile(r"^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}(?:\\.[0-9]{1,9})?Z$")
+UTC_TIMESTAMP = re.compile(r"^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}(?:\.[0-9]{1,9})?Z$")
 
 
 def valid_utc_timestamp(value):
@@ -19,8 +19,6 @@ def valid_utc_timestamp(value):
     except ValueError:
         return False
     return stamp.tzinfo == timezone.utc
-
-
 
 
 def verify_issue_comment(issue, comment, *, issue_number, comment_id, approver_id,
