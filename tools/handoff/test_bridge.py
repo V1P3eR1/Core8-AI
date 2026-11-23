@@ -57,7 +57,8 @@ class ContractTests(unittest.TestCase):
         self.export()
         self.f.approval = {'id': 55, 'user': {'id': 123, 'type': 'User'},
                            'body': '/core8-implement ' + digest(payload(self.f.page)),
-                           'created_at': '2026-11-12T12:00:00Z', 'updated_at': '2026-11-12T12:00:00Z'}
+                           'created_at': '2026-11-12T12:00:00Z', 'updated_at': '2026-11-12T12:00:00Z',
+                           'issue_url': 'https://api.github.com/repos/V1P3eR1/Core8-AI/issues/1'}
         return {'action': 'created', 'issue': {'number': 1}, 'comment': copy.deepcopy(self.f.approval)}
 
     def test_proposal_never_exports(self):
@@ -102,6 +103,20 @@ class ContractTests(unittest.TestCase):
             self.b.sync()
         self.assertEqual(self.f.issues, [])
         self.assertNotIn('examplevalue', str(self.f.writes))
+
+    def test_secret_in_task_title_blocked_before_export(self):
+        self.f.page['properties']['Name']['title'][0]['plain_text'] = 'token=' + 'sensitivevalue123456'
+        with self.assertRaises(Stop):
+            self.b.sync()
+        self.assertEqual(self.f.issues, [])
+        self.assertNotIn('sensitivevalue123456', str(self.f.writes))
+
+    def test_secret_in_acceptance_blocked_before_export(self):
+        self.f.page['properties']['Acceptance']['rich_text'][0]['plain_text'] = 'api_key=' + 'sensitivevalue123456'
+        with self.assertRaises(Stop):
+            self.b.sync()
+        self.assertEqual(self.f.issues, [])
+        self.assertNotIn('sensitivevalue123456', str(self.f.writes))
 
     def test_private_page_content_not_exported(self):
         self.f.page['private_notes'] = 'PRIVATE_SENTINEL'
@@ -151,8 +166,77 @@ class ContractTests(unittest.TestCase):
         self.b.sync()
         self.assertEqual(self.f.writes[-1][2]['properties']['Status']['select']['name'], 'Review')
 
+    def test_revoked_between_query_and_live_read_never_exports(self):
+        class RevokedAfterQuery(Fake):
+            def call(self, method, path, data=None):
+                if method == 'GET' and path == '/pages/' + TASK:
+                    current = copy.deepcopy(self.page)
+                    current['properties']['Public export']['checkbox'] = False
+                    return current
+                return super().call(method, path, data)
+
+        fake = RevokedAfterQuery()
+        Bridge(fake, fake, SOURCE, apply=True).sync()
+        self.assertEqual(fake.issues, [])
+        self.assertFalse(any(method == 'POST' and path == PREFIX + '/issues'
+                             for method, path, _ in fake.writes))
+
+    def test_dryrun_revoked_between_query_and_live_read_zero_writes(self):
+        class RevokedAfterQuery(Fake):
+            def call(self, method, path, data=None):
+                if method == 'GET' and path == '/pages/' + TASK:
+                    current = copy.deepcopy(self.page)
+                    current['properties']['Decision']['select']['name'] = 'Rejected'
+                    return current
+                return super().call(method, path, data)
+
+        fake = RevokedAfterQuery()
+        Bridge(fake, fake, SOURCE, apply=False).sync()
+        self.assertEqual(fake.writes, [])
+
+    def test_machine_status_with_wrong_digest_ignored(self):
+        self.export()
+        self.f.comments = [{'user': {'login': 'github-actions[bot]'},
+                            'body': 'core8-run ' + '0' * 64 +
+                            ' review https://github.com/V1P3eR1/Core8-AI/actions/runs/1'}]
+        self.b.sync()
+        self.assertEqual(self.f.writes[-1][2]['properties']['Status']['select']['name'], 'Queued')
+
+    def test_machine_status_with_untrusted_run_url_ignored(self):
+        self.export()
+        sha = digest(payload(self.f.page))
+        self.f.comments = [{'user': {'login': 'github-actions[bot]'},
+                            'body': f'core8-run {sha} review https://example.org/fake-run'}]
+        self.b.sync()
+        self.assertEqual(self.f.writes[-1][2]['properties']['Status']['select']['name'], 'Queued')
+
     def test_approved_gate(self):
         number, data = self.b.gate(self.event(), '123')
+        self.assertEqual(number, 1)
+        self.assertEqual(data['task'], TASK)
+
+    def test_fetched_issue_number_must_match_event(self):
+        event = self.event()
+        self.f.issues[0]['number'] = 999
+        with self.assertRaisesRegex(Stop, 'approval_issue_mismatch'):
+            self.b.gate(event, '123')
+
+    def test_approval_comment_issue_url_must_match_event(self):
+        event = self.event()
+        self.f.approval['issue_url'] = 'https://api.github.com/repos/V1P3eR1/Core8-AI/issues/999'
+        with self.assertRaisesRegex(Stop, 'approval_issue_mismatch'):
+            self.b.gate(event, '123')
+
+    def test_missing_approval_comment_issue_url_blocked(self):
+        event = self.event()
+        self.f.approval.pop('issue_url')
+        with self.assertRaisesRegex(Stop, 'approval_issue_mismatch'):
+            self.b.gate(event, '123')
+
+    def test_matching_approval_comment_issue_url_accepted(self):
+        event = self.event()
+        self.f.approval['issue_url'] = 'https://api.github.com/repos/V1P3eR1/Core8-AI/issues/1'
+        number, data = self.b.gate(event, '123')
         self.assertEqual(number, 1)
         self.assertEqual(data['task'], TASK)
 
@@ -212,6 +296,24 @@ class ContractTests(unittest.TestCase):
         event = self.event()
         self.f.comments.append({'user': {'login': 'github-actions[bot]'}, 'body': f'core8-run {digest(payload(self.f.page))} started https://github.com/V1P3eR1/Core8-AI/actions/runs/1'})
         with self.assertRaisesRegex(Stop, 'already_attempted'):
+            self.b.gate(event, '123')
+
+    def test_revoked_public_export_blocks_approval_gate(self):
+        event = self.event()
+        self.f.page['properties']['Public export']['checkbox'] = False
+        with self.assertRaisesRegex(Stop, 'approval_revoked'):
+            self.b.gate(event, '123')
+
+    def test_missing_approval_evidence_blocks_gate(self):
+        event = self.event()
+        self.f.page['properties']['Approval evidence']['url'] = None
+        with self.assertRaisesRegex(Stop, 'approval_revoked'):
+            self.b.gate(event, '123')
+
+    def test_approval_digest_cannot_be_reused_after_acceptance_change(self):
+        event = self.event()
+        self.f.page['properties']['Acceptance']['rich_text'][0]['plain_text'] = 'Changed acceptance criteria'
+        with self.assertRaisesRegex(Stop, 'stale_or_modified_scope'):
             self.b.gate(event, '123')
 
     def test_approval_command_exact(self):
