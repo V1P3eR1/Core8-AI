@@ -199,7 +199,8 @@ class Bridge:
             raise Stop('approval_changed')
         issue = self.gh.call('GET', PREFIX + f'/issues/{number}')
         # Bind the fetched resource and the approval comment to the webhook issue.
-        if issue.get('number') != number or current.get('issue_url') and current['issue_url'] != f'https://api.github.com{PREFIX}/issues/{number}':
+        if (issue.get('number') != number
+                or current.get('issue_url') != f'https://api.github.com{PREFIX}/issues/{number}'):
             raise Stop('approval_issue_mismatch')
         markers = re.findall(r'<!-- core8-task:([a-f0-9-]{36}) -->', issue.get('body', ''))
         if issue.get('pull_request') or issue['state'] != 'open' or len(markers) != 1:
