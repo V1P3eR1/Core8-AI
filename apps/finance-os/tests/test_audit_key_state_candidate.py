@@ -8,6 +8,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from audit_key_rotation_candidate import AuditKeyringCandidate, PinnedAuditKey
 from audit_key_state_candidate import (
     export_audit_keyring_state, import_audit_keyring_state,
+    recover_audit_keyring_with_floor,
 )
 from tenant_access import FinanceAccessDenied
 
@@ -88,6 +89,40 @@ class AuditKeyStateCandidateTests(unittest.TestCase):
                     self.restore(blob=raw)
         with self.assertRaises(FinanceAccessDenied):
             self.restore(blob=b"not-json")
+
+    def test_external_floor_adapter_validates_provider_and_rollback(self):
+        from external_floor_candidate import IndependentGenerationFloor
+
+        class FakeFloor(IndependentGenerationFloor):
+            def __init__(self, value):
+                self.value = value
+            def read(self, namespace):
+                return self.value
+            def compare_and_advance(self, namespace, expected_generation,
+                                    next_generation):
+                raise AssertionError("recovery must not modify floor")
+
+        kwargs = dict(
+            blob=self.blob, namespace=self.namespace,
+            state_signing_key=STATE_KEY,
+            pinned_secrets={NEW.kid: NEW.secret},
+        )
+        self.assertEqual(recover_audit_keyring_with_floor(
+            **kwargs, floor=FakeFloor(3)).generation, 3)
+        for value in (2, 4, True, None, "3", 0):
+            with self.subTest(value=value):
+                with self.assertRaises(FinanceAccessDenied):
+                    recover_audit_keyring_with_floor(
+                        **kwargs, floor=FakeFloor(value))
+        with self.assertRaises(FinanceAccessDenied):
+            recover_audit_keyring_with_floor(**kwargs, floor=object())
+
+        class BrokenFloor(IndependentGenerationFloor):
+            def read(self, namespace):
+                raise RuntimeError("synthetic service outage")
+        with self.assertRaises(FinanceAccessDenied):
+            recover_audit_keyring_with_floor(
+                **kwargs, floor=BrokenFloor())
 
     def test_overlap_keys_are_reconstructed_from_trusted_inputs(self):
         overlap = AuditKeyringCandidate(active=OLD)
