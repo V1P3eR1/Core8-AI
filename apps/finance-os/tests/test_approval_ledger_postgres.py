@@ -404,6 +404,40 @@ class ApprovalLedgerPostgresTests(unittest.TestCase):
                     1,
                 )
 
+    def test_health_counters_detect_exhausted_and_preserve_namespace(self):
+        from audit_outbox_health_candidate import audit_outbox_health
+        self.assertTrue(self.consume())
+        with psycopg.connect(self.dsn, autocommit=True) as db:
+            initial = audit_outbox_health(db, namespace=self.namespace)
+            self.assertEqual(initial["pending"], 1)
+            self.assertEqual(initial["ready"], 1)
+            self.assertEqual(initial["exhausted"], 0)
+            self.assertEqual(
+                audit_outbox_health(db, namespace="other_namespace")["pending"], 0
+            )
+            db.execute(
+                """UPDATE finance_key_audit_outbox_candidate o
+                   SET delivery_attempts=5, lease_until=NULL, lease_token=NULL
+                   FROM finance_key_approval_audit_candidate a
+                   WHERE a.id=o.audit_id AND a.approval_id=%s""",
+                (self.approval.approval_id,),
+            )
+            health = audit_outbox_health(db, namespace=self.namespace)
+            self.assertEqual(health["pending"], 1)
+            self.assertEqual(health["exhausted"], 1)
+            self.assertEqual(health["ready"], 0)
+            from audit_dispatch_candidate import claim_next
+            self.assertIsNone(claim_next(db, namespace=self.namespace))
+
+    def test_health_rejects_invalid_namespace_and_limits(self):
+        from audit_outbox_health_candidate import audit_outbox_health
+        with psycopg.connect(self.dsn, autocommit=True) as db:
+            for ns, attempts in (("../bad", 5), ("", 5),
+                                 (self.namespace, 0), (self.namespace, True)):
+                with self.subTest(ns=ns, attempts=attempts):
+                    with self.assertRaises(FinanceAccessDenied):
+                        audit_outbox_health(db, namespace=ns, max_attempts=attempts)
+
     def test_provisioning_cannot_overwrite_existing_approval(self):
         with psycopg.connect(self.dsn, autocommit=True) as db:
             with self.assertRaises(FinanceAccessDenied):
