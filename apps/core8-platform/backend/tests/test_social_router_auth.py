@@ -199,3 +199,18 @@ def test_worker_approval_detection_covers_all_worker_prefixes(monkeypatch):
             return {"approved_by": approved_by}
         monkeypatch.setattr(publishing, "fetch_one", approval_row)
         assert asyncio.run(publishing._is_auto({"approval_id": "synthetic-approval"})) is expected
+
+
+@pytest.mark.parametrize("actor", ["worker:auto", "worker:legacy", "system:publisher", ""])
+def test_approval_service_rejects_nonhuman_actor_before_db(monkeypatch, actor):
+    """A background job cannot bypass the API and manufacture approval."""
+    import asyncio
+    from social import publishing
+
+    async def forbidden(*args, **kwargs):
+        raise AssertionError("database reached before actor validation")
+
+    monkeypatch.setattr(publishing, "get_item", forbidden)
+    with pytest.raises(publishing.GateError) as exc:
+        asyncio.run(publishing.approve_item("synthetic-item", actor))
+    assert exc.value.code == "human_approval_required"
