@@ -24,7 +24,7 @@ async def intake(request: Request,
         timestamp = int(x_demo_timestamp)
     except ValueError:
         raise HTTPException(status_code=400, detail="invalid_timestamp")
-    body = await request.body()
+    if request.headers.get("content-length"):\n        try:\n            if int(request.headers["content-length"]) > 65536:\n                raise HTTPException(status_code=413, detail="request_too_large")\n        except ValueError:\n            raise HTTPException(status_code=400, detail="invalid_content_length")\n    body = bytearray()\n    async for chunk in request.stream():\n        body.extend(chunk)\n        if len(body) > 65536:\n            raise HTTPException(status_code=413, detail="request_too_large")\n    body = bytes(body)
     # One database per application instance for tests. Never shared with prod.
     conn = request.app.state.fixture_db
     try:
