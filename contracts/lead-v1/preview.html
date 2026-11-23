@@ -1,0 +1,41 @@
+<!doctype html>
+<html lang="he" dir="rtl">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self'; connect-src 'none'; form-action 'none'; base-uri 'none'">
+  <title>Core8-AI | Lead Flow Sandbox</title>
+  <link rel="stylesheet" href="./preview.css">
+  <script src="./preview.js" defer></script>
+</head>
+<body>
+  <main class="shell">
+    <header class="top">
+      <div><div class="eyebrow">CORE8-AI / CUSTOMER DEMO</div><h1>Lead Flow <span>Sandbox</span></h1><p>סימולציה אינטראקטיבית של קליטת ליד, אימות והפרדה בין לקוחות עסקיים.</p></div>
+      <span class="draft">DEMO ONLY · NO LIVE DATA</span>
+    </header>
+    <section class="stats" aria-label="מצב סביבת הדמו">
+      <div class="stat"><span>סביבת עבודה</span><strong>OFFLINE</strong></div>
+      <div class="stat"><span>מקור הפנייה</span><strong>Lead Triage</strong></div>
+      <div class="stat"><span>פעולות חיצוניות</span><strong>0</strong></div>
+    </section>
+    <section class="layout">
+      <div class="panel">
+        <div class="panelhead"><span class="step">01</span><h2>פנייה נכנסת</h2></div>
+        <label for="scenario">תרחיש בדיקה</label>
+        <select id="scenario"><option value="valid">פנייה בדויה — מסלול תקין</option><option value="tenant">ניסיון גישה של Tenant אחר</option><option value="unsigned">פנייה ללא אימות מקור</option><option value="consent">פנייה ללא הסכמה</option></select>
+        <div class="fixture"><span class="tag">SYNTHETIC DATA</span><p><b>שם:</b> Fictional Demo Customer</p><p><b>עסק:</b> Example Clinic</p><p><b>בקשה:</b> בירור תור ראשוני לדוגמה</p><p><b>ערוץ:</b> Web Lead / Simulation</p></div>
+        <button id="run" type="button">הרץ בדיקת תרחיש</button>
+        <button id="reset" type="button" class="secondary">איפוס</button>
+      </div>
+      <div class="panel">
+        <div class="panelhead"><span class="step">02</span><h2>תוצאות האימות</h2></div>
+        <div id="status" class="result" role="status" aria-live="polite">בחר תרחיש ולחץ על הרצת בדיקה.</div>
+        <ol id="checks" class="checks"><li>ממתין להפעלה</li></ol>
+        <div class="footnote">לא נשלח מייל, לא נקבע תור ולא נוצר ליד במערכת אמיתית.</div>
+      </div>
+    </section>
+    <footer>Core8-AI · Preview UI · no network requests · no persistent storage</footer>
+  </main>
+</body>
+</html>
