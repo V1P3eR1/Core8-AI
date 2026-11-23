@@ -103,6 +103,20 @@ class ContractTests(unittest.TestCase):
         self.assertEqual(self.f.issues, [])
         self.assertNotIn('examplevalue', str(self.f.writes))
 
+    def test_secret_in_task_title_blocked_before_export(self):
+        self.f.page['properties']['Name']['title'][0]['plain_text'] = 'token=' + 'sensitivevalue123456'
+        with self.assertRaises(Stop):
+            self.b.sync()
+        self.assertEqual(self.f.issues, [])
+        self.assertNotIn('sensitivevalue123456', str(self.f.writes))
+
+    def test_secret_in_acceptance_blocked_before_export(self):
+        self.f.page['properties']['Acceptance']['rich_text'][0]['plain_text'] = 'api_key=' + 'sensitivevalue123456'
+        with self.assertRaises(Stop):
+            self.b.sync()
+        self.assertEqual(self.f.issues, [])
+        self.assertNotIn('sensitivevalue123456', str(self.f.writes))
+
     def test_private_page_content_not_exported(self):
         self.f.page['private_notes'] = 'PRIVATE_SENTINEL'
         self.b.sync()
