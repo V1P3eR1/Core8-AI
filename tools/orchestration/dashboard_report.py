@@ -71,6 +71,7 @@ def render(health, notion=None):
         )
     lines = [
         "# Core8-AI engineering control — observation only",
+        *(["", "**PARTIAL COVERAGE — at most 20 open PRs sampled; remaining PRs were not checked.**"] if health.get("coverage") == "partial" else []),
         *(["", "**SYNTHETIC DEMO DATA — NOT LIVE GITHUB CHECKS.**"] if demo else []),
         "",
         f"**GitHub PRs checked:** {len(items)}. This report does not approve code, "
