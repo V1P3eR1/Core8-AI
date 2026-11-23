@@ -62,6 +62,21 @@ class PinnedJwksRegistry:
         with self._lock:
             return self._generation, {"keys": deepcopy(list(self._keys.values()))}
 
+    def preview_replace(self, jwks, *, generation, retire=()):
+        """Validate a proposed transition without changing active keys.
+
+        This is a preflight only; callers MUST validate again at commit time.
+        The independent watermark must never be advanced for invalid input.
+        """
+        with self._lock:
+            candidate = PinnedJwksRegistry(
+                {"keys": deepcopy(list(self._keys.values()))},
+                generation=self._generation,
+            )
+            candidate._retired = set(self._retired)
+            candidate.replace(jwks, generation=generation, retire=retire)
+        return True
+
     def replace(self, jwks, *, generation, retire=()):
         """Apply fully prevalidated next generation, or leave state untouched.
 
