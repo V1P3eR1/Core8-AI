@@ -56,3 +56,7 @@ Added `webhook_signature_demo.py` and ten offline tests for HMAC-SHA256 over tim
 ## Signed intake vertical slice (2026-11-23)
 
 Added `signed_intake_demo.py` and `test_signed_intake_demo.py` (11 cases). The demo maps a synthetic credential ID through a **trusted in-process registry** to one tenant and source, verifies the exact request bytes with HMAC, enforces timestamp freshness and explicit consent, then performs SQLite atomic claim + lead creation. The request's claimed tenant is ignored. Duplicate submission IDs replay the original lead and changed payloads conflict. **No HTTP route, credential persistence, credential rotation, nonce store, request rate limiting or production secrets are included.** A signed request can still be replayed within the 5-minute window; duplicate lead creation is blocked by the idempotency claim but event replay prevention requires additional work. Only fixture data is used.
+
+## Credential rotation policy fixture (2026-11-23)
+
+Added `credential_rotation_demo.py` with nine tests: active/current secret, bounded previous-key grace period, expiry, unknown key, inactive credential, old timestamp, tampering and malformed grace period. **This is a standalone policy fixture and is not wired into `signed_intake_demo.py` or `webhook_receipt_demo.py` yet.** Actual secret persistence, audit logging, rotation scheduling, per-provider signature semantics and emergency revocation remain unimplemented. The previous key must be removed after the grace period; never accept a previous key indefinitely.
