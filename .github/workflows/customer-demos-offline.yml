@@ -1,0 +1,30 @@
+name: customer-demos-offline-tests
+
+on:
+  pull_request:
+    paths:
+      - "apps/customer-demos/**"
+      - ".github/workflows/customer-demos-offline.yml"
+  push:
+    branches: [main]
+    paths:
+      - "apps/customer-demos/**"
+      - ".github/workflows/customer-demos-offline.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  offline-node-tests:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    defaults:
+      run:
+        working-directory: apps/customer-demos
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Run deterministic mock-only unit and static checks
+        run: npm test
