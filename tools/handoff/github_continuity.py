@@ -84,7 +84,7 @@ def summarize_pr(pr, checks, number):
         if not isinstance(c, dict) or not isinstance(c.get("name"), str):
             raise SnapshotBlocked("invalid_check")
         check_sha = c.get("head_sha")
-        if check_sha is not None and check_sha != sha:
+        if not isinstance(check_sha, str) or check_sha != sha:
             raise SnapshotBlocked("check_head_sha_mismatch")
         name = c["name"]
         if name in records:  # Duplicate latest-name ambiguity must not falsely turn green.
