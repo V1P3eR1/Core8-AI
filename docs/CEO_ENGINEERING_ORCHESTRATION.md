@@ -109,6 +109,14 @@ Offline cases in `tools/orchestration/test_retry_policy.py` cover missing approv
 
 **Next safe engineering tasks:** introduce a verified durable attempt record tied to GitHub run ID and immutable approved scope, atomic idempotency claims across concurrent runners, recorded model budget consumption, redacted failure evidence, a separately sandboxed patch review workflow, and a human review gate before any PR is merged. Preserve the existing owner/Notion approval mechanism rather than allowing the ledger to grant permissions.
 
+### November 23 — private Notion ↔ GitHub reconciliation contract (draft)
+
+The connected private Notion integration was used to **read**, not export, the existing nine Core8 integration tasks. A material observation: the Finance OS task formerly shown as `In progress` now reads `Awaiting approval`, with `Public export=false`; its existing GitHub Issue #63 remains linked. This is a **status discrepancy requiring review**, not permission to overwrite Notion or revive a task in GitHub. Historic reports in this document are snapshots and must not be used as current approval evidence.
+
+`tools/orchestration/notion_reconciliation.py` and its synthetic tests implement a standalone, **read-only comparison** of pre-fetched private Notion task metadata and GitHub issue snapshots. It verifies task IDs, unique issue mapping, exact task markers in issue bodies, actual issue open/closed state and the separate Notion public-export/approval-evidence gates; it refuses invalid domains and duplicated mappings. Output contains only task IDs, issue numbers, status and fixed diagnostic codes. Private `Scope`, `Acceptance`, approval evidence URLs and user details never appear in the report. It does not automatically import customer data, create GitHub issues, update Notion properties or authorize Claude.
+
+**Remaining gap:** the hourly workflow currently fetches GitHub check runs only; it does not retrieve private Notion tasks because the private connector credentials must not be put into a public-repository CI context without a reviewed design. Cross-source reconciliation is a tested library contract, **not an activated scheduled sync**. Verified source identity, isolated secrets and an explicit write approval gate must precede any live status updates.
+
 ### Safe activation checklist
 
 1. Inspect this PR diff and successful `Core8 development loop (read-only)` CI, security review, codeowners and actions-policy compatibility.
