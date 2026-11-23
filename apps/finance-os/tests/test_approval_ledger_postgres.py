@@ -113,21 +113,27 @@ class ApprovalLedgerPostgresTests(unittest.TestCase):
         self.assertTrue(self.consume())
         self.assertEqual(self.audit_count(), 1)
 
-    def test_audit_write_failure_rolls_back_consumption(self):
+    def test_nested_transaction_cannot_replay_consumed_approval(self):
+        # Consuming inside a caller transaction would return True before
+        # commit, allowing a later rollback to make the approval reusable.
         with psycopg.connect(self.dsn, autocommit=True) as db:
-            with self.assertRaises(psycopg.Error):
-                with db.transaction():
-                    db.execute(
-                        "DROP TABLE finance_key_approval_audit_candidate"
-                    )
-                    # Intentionally fails because the audit table was dropped.
-                    PostgresApprovalCandidate(
-                        db, namespace=self.namespace
-                    ).consume(self.approval.approval_id, self.approval)
-            # The DROP is rolled back with the consumption.
+            with db.transaction():
+                ledger = PostgresApprovalCandidate(
+                    db, namespace=self.namespace
+                )
+                with self.assertRaises(FinanceAccessDenied):
+                    ledger.consume(self.approval.approval_id, self.approval)
         self.assertEqual(self.audit_count(), 0)
         self.assertTrue(self.consume())
         self.assertEqual(self.audit_count(), 1)
+
+    def test_non_autocommit_connection_denied(self):
+        with psycopg.connect(self.dsn) as db:
+            ledger = PostgresApprovalCandidate(db, namespace=self.namespace)
+            with self.assertRaises(FinanceAccessDenied):
+                ledger.consume(self.approval.approval_id, self.approval)
+        self.assertEqual(self.audit_count(), 0)
+        self.assertTrue(self.consume())
 
     def test_server_clock_rejects_expired_and_far_future_approval(self):
         from dataclasses import replace
