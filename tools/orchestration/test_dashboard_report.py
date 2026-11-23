@@ -36,7 +36,6 @@ class DashboardTests(unittest.TestCase):
         self.assertIn("Tasks inspected: 9", text)
         self.assertIn("Linked GitHub issues: 3", text)
         self.assertNotIn("SECRET CLIENT DATA", text)
-        self.assertNotIn("private", text.lower().replace("private notion", "").replace("private task", "")) if False else None
 
     def test_malformed_git_status_fails_closed(self):
         with self.assertRaises(DashboardError):
