@@ -179,6 +179,49 @@ class OidcCandidateTests(unittest.TestCase):
         with self.assertRaises(FinanceAccessDenied):
             self.verify(token, jwks=jwks)
 
+    def test_pinned_key_rotation_and_emergency_revocation(self):
+        # The JWKS is supplied by a trusted operator, never fetched from token URLs.
+        # During an approved overlap, either pinned key can verify its own JWT.
+        rotated_key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
+        pub = rotated_key.public_key().public_numbers()
+        def b64(value):
+            return base64.urlsafe_b64encode(
+                value.to_bytes((value.bit_length() + 7) // 8, "big")
+            ).rstrip(b"=").decode()
+        new_jwk = {
+            "kty": "RSA", "kid": "ci-rotated", "alg": "RS256", "use": "sig",
+            "n": b64(pub.n), "e": b64(pub.e),
+        }
+        old_token = self.signed()
+        new_token = self.signed(key=rotated_key, headers={"kid": "ci-rotated"})
+        overlap = {"keys": [*self.jwks["keys"], new_jwk]}
+        self.assertEqual(self.verify(old_token, jwks=overlap).value, "sub_test_123")
+        self.assertEqual(self.verify(new_token, jwks=overlap).value, "sub_test_123")
+        # After removal of the compromised/retired key, its token fails
+        # regardless of the JWT's remaining expiry window.
+        active = {"keys": [new_jwk]}
+        self.assertEqual(self.verify(new_token, jwks=active).value, "sub_test_123")
+        with self.assertRaises(FinanceAccessDenied):
+            self.verify(old_token, jwks=active)
+        with self.assertRaises(FinanceAccessDenied):
+            self.verify(new_token, jwks=self.jwks)
+
+    def test_duplicate_key_id_and_token_supplied_jwk_denied(self):
+        rotated_key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
+        pub = rotated_key.public_key().public_numbers()
+        def b64(value):
+            return base64.urlsafe_b64encode(
+                value.to_bytes((value.bit_length() + 7) // 8, "big")
+            ).rstrip(b"=").decode()
+        ambiguous = {"keys": [*self.jwks["keys"], {
+            "kty": "RSA", "kid": "ci-key", "alg": "RS256", "use": "sig",
+            "n": b64(pub.n), "e": b64(pub.e)
+        }]}
+        with self.assertRaises(FinanceAccessDenied):
+            self.verify(self.signed(), jwks=ambiguous)
+        with self.assertRaises(FinanceAccessDenied):
+            self.verify(self.signed(headers={"jwk": self.jwks["keys"][0]}))
+
     def test_reject_missing_configuration_and_oversized_token(self):
         with self.assertRaises(FinanceAccessDenied):
             self.verify(self.signed(), issuer="http://insecure")
