@@ -214,6 +214,25 @@ class ContractTests(unittest.TestCase):
         self.assertEqual(number, 1)
         self.assertEqual(data['task'], TASK)
 
+    def test_fetched_issue_number_must_match_event(self):
+        event = self.event()
+        self.f.issues[0]['number'] = 999
+        with self.assertRaisesRegex(Stop, 'approval_issue_mismatch'):
+            self.b.gate(event, '123')
+
+    def test_approval_comment_issue_url_must_match_event(self):
+        event = self.event()
+        self.f.approval['issue_url'] = 'https://api.github.com/repos/V1P3eR1/Core8-AI/issues/999'
+        with self.assertRaisesRegex(Stop, 'approval_issue_mismatch'):
+            self.b.gate(event, '123')
+
+    def test_matching_approval_comment_issue_url_accepted(self):
+        event = self.event()
+        self.f.approval['issue_url'] = 'https://api.github.com/repos/V1P3eR1/Core8-AI/issues/1'
+        number, data = self.b.gate(event, '123')
+        self.assertEqual(number, 1)
+        self.assertEqual(data['task'], TASK)
+
     def test_other_user_blocked(self):
         with self.assertRaisesRegex(Stop, 'unauthorized'):
             self.b.gate(self.event(), '456')
