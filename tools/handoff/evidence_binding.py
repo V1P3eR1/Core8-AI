@@ -68,9 +68,10 @@ def bind_review_evidence(approval, run_artifact, protected_gate, *, now):
     if not isinstance(archive_hash, str) or not HEX64.fullmatch(archive_hash):
         raise EvidenceBlocked("invalid_archive_digest")
     approved = utc_time(protected_gate["approved_at"])
+    comment_created = utc_time(approval.get("comment_created_at"))
     created = utc_time(run_artifact.get("created_at"))
     expires = utc_time(run_artifact.get("expires_at"))
-    if not (approved <= created <= now < expires):
+    if not (approved <= comment_created <= created <= now < expires):
         raise EvidenceBlocked("approval_or_artifact_time_mismatch")
     return {
         "status": "BOUND_FOR_REVIEW_ONLY", "repo": REPO,
