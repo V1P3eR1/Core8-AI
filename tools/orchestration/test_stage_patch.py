@@ -83,6 +83,32 @@ class StagePatchTests(unittest.TestCase):
         with self.assertRaisesRegex(StageRejected, "dirty_source"):
             self.apply(self.patch())
 
+    def test_ignored_source_is_rejected(self):
+        (self.repo / ".gitignore").write_text("ignored-secret.txt\n")
+        git(self.repo, "add", ".gitignore")
+        git(self.repo, "-c", "user.name=Test", "-c",
+            "user.email=test@invalid.local", "commit", "-qm", "ignore fixture")
+        self.base = git(self.repo, "rev-parse", "HEAD")
+        (self.repo / "ignored-secret.txt").write_text("hidden data")
+        with self.assertRaisesRegex(StageRejected, "dirty_source"):
+            self.apply(self.patch())
+
+    def test_nested_checkout_is_not_worktree_root(self):
+        nested = self.repo / "docs"
+        patch = self.patch()
+        with self.assertRaisesRegex(StageRejected, "not_a_git_checkout"):
+            stage(nested, patch, hashlib.sha256(patch).hexdigest(),
+                  self.base, "a" * 64)
+
+    def test_local_fsmonitor_helper_is_not_executed(self):
+        helper = self.repo.parent / "fsmonitor-helper.sh"
+        marker = self.repo.parent / "helper-executed"
+        helper.write_text("#!/bin/sh\ntouch '" + str(marker) + "'\nexit 0\n")
+        helper.chmod(0o755)
+        git(self.repo, "config", "core.fsmonitor", str(helper))
+        self.apply(self.patch())
+        self.assertFalse(marker.exists())
+
     def test_reject_workflow_path(self):
         with self.assertRaisesRegex(StageRejected, "patch_"):
             self.apply(self.patch(path=".github/workflows/exploit.yml"))
