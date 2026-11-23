@@ -57,7 +57,8 @@ class ContractTests(unittest.TestCase):
         self.export()
         self.f.approval = {'id': 55, 'user': {'id': 123, 'type': 'User'},
                            'body': '/core8-implement ' + digest(payload(self.f.page)),
-                           'created_at': '2026-11-12T12:00:00Z', 'updated_at': '2026-11-12T12:00:00Z'}
+                           'created_at': '2026-11-12T12:00:00Z', 'updated_at': '2026-11-12T12:00:00Z',
+                           'issue_url': 'https://api.github.com/repos/V1P3eR1/Core8-AI/issues/1'}
         return {'action': 'created', 'issue': {'number': 1}, 'comment': copy.deepcopy(self.f.approval)}
 
     def test_proposal_never_exports(self):
@@ -223,6 +224,12 @@ class ContractTests(unittest.TestCase):
     def test_approval_comment_issue_url_must_match_event(self):
         event = self.event()
         self.f.approval['issue_url'] = 'https://api.github.com/repos/V1P3eR1/Core8-AI/issues/999'
+        with self.assertRaisesRegex(Stop, 'approval_issue_mismatch'):
+            self.b.gate(event, '123')
+
+    def test_missing_approval_comment_issue_url_blocked(self):
+        event = self.event()
+        self.f.approval.pop('issue_url')
         with self.assertRaisesRegex(Stop, 'approval_issue_mismatch'):
             self.b.gate(event, '123')
 
