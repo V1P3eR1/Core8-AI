@@ -48,3 +48,21 @@ def test_schedule_does_not_implicitly_approve_when_date_supplied(api, headers_ki
         headers=headers,
     )
     assert response.status_code == expected, response.text
+
+
+@pytest.mark.parametrize("headers_kind,expected", [
+    ("anonymous", 401),
+    ("operator", 403),
+    ("admin", 400),
+])
+def test_schedule_without_date_cannot_queue_nonexistent_item(api, headers_kind, expected):
+    """Scheduling an unknown item cannot bypass JWT/admin or create a queue entry."""
+    headers = None if headers_kind == "anonymous" else (
+        api.admin if headers_kind == "admin" else api.user("operator-social-queue@core8.test")
+    )
+    response = api.c.post(
+        "/api/social/items/nonexistent-synthetic-id/schedule",
+        json={},
+        headers=headers,
+    )
+    assert response.status_code == expected, response.text
