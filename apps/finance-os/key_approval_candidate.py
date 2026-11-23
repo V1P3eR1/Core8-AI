@@ -83,7 +83,7 @@ def require_key_approval(*, requester, approver, approval, namespace,
     for identity in (requester, approver):
         if (type(identity.subject) is not str or not _OPERATOR.fullmatch(identity.subject)
                 or type(identity.enabled) is not bool or not identity.enabled
-                or identity.role not in _ALLOWED_ROLES):
+                or type(identity.role) is not str or identity.role not in _ALLOWED_ROLES):
             raise FinanceAccessDenied("Finance key approval denied")
     if (requester.role != "key_manager"
             or approver.role != "security_approver"
