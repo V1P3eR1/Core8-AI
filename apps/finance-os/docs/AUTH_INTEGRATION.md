@@ -67,3 +67,11 @@
 - [Finance OS CI #70](https://github.com/V1P3eR1/Core8-AI/actions/runs/45140617247) **SUCCESS** on commit `61f03d0` (unit, disposable PostgreSQL and container build); the secret scan for this commit must be confirmed separately.
 - **Trust boundary:** Configuration comes from the server; a malicious caller may not choose `issuer`, `audience` or `jwks`. This is an offline cryptographic validation candidate, **not full OIDC integration**: no discovery, trusted JWKS refresh/rotation/revocation service, token type and authorized client policy, active user session revocation, authentication endpoint, finance API route, or audited authorization layer has been implemented.
 - Do not deploy the candidate or open `/finance/overview`. Before any rollout, select the external identity provider, pin and review its discovery/JWKS policy, validate token profile and identity subject, connect authoritative memberships with revocation, enforce privileged DB isolation and complete security review.
+
+
+## Offline token type separation — 2026-11-23
+
+- The sandbox `oidc_candidate.py` now rejects otherwise valid signed JWTs unless `token_use=access`. A JWT with `token_use=id` or no `token_use` cannot be substituted as an API access token. Tests use only ephemeral RSA keys and mock issuer/claims.
+- [Finance OS CI #73 — SUCCESS](https://github.com/V1P3eR1/Core8-AI/actions/runs/45141385728) and [secret scan #416 — SUCCESS](https://github.com/V1P3eR1/Core8-AI/actions/runs/45141385718), commit `c818b6e`.
+- **Provider compatibility gate:** `token_use` is a candidate-specific assertion, not a universal OIDC access-token claim. A real identity provider may use a different token-type profile; adopt its formally verified access-token semantics (including audience/client and token type), and update tests before enabling any API. Never relax token-type discrimination to make a mismatched provider work.
+- The module remains disconnected from HTTP endpoints and financial data access; no actual OIDC discovery, secure key rotation, login, logout or token revocation has been built.
