@@ -73,3 +73,12 @@
 **Scope clarification:** Hosted CI proves execution of *synthetic offline tests on GitHub-hosted runners*, not the full operational requirement that a live Notion ↔ GitHub synchronization completes while the owner's computers are off. That acceptance checkbox remains unchecked. The `knowledge-sync` inventory row must not be interpreted as proof of a Notion workspace outage: it is a connector eligibility failure observed in one chat session.
 
 **Next evidence needed:** inspect protected environment settings and token presence via authorized metadata-only API; verify branch protection; demonstrate owner-approved fictional queue item in dry-run before considering any apply. Do not enable scheduled sync as a test: its cron uses write mode when enabled.
+
+## Verified checkpoint — 2026-11-23 (GitHub evidence only)
+
+- PR #60 remains open; latest approval-comment issue binding hardening: commit `9c0da754626a23f98bb999b5bde657518b458b54`.
+- All three hosted checks for that exact SHA passed: [secret scan](https://github.com/V1P3eR1/Core8-AI/actions/runs/45250914356), [handoff contract](https://github.com/V1P3eR1/Core8-AI/actions/runs/45250914670), [cloud continuity synthetic](https://github.com/V1P3eR1/Core8-AI/actions/runs/45250914615).
+- PRs [#61](https://github.com/V1P3eR1/Core8-AI/pull/61) (orchestrator), [#64](https://github.com/V1P3eR1/Core8-AI/pull/64) (finance sandbox), and [#81](https://github.com/V1P3eR1/Core8-AI/pull/81) (social auth tests) were verified **open and mergeable**, not merged or release-ready. Their current CI, deployment, and end-to-end demonstrations were **not verified by this checkpoint**.
+- Notion connector eligibility and live GitHub-hosted Notion bridge credentials remain unverified; no live sync, tenant data, payments, deployment, or public posting was exercised.
+- Next evidence gates: obtain a reproducible synthetic receptionist E2E run URL; verify social tenant isolation and authorization CI on its own SHA; verify Finance OS sandbox PostgreSQL and idempotency tests on its own SHA; then assess the orchestrator's gated workflow. Keep personal LEV data and customer tenants separate.
+
