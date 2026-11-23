@@ -193,7 +193,8 @@ def test_worker_approval_detection_covers_all_worker_prefixes(monkeypatch):
 
     for actor, expected in [
         ("worker:auto", True), ("worker:publisher", True),
-        ("worker:legacy-agent", True), ("admin", False),
+        ("worker:legacy-agent", True), ("system:publisher", True),
+        ("system:legacy-agent", True), ("admin", False),
     ]:
         async def approval_row(query, args, approved_by=actor):
             return {"approved_by": approved_by}
