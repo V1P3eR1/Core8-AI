@@ -50,6 +50,6 @@ test('does not mutate source record', () => {
 test('invalid consent is rejected by canonical validator', () => {
   const p=parsed();p.lead.consent.given='yes';
   const r=previewPilotLead(p,ctx());
-  assert.equal(r.ok,true);assert.equal(r.envelope.consent.given,false);
-  assert.equal(r.envelope.simulation,true);
+  assert.equal(r.ok,false);
+  assert.ok(r.errors.includes('invalid_pilot_lead'));
 });
