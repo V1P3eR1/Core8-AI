@@ -33,6 +33,22 @@ class StagePatchTests(unittest.TestCase):
         return stage(self.repo, patch, digest or hashlib.sha256(patch).hexdigest(),
                      base or self.base, scope)
 
+    def test_git_subprocess_does_not_inherit_api_credentials(self):
+        import os
+        from unittest import mock
+        import stage_patch
+        real_run = subprocess.run
+        with mock.patch.dict(os.environ, {"ANTHROPIC_API_KEY": "test-only-secret",
+                                          "NOTION_TOKEN": "test-only-secret",
+                                          "GIT_CONFIG_GLOBAL": "/tmp/host-config"}):
+            with mock.patch("stage_patch.subprocess.run", wraps=real_run) as call:
+                self.assertEqual(stage_patch.git(self.repo, "rev-parse", "HEAD").decode().strip(), self.base)
+                environment = call.call_args.kwargs["env"]
+        self.assertNotIn("ANTHROPIC_API_KEY", environment)
+        self.assertNotIn("NOTION_TOKEN", environment)
+        self.assertEqual(environment["GIT_CONFIG_GLOBAL"], "/dev/null")
+        self.assertEqual(environment["HOME"], "/nonexistent")
+
     def test_valid_stage_is_read_only(self):
         result = self.apply(self.patch())
         self.assertEqual(result["paths"], ["docs/new.md"])
@@ -66,6 +82,32 @@ class StagePatchTests(unittest.TestCase):
         (self.repo / "docs" / "untracked.txt").write_text("new")
         with self.assertRaisesRegex(StageRejected, "dirty_source"):
             self.apply(self.patch())
+
+    def test_ignored_source_is_rejected(self):
+        (self.repo / ".gitignore").write_text("ignored-secret.txt\n")
+        git(self.repo, "add", ".gitignore")
+        git(self.repo, "-c", "user.name=Test", "-c",
+            "user.email=test@invalid.local", "commit", "-qm", "ignore fixture")
+        self.base = git(self.repo, "rev-parse", "HEAD")
+        (self.repo / "ignored-secret.txt").write_text("hidden data")
+        with self.assertRaisesRegex(StageRejected, "dirty_source"):
+            self.apply(self.patch())
+
+    def test_nested_checkout_is_not_worktree_root(self):
+        nested = self.repo / "docs"
+        patch = self.patch()
+        with self.assertRaisesRegex(StageRejected, "not_a_git_checkout"):
+            stage(nested, patch, hashlib.sha256(patch).hexdigest(),
+                  self.base, "a" * 64)
+
+    def test_local_fsmonitor_helper_is_not_executed(self):
+        helper = self.repo.parent / "fsmonitor-helper.sh"
+        marker = self.repo.parent / "helper-executed"
+        helper.write_text("#!/bin/sh\ntouch '" + str(marker) + "'\nexit 0\n")
+        helper.chmod(0o755)
+        git(self.repo, "config", "core.fsmonitor", str(helper))
+        self.apply(self.patch())
+        self.assertFalse(marker.exists())
 
     def test_reject_workflow_path(self):
         with self.assertRaisesRegex(StageRejected, "patch_"):

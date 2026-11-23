@@ -5,6 +5,7 @@ This is NOT an approval gate, CI runner, GitHub publisher or security sandbox.
 Trusted run metadata must be checked by the upstream human approval gate.
 """
 import argparse
+import base64
 import hashlib
 import io
 import json
@@ -26,10 +27,13 @@ class StageRejected(ValueError):
 
 
 def git(root, *args, data=None):
-    env = {k: v for k, v in os.environ.items()
-           if not k.startswith("GIT_") and k not in ("SSH_ASKPASS", "GIT_ASKPASS")}
-    env.update(GIT_CONFIG_NOSYSTEM="1", GIT_TERMINAL_PROMPT="0", LC_ALL="C")
-    cmd = ["git", "-c", "core.hooksPath=/dev/null", "-c", "protocol.allow=never",
+    # Never forward the caller's arbitrary environment into Git subprocesses.
+    # In particular, this excludes API keys, credentials and injection variables.
+    env = {"PATH": os.defpath, "HOME": "/nonexistent", "LC_ALL": "C",
+           "GIT_CONFIG_NOSYSTEM": "1", "GIT_CONFIG_GLOBAL": "/dev/null",
+           "GIT_TERMINAL_PROMPT": "0"}
+    cmd = ["git", "-c", "core.hooksPath=/dev/null", "-c", "core.fsmonitor=false",
+           "--no-optional-locks", "-c", "protocol.allow=never",
            "-C", str(root), *args]
     try:
         p = subprocess.run(cmd, input=data, stdout=subprocess.PIPE,
@@ -41,7 +45,7 @@ def git(root, *args, data=None):
     return p.stdout
 
 
-def stage(repo, patch, artifact_hash, base_sha, approved_scope_hash):
+def stage(repo, patch, artifact_hash, base_sha, approved_scope_hash, bundle_output=None):
     if not SHA256.fullmatch(artifact_hash) or not SHA256.fullmatch(approved_scope_hash) or not SHA40.fullmatch(base_sha):
         raise StageRejected("invalid_trusted_metadata")
     if hashlib.sha256(patch).hexdigest() != artifact_hash:
@@ -58,7 +62,14 @@ def stage(repo, patch, artifact_hash, base_sha, approved_scope_hash):
         raise StageRejected("not_a_git_checkout")
     if git(repo, "rev-parse", "HEAD").strip().decode() != base_sha:
         raise StageRejected("base_sha_mismatch")
-    if git(repo, "status", "--porcelain", "--untracked-files=all"):
+    # The supplied checkout must be the actual worktree root, not a nested
+    # directory whose HEAD appears valid but changes how paths are resolved.
+    top = Path(os.fsdecode(git(repo, "rev-parse", "--show-toplevel")).strip()).resolve()
+    if top != repo:
+        raise StageRejected("not_worktree_root")
+    # --ignored catches files hidden by a repository-local .gitignore; those
+    # files must not influence any review, even if Git would normally skip them.
+    if git(repo, "status", "--porcelain", "--untracked-files=all", "--ignored"):
         raise StageRejected("dirty_source")
     with tempfile.TemporaryDirectory(prefix="core8-review-") as temp:
         target = Path(temp)
@@ -99,22 +110,51 @@ def stage(repo, patch, artifact_hash, base_sha, approved_scope_hash):
         delta = git(target, "diff", "--cached", "--binary", "HEAD")
         if not delta:
             raise StageRejected("empty_effective_change")
-    key = hashlib.sha256((base_sha + ":" + artifact_hash + ":" + approved_scope_hash).encode()).hexdigest()
-    return {"schema": 1, "status": "REVIEW_ONLY", "base_sha": base_sha,
-            "approved_scope_sha256": approved_scope_hash, "artifact_sha256": artifact_hash,
-            "result_sha256": hashlib.sha256(delta).hexdigest(),
-            "idempotency_key": key, "paths": sorted(paths)}
+        key = hashlib.sha256((base_sha + ":" + artifact_hash + ":" + approved_scope_hash).encode()).hexdigest()
+        bundle_digest = None
+        if bundle_output is not None:
+            output = Path(bundle_output).absolute()
+            if output.parent.resolve() == repo or repo in output.parent.resolve().parents:
+                raise StageRejected("bundle_must_be_outside_source")
+            files = []
+            for path in sorted(paths):
+                candidate = target / path
+                if not candidate.is_file() or candidate.is_symlink():
+                    raise StageRejected("bundle_requires_regular_files_no_deletions")
+                raw = candidate.read_bytes()
+                if len(raw) > 100_000 or b"\x00" in raw:
+                    raise StageRejected("bundle_file_too_large_or_binary")
+                files.append({"path": path, "sha256": hashlib.sha256(raw).hexdigest(),
+                              "content_b64": base64.b64encode(raw).decode("ascii")})
+            bundle = {"schema": 1, "status": "REVIEW_ONLY", "base_sha": base_sha,
+                      "approved_scope_sha256": approved_scope_hash,
+                      "artifact_sha256": artifact_hash, "idempotency_key": key,
+                      "paths": sorted(paths), "files": files}
+            payload = json.dumps(bundle, sort_keys=True, separators=(",", ":")).encode()
+            if len(payload) > 2_000_000:
+                raise StageRejected("bundle_too_large")
+            with output.open("xb") as stream:
+                stream.write(payload)
+            bundle_digest = hashlib.sha256(payload).hexdigest()
+    result = {"schema": 1, "status": "REVIEW_ONLY", "base_sha": base_sha,
+              "approved_scope_sha256": approved_scope_hash, "artifact_sha256": artifact_hash,
+              "result_sha256": hashlib.sha256(delta).hexdigest(),
+              "idempotency_key": key, "paths": sorted(paths)}
+    if bundle_digest is not None:
+        result["bundle_sha256"] = bundle_digest
+    return result
 
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     for name in ("repo", "patch", "artifact_sha256", "base_sha", "approved_scope_sha256"):
         parser.add_argument("--" + name.replace("_", "-"), required=True)
+    parser.add_argument("--bundle-output", help="create reviewed evidence JSON outside source repo")
     args = parser.parse_args()
     try:
         with open(args.patch, "rb") as f:
             patch = f.read(300_001)
-        result = stage(args.repo, patch, args.artifact_sha256, args.base_sha, args.approved_scope_sha256)
+        result = stage(args.repo, patch, args.artifact_sha256, args.base_sha, args.approved_scope_sha256, bundle_output=args.bundle_output)
     except (StageRejected, OSError, tarfile.TarError) as exc:
         print("BLOCKED:", str(exc), file=sys.stderr)
         return 1
