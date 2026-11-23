@@ -69,6 +69,41 @@ class ProvenanceTests(unittest.TestCase):
         self.assertTrue(all(x.full_url.startswith("https://api.github.com/repos/" + REPO + "/")
                             for x in opener.requests))
 
+    def test_disallow_arbitrary_api_resources_before_network(self):
+        opener = FakeOpener(self.run, self.artifact)
+        reader = GitHubReadOnly("placeholder-read-token", opener=opener)
+        for path in ("../users/1", "actions/runs/123/..", "issues/0",
+                     "issues/comments/-1", "actions/runs/123?ref=main",
+                     "https://evil.invalid/test", "issues/1%2Fcomments"):
+            with self.subTest(path=path), self.assertRaisesRegex(
+                    EvidenceBlocked, "github_resource_not_allowed"):
+                reader._get(path)
+        self.assertEqual(opener.requests, [])
+
+    def test_issue_evidence_paths_still_allowed(self):
+        self.assertEqual(
+            [bool(__import__("github_provenance").ALLOWED_RESOURCE.fullmatch(path))
+             for path in ("issues/62", "issues/comments/456")], [True, True])
+
+    def test_duplicate_json_keys_rejected(self):
+        class DuplicateOpener:
+            def open(self, request, timeout):
+                return FakeResponse(b'{"id": 123, "id": 456}')
+        reader = GitHubReadOnly("placeholder-read-token", opener=DuplicateOpener())
+        with self.assertRaisesRegex(EvidenceBlocked, "github_duplicate_json_key"):
+            reader._get("actions/runs/123")
+
+    def test_redirected_final_url_rejected(self):
+        class RedirectedResponse(FakeResponse):
+            def geturl(self):
+                return "https://evil.invalid/redirected"
+        class RedirectOpener:
+            def open(self, request, timeout):
+                return RedirectedResponse(b'{}')
+        reader = GitHubReadOnly("placeholder-read-token", opener=RedirectOpener())
+        with self.assertRaisesRegex(EvidenceBlocked, "github_redirect_refused"):
+            reader._get("actions/runs/123")
+
     def test_forged_run_actor_rejected(self):
         self.run["actor"]["id"] = 111
         with self.assertRaises(EvidenceBlocked): self.check()
