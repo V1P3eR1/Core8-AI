@@ -30,3 +30,7 @@ The browser UI uses the same structural validator as Node.js, but its scenario s
 ## Tenant-scoped deduplication preview
 
 `dedup-preview.cjs` provides a pure, offline duplicate check using the tuple `(trustedTenantId, sourceSystem, sourceSubmissionId)`. A duplicate within one tenant/source is detected; matching submission IDs across tenants or different sources remain distinct. Length-prefixed keys avoid separator collisions. This implementation deliberately stores nothing and does **not** provide concurrency safety, atomic uniqueness, idempotent API semantics, a database unique index, or a tenant authorization boundary. Those are required before live ingestion. Only trusted server context may supply the tenant ID; never use a source payload's claimed tenant as authority.
+
+## PostgreSQL idempotency design (not deployed)
+
+See [IDEMPOTENCY_DESIGN.md](./IDEMPOTENCY_DESIGN.md) and [postgres-idempotency.proposal.sql](./postgres-idempotency.proposal.sql). These are reviewed-in-PR design artifacts only. No migration has been applied and no production database has been accessed.
