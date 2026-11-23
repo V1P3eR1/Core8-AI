@@ -184,3 +184,18 @@ def test_publication_rejects_approval_id_mismatch_before_provider(monkeypatch):
         "approval_id": "old-human-approval", "mode": "mock",
     }))
     assert result["state"] == "cancelled"
+
+
+def test_worker_approval_detection_covers_all_worker_prefixes(monkeypatch):
+    """No worker identity can count as a human approval, including legacy names."""
+    import asyncio
+    from social import publishing
+
+    for actor, expected in [
+        ("worker:auto", True), ("worker:publisher", True),
+        ("worker:legacy-agent", True), ("admin", False),
+    ]:
+        async def approval_row(query, args, approved_by=actor):
+            return {"approved_by": approved_by}
+        monkeypatch.setattr(publishing, "fetch_one", approval_row)
+        assert asyncio.run(publishing._is_auto({"approval_id": "synthetic-approval"})) is expected
