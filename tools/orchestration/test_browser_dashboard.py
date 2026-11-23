@@ -24,7 +24,7 @@ class BrowserDashboardTests(unittest.TestCase):
     def test_untrusted_check_name_escaped(self):
         html = render_html(sample([pr(check='<img src=x onerror=alert(1)> " & \\n|')]))
         self.assertNotIn("<img", html)
-        self.assertNotIn('onerror=', html)
+        self.assertNotIn('<img src=x onerror=', html)
         self.assertIn("&lt;img", html)
         self.assertIn("&amp;", html)
 
