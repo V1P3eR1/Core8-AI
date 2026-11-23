@@ -7,6 +7,7 @@ production database migrations or network calls.
 """
 from audit_keyring_store_candidate import (
     advance_audit_keyring_store, recover_audit_keyring_store,
+    _require_idle,
 )
 from audit_keyring_state_candidate import (
     export_audit_keyring_state, import_audit_keyring_state,
@@ -52,6 +53,7 @@ def rotate_audit_with_floor(conn, *, namespace, floor, signing_key,
             or type(new_registry) is not AuditKeyringCandidate
             or new_registry.generation != expected_generation + 1):
         raise FinanceAccessDenied("Finance audit floor denied")
+    _require_idle(conn)
     current = _floor_read(floor, namespace)
     if current != expected_generation:
         raise FinanceAccessDenied("Finance audit floor denied")
@@ -66,6 +68,9 @@ def rotate_audit_with_floor(conn, *, namespace, floor, signing_key,
     proposed_blob = export_audit_keyring_state(
         new_registry, signing_key=signing_key,
     )
+    if (type(trusted_key_material) is not dict or
+            any(k not in trusted_key_material for k in new_registry._keys)):
+        raise FinanceAccessDenied("Finance audit floor denied")
     prospective = import_audit_keyring_state(
         proposed_blob, signing_key=signing_key,
         expected_generation=current + 1,
