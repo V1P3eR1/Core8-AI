@@ -6,13 +6,14 @@ Never construct it from Claude artifacts, task text or issue comments.
 import re
 from datetime import datetime, timezone
 from github_provenance import EvidenceBlocked, REPO, positive
+from approval_evidence import valid_utc_timestamp
 
 HEX40 = re.compile(r"^[a-f0-9]{40}$")
 HEX64 = re.compile(r"^[a-f0-9]{64}$")
 
 
 def utc_time(value):
-    if not isinstance(value, str) or not value.endswith("Z"):
+    if not valid_utc_timestamp(value):
         raise EvidenceBlocked("invalid_provenance_time")
     try:
         result = datetime.fromisoformat(value.replace("Z", "+00:00"))
