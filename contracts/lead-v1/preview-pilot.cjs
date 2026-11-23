@@ -14,7 +14,8 @@ function previewPilotLead(parsed, context) {
   }
   const p = parsed.lead;
   if (!p.contact || typeof p.contact !== 'object' || Array.isArray(p.contact) ||
-      typeof p.consent !== 'object' || p.consent === null) {
+      typeof p.consent !== 'object' || p.consent === null ||
+      p.consent.given !== true) {
     return { ok: false, errors: ['invalid_pilot_lead'] };
   }
   const envelope = {
@@ -35,7 +36,7 @@ function previewPilotLead(parsed, context) {
       company: p.contact.company ?? null
     },
     inquiry: { message: p.message ?? '', intent: 'unknown', service: null },
-    consent: { given: p.consent.given === true, text_id: p.consent.textId ?? null, recorded_at: null },
+    consent: { given: true, text_id: p.consent.textId ?? null, recorded_at: null },
     workflow: { state: 'needs_review', human_approved: false },
     simulation: true
   };
