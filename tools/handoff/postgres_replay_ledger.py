@@ -8,7 +8,7 @@ import re
 
 from replay_ledger import ReplayBlocked
 
-REPO_ID = re.compile(r"^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$")
+REPO_ID = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.-]*/[A-Za-z0-9][A-Za-z0-9_.-]*$")
 HEX64 = re.compile(r"^[a-f0-9]{64}$")
 MAX_BIGINT = 2**63 - 1
 
