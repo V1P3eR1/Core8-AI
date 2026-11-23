@@ -36,6 +36,13 @@ jobs:
           node --check receptionist/app.js
           node --check receptionist/engine.js
           node --check receptionist/i18n.js
+      - name: Verify optional unpublished showcase assets
+        run: |
+          if [ -f docs/customer-showcase/test_showcase.cjs ]; then
+            node --test docs/customer-showcase/test_showcase.cjs
+          else
+            echo 'Showcase tests not present in this checkout; no showcase acceptance claimed.' >> "$GITHUB_STEP_SUMMARY"
+          fi
       - name: Browser coverage disclosure
         run: |
           echo 'Browser visual smoke is NOT run by this job. It requires a separately reviewed Playwright environment.' >> "$GITHUB_STEP_SUMMARY"
