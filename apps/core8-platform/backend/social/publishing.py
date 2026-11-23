@@ -303,7 +303,6 @@ async def run_publication(pub: dict, worker_id: str = "worker") -> dict:
     """Execute one claimed publication end-to-end. Returns the final row."""
     pub_id = pub["id"]
     item = await get_item(pub["content_item_id"])
-    provider = get_provider(pub["mode"])
     try:
         # Historical worker-created approvals are not human consent. Cancel them
         # before any provider action, including retries of already-claimed rows.
@@ -336,6 +335,7 @@ async def run_publication(pub: dict, worker_id: str = "worker") -> dict:
                 await set_status(item["id"], "failed", worker_id, "נכשל בבדיקות לפני פרסום: " + ", ".join(codes))
             return await fetch_one("SELECT * FROM sm_publications WHERE id=?", (pub_id,))
 
+        provider = get_provider(pub["mode"])
         await set_status(item["id"], "publishing", worker_id)
         token, ig_user_id = await _credentials(pub["mode"], item)
 
