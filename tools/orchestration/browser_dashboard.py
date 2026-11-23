@@ -71,6 +71,8 @@ def render_html(health):
     )
     rows_html = "\n".join(rows) or '<tr><td colspan="4">לא נמצאו Pull Requests לבדיקה.</td></tr>'
     demo_notice = ('<p class="demo-warning" role="status">דמו סינתטי בלבד · אין כאן נתוני GitHub חיים, תקלות אמיתיות או אישורי ביצוע.</p>' if demo else '')
+    coverage_notice = ('<p class="demo-warning" role="status">דוח חלקי: המעקב מוגבל ל־20 בקשות שינוי. אין להסיק שיתר ה־PRs נבדקו.</p>'
+                       if health.get("coverage") == "partial" else '')
     return f"""<!doctype html>
 <html lang="he" dir="rtl">
 <head>
@@ -101,6 +103,7 @@ footer{{color:var(--muted);border-top:1px solid var(--border);margin-top:35px;pa
 <div class="kicker">CORE8-AI · ENGINEERING CONTROL</div>
 <h1>מרכז בקרת הפיתוח</h1>
 <p>תמונת מצב לצפייה בלבד; הצלחת בדיקה אינה אישור למיזוג, פריסה או חיוב כספי.</p>\n{demo_notice}
+{coverage_notice}
 <section class="metrics" aria-label="סיכום סטטוסים">{cards}</section>
 <h2>בדיקות Pull Requests · {len(items)} פריטים</h2>
 <div class="panel"><table>
