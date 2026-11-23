@@ -58,9 +58,31 @@ class LedgerTests(unittest.TestCase):
         with self.assertRaises(ReplayBlocked):
             again.reserve(**self.args)
 
-    def test_distinct_artifacts_allowed(self):
+    def test_other_artifact_same_task_revision_blocked(self):
         self.ledger.reserve(**self.args)
-        self.ledger.reserve(**{**self.args, "artifact_id": 457})
+        with self.assertRaisesRegex(ReplayBlocked, "already_reserved"):
+            self.ledger.reserve(**{**self.args, "artifact_id": 457})
+
+    def test_other_run_same_task_revision_blocked(self):
+        self.ledger.reserve(**self.args)
+        with self.assertRaisesRegex(ReplayBlocked, "already_reserved"):
+            self.ledger.reserve(**{**self.args, "run_id": 124, "artifact_id": 457})
+
+    def test_new_task_digest_allows_distinct_artifact(self):
+        self.ledger.reserve(**self.args)
+        self.ledger.reserve(**{**self.args, "run_id": 124, "artifact_id": 457,
+                                "task_digest": "c" * 64})
+
+    def test_migration_blocks_preexisting_duplicate_task(self):
+        import sqlite3
+        with sqlite3.connect(self.path) as db:
+            db.execute("DROP INDEX reservations_one_task")
+            db.execute("INSERT INTO reservations VALUES (?, ?, ?, ?, ?, 'RESERVED')",
+                       (self.args["repo"], 222, 333, self.args["task_digest"],
+                        "c" * 64))
+        with self.assertRaisesRegex(ReplayBlocked,
+                                    "ambiguous_existing_task_reservations"):
+            ReplayLedger(self.path)
 
     def test_bad_digest(self):
         with self.assertRaises(ReplayBlocked):
