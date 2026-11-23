@@ -28,3 +28,12 @@ Reviewable synthetic acceptance: tests create a disposable Git fixture, apply a 
 **Default CLI behavior:** `draft_publisher.py` is **dry-run** (validates and prints an idempotency key without network). `--apply` additionally requires `CORE8_PROTECTED_PUBLISH=1` and `GITHUB_TOKEN` from a protected job. These flags are accident prevention, not authentication. No automatic invocation has been added.
 
 No step here authorizes financial charges, production deployments, DNS/credential changes, messaging customers, or publishing social content.
+
+
+### Main-branch race and draft reuse protection (2026-11-23)
+
+- Validate `main` equals the independently approved base commit **before** looking up an existing Draft PR. Returning a matching existing PR on a stale base is not acceptable.
+- Revalidate `main` immediately before creating the new remote branch. If it moved during blob/tree/commit preparation, fail closed and do not publish a branch or PR. The intermediate unreachable Git objects are harmless but must not be presented as published work.
+- Unit tests exercise stale-base replay and main advancing between preparation and branch creation.
+- **Residual race:** these are two separate GET checks, **not an atomic compare-and-swap tied to the `main` ref**. `main` can still move after the final GET. Do not activate protected publishing until a trusted operator and reconciliation process can detect base drift and prevent unreviewed merges.
+- Existing matching Draft PR reuse additionally checks remote head SHA, parent, changed paths and Git blob digests; it does not constitute fresh human authorization. The publisher's independently supplied trusted approval metadata must still be rechecked before invocation.
