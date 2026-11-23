@@ -27,12 +27,15 @@ def _check_id(value):
 class ReplayLedger:
     def __init__(self, path):
         self.path = Path(path)
-        if str(path) == ":memory:" or self.path.is_dir():
+        if str(path) == ":memory:" or self.path.is_dir() or self.path.is_symlink():
             raise ReplayBlocked("persistent_storage_required")
-        if not self.path.parent.exists():
+        if not self.path.parent.is_dir():
             raise ReplayBlocked("storage_directory_missing")
         # Caller must provision a secured durable path; no secret is stored.
+        # A RESERVED row and its one-task index must be initialized in a
+        # single write transaction to avoid an unprotected migration window.
         with self._connect() as db:
+            db.execute("BEGIN IMMEDIATE")
             db.execute(
                 """CREATE TABLE IF NOT EXISTS reservations(
                     repo TEXT NOT NULL,
@@ -53,7 +56,9 @@ class ReplayLedger:
                     "ON reservations(repo, task_digest)"
                 )
             except sqlite3.IntegrityError:
+                db.rollback()
                 raise ReplayBlocked("ambiguous_existing_task_reservations") from None
+            db.commit()
 
     def _connect(self):
         db = sqlite3.connect(self.path, timeout=5, isolation_level=None)
