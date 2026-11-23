@@ -104,14 +104,17 @@ th{{color:var(--muted);font-size:.82rem}}tr:last-child td{{border-bottom:0}}a{{c
 .status{{padding:4px 9px;border-radius:100px;background:#25344a;display:inline-block;white-space:nowrap}}
 .failure{{color:#ffaaaa}}.warning{{color:#ffdf9b}}.pending{{color:#c8c0ff}}.review{{color:#9ee7bf}}
 .checks{{max-width:360px;overflow-wrap:anywhere}}code{{font-family:ui-monospace,monospace;font-size:.86rem}}
-footer{{color:var(--muted);border-top:1px solid var(--border);margin-top:35px;padding-top:18px;font-size:.85rem}}\n.snapshot-note{{font-size:.85rem;color:var(--muted)}}\n.demo-warning{{background:#3d291e;border:1px solid #f6bb75;color:#ffe0b5;padding:12px 16px;border-radius:10px;font-weight:700}}
+footer{{color:var(--muted);border-top:1px solid var(--border);margin-top:35px;padding-top:18px;font-size:.85rem}}
+.snapshot-note{{font-size:.85rem;color:var(--muted)}}
+.demo-warning{{background:#3d291e;border:1px solid #f6bb75;color:#ffe0b5;padding:12px 16px;border-radius:10px;font-weight:700}}
 </style>
 </head>
 <body>
 <main>
 <div class="kicker">CORE8-AI · ENGINEERING CONTROL</div>
 <h1>מרכז בקרת הפיתוח</h1>
-<p>תמונת מצב לצפייה בלבד; הצלחת בדיקה אינה אישור למיזוג, פריסה או חיוב כספי.</p>\n{demo_notice}
+<p>תמונת מצב לצפייה בלבד; הצלחת בדיקה אינה אישור למיזוג, פריסה או חיוב כספי.</p>
+{demo_notice}
 {coverage_notice}
 {freshness_notice}
 {source_notice}
