@@ -50,7 +50,7 @@ class FastApiFixtureTests(unittest.TestCase):
         self.send()
         response=self.send(delivery="D2",payload={"submission_id":"S1","name":"Changed","consent":True})
         self.assertEqual(response.status_code,409)
-    def test_invalid_timestamp_rejected(self):
+    def test_large_request_rejected_before_signature_verification(self):\n        response=self.client.post("/offline-fixture/intake",content=b"x"*65537,\n                                  headers={"x-demo-timestamp":str(NOW),\n                                           "x-demo-delivery-id":"D-large",\n                                           "x-demo-credential-id":"demo"})\n        self.assertEqual(response.status_code,413)\n    def test_missing_signature_rejected(self):\n        response=self.client.post("/offline-fixture/intake",content=b"{}",\n                                  headers={"x-demo-timestamp":str(NOW),\n                                           "x-demo-delivery-id":"D-missing",\n                                           "x-demo-credential-id":"demo"})\n        self.assertEqual(response.status_code,401)\n    def test_invalid_timestamp_rejected(self):
         raw=json.dumps({"submission_id":"S1","name":"Synthetic","consent":True}).encode()
         response=self.client.post("/offline-fixture/intake",content=raw,
                                   headers={"x-demo-timestamp":"not-a-time",
