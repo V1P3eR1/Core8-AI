@@ -20,10 +20,10 @@ def fake_pr(n):
 
 def fake_checks():
     return {"total_count": 4, "check_runs": [
-        {"name": "Handoff contract tests", "head_sha": SHA, "status": "completed", "conclusion": "success"},
-        {"name": "Orchestration staging offline unit tests", "head_sha": SHA, "status": "completed", "conclusion": "success"},
-        {"name": "release preflight (offline)", "head_sha": SHA, "status": "completed", "conclusion": "success"},
-        {"name": "secret-scan", "head_sha": SHA, "status": "completed", "conclusion": "success"},
+        {"name": "Handoff contract tests", "head_sha": SHA, "app": {"slug": "github-actions"}, "status": "completed", "conclusion": "success"},
+        {"name": "Orchestration staging offline unit tests", "head_sha": SHA, "app": {"slug": "github-actions"}, "status": "completed", "conclusion": "success"},
+        {"name": "release preflight (offline)", "head_sha": SHA, "app": {"slug": "github-actions"}, "status": "completed", "conclusion": "success"},
+        {"name": "secret-scan", "head_sha": SHA, "app": {"slug": "github-actions"}, "status": "completed", "conclusion": "success"},
     ]}
 
 
@@ -61,7 +61,7 @@ class ContinuityTests(unittest.TestCase):
 
     def test_unrelated_success_cannot_replace_required_ci(self):
         checks = {"total_count": 1, "check_runs": [
-            {"name": "unit-tests", "head_sha": SHA, "status": "completed", "conclusion": "success"}]}
+            {"name": "unit-tests", "head_sha": SHA, "app": {"slug": "github-actions"}, "status": "completed", "conclusion": "success"}]}
         self.assertEqual(
             summarize_pr(fake_pr(74), checks, 74)["check_state"],
             "missing_required_checks")
@@ -106,6 +106,18 @@ class ContinuityTests(unittest.TestCase):
         checks = fake_checks()
         del checks["check_runs"][0]["head_sha"]
         with self.assertRaisesRegex(SnapshotBlocked, "check_head_sha_mismatch"):
+            summarize_pr(fake_pr(74), checks, 74)
+
+    def test_untrusted_ci_provider_fails_closed(self):
+        checks = fake_checks()
+        checks["check_runs"][0]["app"]["slug"] = "other-app"
+        with self.assertRaisesRegex(SnapshotBlocked, "untrusted_check_provider"):
+            summarize_pr(fake_pr(74), checks, 74)
+
+    def test_missing_ci_app_identity_fails_closed(self):
+        checks = fake_checks()
+        del checks["check_runs"][0]["app"]
+        with self.assertRaisesRegex(SnapshotBlocked, "untrusted_check_provider"):
             summarize_pr(fake_pr(74), checks, 74)
 
     def test_matching_check_run_sha_is_allowed(self):
