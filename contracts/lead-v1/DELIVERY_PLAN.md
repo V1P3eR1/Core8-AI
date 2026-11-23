@@ -44,3 +44,7 @@ Main branch currently uses **SQLite via aiosqlite** in `apps/core8-platform/back
 ## Verification and reporting
 
 Each increment: commit to draft branch → GitHub Actions checks → fix failures → update this plan and Notion project registry. Report **implemented**, **tested**, **proposed**, and **not started** separately. A passing secret scan does not establish full security. Do not merge or deploy automatically.
+
+## Offline vertical slice (2026-11-23)
+
+Added `offline_intake_demo.py` and `test_offline_intake_demo.py` to compose verified synthetic identity, explicit tenant membership, consent, source-verification fixture, deterministic demo digest and atomic SQLite lead/claim creation. Nine tests cover happy path, idempotent replay, conflicting payload, denied tenant/admin, unsigned source, missing consent and invalid input. **This is not a live FastAPI endpoint**. The `source_verified` boolean and `identity.verified` fixture are not cryptographic verification; never accept these from HTTP payloads. Real signature verification, authenticated membership storage and API integration remain blocked until implemented.
