@@ -15,7 +15,7 @@ def setup_receipts(conn):
 
 def receive_once(conn, *, delivery_id, raw_body, timestamp, signature_hex,
                  credential_id, credential_registry, now, lead_id):
-    if not isinstance(delivery_id, str) or not (1 <= len(delivery_id) <= 256):
+    if not isinstance(delivery_id, str) or not (1 <= len(delivery_id) <= 256) or not delivery_id.isascii():
         return {"ok": False, "reason": "invalid_delivery_id"}
     credential = credential_registry.get(credential_id) if isinstance(credential_registry, dict) else None
     if not isinstance(credential, dict) or credential.get("active") is not True:
