@@ -33,3 +33,12 @@
 - **TBD:** Human review of Israeli accounting, tax, fiscal invoices and payroll dependencies.
 
 **Approval gate:** All of the above must pass independent security review before changing the 503 endpoint or deploying. No merge, live Stripe use or real-customer data is authorized by the presence of this document.
+
+
+## Read-only PostgreSQL RLS candidate — validated in disposable CI
+
+- [sql/rls_readonly_candidate.sql](../sql/rls_readonly_candidate.sql) defines a **review-only** read-only policy for `finance_stripe_event_inbox` and `finance_activity` based on a database-administrator-maintained `finance_rls_role_bindings` table and PostgreSQL `current_user`; the application/request cannot grant itself a role or write a mapping. This SQL is **not applied by** the regular sandbox bootstrap and is **not** a production migration.
+- [tests/test_rls_postgres.py](../tests/test_rls_postgres.py) creates disposable PostgreSQL `NOLOGIN NOSUPERUSER NOBYPASSRLS` roles, provisions two synthetic tenant memberships, enables `FORCE ROW LEVEL SECURITY` temporarily, verifies disjoint read visibility in *both* operational tables, rejects unauthorized UPDATEs/binding mutations and removes the test policies and roles afterward. [Finance OS CI #58](https://github.com/V1P3eR1/Core8-AI/actions/runs/45131882227) **success**; [secret scan #370](https://github.com/V1P3eR1/Core8-AI/actions/runs/45131882214) **success**, commit `786d4fb`.
+- **Important limitation:** The tested CI administrator is a superuser and may `SET ROLE` for fixtures. Live application credentials must be separate non-owner, non-superuser, non-BYPASSRLS roles without the ability to `SET ROLE` into another tenant. Provisioning identity-to-database-role mapping requires verified server-side membership, audited least privilege, migrations and a separate ingress/worker policy. The prototype currently has none of these capabilities.
+- The candidate purposefully has **no write policy**, so applying it to a deployed writer/worker would break normal ingestion. Do not run its DDL on a shared, deployed or production database. Do not infer broad tenant isolation from an isolated SQL demonstration.
+- Before any release: test unauthorized SQL SELECT and mutation across joins, connection-pool role reset, role-grant escalation, migration rollback, background worker execution and idempotent Stripe webhook ingress under distinct least-privilege roles. Keep `/finance/overview` disabled pending verified identity and authorization.
