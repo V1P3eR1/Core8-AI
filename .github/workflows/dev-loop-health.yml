@@ -25,6 +25,22 @@ jobs:
           python-version: "3.12"
       - name: Deterministic orchestration contract
         run: python -m unittest discover -s tools/orchestration -p 'test_*.py' -v
+      - name: Render synthetic dashboard preview (no network, no private data)
+        if: github.event_name == 'pull_request'
+        run: |
+          python tools/orchestration/demo_fixture.py
+          python tools/orchestration/dashboard_report.py core8-dev-loop-report.json
+          python tools/orchestration/browser_dashboard.py core8-dev-loop-report.json
+      - name: Upload synthetic demo preview
+        if: github.event_name == 'pull_request'
+        uses: actions/upload-artifact@v4
+        with:
+          name: core8-dashboard-SYNTHETIC-DEMO
+          path: |
+            core8-dev-loop-report.md
+            core8-dev-loop-dashboard.html
+          retention-days: 7
+          if-no-files-found: error
   observe:
     # Explicit budget/operations switch; never begin hourly runs just by merging.
     if: >-
