@@ -314,6 +314,15 @@ async def run_publication(pub: dict, worker_id: str = "worker") -> dict:
             return await fetch_one("SELECT * FROM sm_publications WHERE id=?", (pub_id,))
         if not item:
             raise ProviderError("content item missing", retryable=False)
+        # A publication must execute under its own exact, still-active human approval.
+        # A later approval for the same item must not authorize an older queued row.
+        approval = await check_item_approval(await get_item_raw(item["id"]))
+        active = approval.get("approval") or {}
+        if (not approval.get("valid") or active.get("id") != pub.get("approval_id")
+                or (active.get("approved_by") or "").startswith("worker:")):
+            await _set_state(pub_id, "cancelled", last_error="human_approval_required", error_class="permanent")
+            await set_status(item["id"], "paused", worker_id, "Human approval required for this publication")
+            return await fetch_one("SELECT * FROM sm_publications WHERE id=?", (pub_id,))
         # Re-check every gate at execution time (settings may have changed since queueing).
         report = await gate_report(item, for_auto=await _is_auto(pub))
         failed = [c for c in report["checks"] if not c["ok"]]
