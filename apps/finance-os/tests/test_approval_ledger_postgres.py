@@ -365,6 +365,45 @@ class ApprovalLedgerPostgresTests(unittest.TestCase):
                 dispatch_one(db, namespace=self.namespace, sink=object())
             self.assertIsNotNone(claim_next(db, namespace=self.namespace))
 
+    def test_sqlite_receiver_deduplicates_when_postgres_ack_is_lost(self):
+        from tempfile import TemporaryDirectory
+        from audit_dispatch_candidate import claim_next, dispatch_one
+        from audit_receiver_sqlite_candidate import SQLiteAuditReceiverCandidate
+
+        self.assertTrue(self.consume())
+        with TemporaryDirectory() as directory:
+            receiver = SQLiteAuditReceiverCandidate(
+                str(Path(directory) / "receiver.sqlite")
+            )
+            receiver.initialize_test_store()
+            with psycopg.connect(self.dsn, autocommit=True) as db:
+                first = claim_next(db, namespace=self.namespace)
+                self.assertIsNotNone(first)
+                # Remote/independent receiver has committed, but the outbox
+                # ACK is intentionally lost before PostgreSQL observes it.
+                self.assertTrue(receiver.accept(first.event_id, first.payload))
+                db.execute(
+                    """UPDATE finance_key_audit_outbox_candidate
+                         SET lease_until=clock_timestamp()-interval '1 second'
+                       WHERE audit_id=%s""", (first.audit_id,),
+                )
+                self.assertEqual(
+                    dispatch_one(db, namespace=self.namespace, sink=receiver),
+                    "delivered",
+                )
+                row = db.execute(
+                    "SELECT delivered_at, delivery_attempts FROM finance_key_audit_outbox_candidate WHERE audit_id=%s",
+                    (first.audit_id,),
+                ).fetchone()
+                self.assertIsNotNone(row[0])
+                self.assertEqual(row[1], 2)
+            import sqlite3
+            with sqlite3.connect(receiver.database_path) as local:
+                self.assertEqual(
+                    local.execute("SELECT count(*) FROM received_audit_candidate").fetchone()[0],
+                    1,
+                )
+
     def test_provisioning_cannot_overwrite_existing_approval(self):
         with psycopg.connect(self.dsn, autocommit=True) as db:
             with self.assertRaises(FinanceAccessDenied):
