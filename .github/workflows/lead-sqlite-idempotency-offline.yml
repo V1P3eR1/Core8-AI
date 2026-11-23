@@ -1,0 +1,23 @@
+name: lead-sqlite-idempotency-offline
+on:
+  pull_request:
+    paths:
+      - 'contracts/lead-v1/**'
+      - '.github/workflows/lead-sqlite-idempotency-offline.yml'
+  push:
+    paths:
+      - 'contracts/lead-v1/**'
+      - '.github/workflows/lead-sqlite-idempotency-offline.yml'
+permissions:
+  contents: read
+jobs:
+  sqlite-idempotency:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Disposable SQLite unit and concurrency tests
+        run: python -m unittest discover -s contracts/lead-v1 -p 'test_sqlite_*.py' -v
