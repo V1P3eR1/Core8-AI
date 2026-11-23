@@ -23,3 +23,10 @@ Track in Issue #62, review in PRs #65, #68, #72.
 ## GitHub metadata provenance (read-only proposal)
 
 `tools/handoff/github_provenance.py` independently fetches workflow-run and artifact **metadata only** over authenticated GitHub GET requests and rejects wrong repo/workflow/commit/run identity. It intentionally returns `archive_sha256` for the uploaded GitHub Actions artifact ZIP. **This is not the extracted patch digest**. A future downloader must validate the archive bytes against `archive_sha256`, bound extraction size and paths, then derive the separate extracted patch SHA-256 and bind it to the human-approved task/run before allowing patch validation. The provider metadata alone does not prove Notion approval or user identity; those remain independently gated. This code is not an active job and currently has no live Notion task queue available for approval verification.
+
+
+## Read-only GitHub issue and comment scope evidence
+
+`tools/handoff/approval_evidence.py` uses the existing read-only GitHub adapter's fixed GET endpoints to verify exact issue/comment IDs, comment author ID/type, unedited single approval command, original issue-body SHA-256 and exact task UUID and scope digest. Unknown numeric identifiers and edited/foreign comments fail closed. Fourteen adversarial/offline tests exercise the evidence boundary.
+
+The expected issue-body digest must come from an independently authenticated canonical Notion task and the existing protected human gate. GitHub comments and issue bodies alone are **not** equivalent to Notion approval; a caller-provided digest is not authoritative. This adapter also does **not** yet prove which issue_comment initiated a particular Actions run: the trusted gate must bind the immutable comment ID, scope revision and workflow run ID, and re-check current Notion approval, before any publication. The present code is offline review-only and is not wired into a privileged workflow.
