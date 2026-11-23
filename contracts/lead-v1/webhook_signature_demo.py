@@ -1,0 +1,38 @@
+"""Offline signed webhook fixture with replay-window validation.
+
+Demonstration only: no HTTP endpoint, credential store or external requests.
+The signing secret must be resolved from trusted server configuration.
+"""
+import hashlib
+import hmac
+import time
+
+MAX_AGE_SECONDS = 300
+
+def signature(secret, timestamp, body):
+    if not isinstance(secret, bytes) or not secret:
+        raise ValueError("invalid_secret")
+    if not isinstance(body, bytes) or not isinstance(timestamp, int):
+        raise ValueError("invalid_message")
+    data = str(timestamp).encode("ascii") + b"." + body
+    return hmac.new(secret, data, hashlib.sha256).hexdigest()
+
+def verify(secret, timestamp, body, provided_signature, *, now=None):
+    if not isinstance(timestamp, int) or isinstance(timestamp, bool):
+        return {"ok": False, "reason": "invalid_timestamp"}
+    current = int(time.time()) if now is None else now
+    if not isinstance(current, int) or isinstance(current, bool):
+        return {"ok": False, "reason": "invalid_clock"}
+    if timestamp > current + 30 or current - timestamp > MAX_AGE_SECONDS:
+        return {"ok": False, "reason": "outside_replay_window"}
+    if not isinstance(body, bytes) or len(body) > 65536:
+        return {"ok": False, "reason": "invalid_body"}
+    if not isinstance(provided_signature, str) or len(provided_signature) != 64:
+        return {"ok": False, "reason": "invalid_signature"}
+    try:
+        expected = signature(secret, timestamp, body)
+    except ValueError:
+        return {"ok": False, "reason": "invalid_secret"}
+    if not hmac.compare_digest(expected, provided_signature):
+        return {"ok": False, "reason": "signature_mismatch"}
+    return {"ok": True}
