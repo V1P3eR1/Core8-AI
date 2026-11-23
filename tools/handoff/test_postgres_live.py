@@ -25,44 +25,45 @@ class PostgreSQLLiveTests(unittest.TestCase):
                 or parsed.path != "/core8_ci_test"):
             raise RuntimeError("isolated_local_ci_database_required")
         import psycopg
-        cls.factory = lambda: psycopg.connect(DSN, connect_timeout=5)
+        cls.factory = staticmethod(lambda: psycopg.connect(DSN, connect_timeout=5))
         cls.ledger = PostgresReplayLedger(cls.factory)
         cls.ledger.install_schema()
 
     def setUp(self):
         digest = hashlib.sha256(os.urandom(32)).hexdigest()
-        self.fields = dict(repo="V1P3eR1/Core8-AI", run_id=123,
-                           artifact_id=456, task_digest=digest,
+        unique_id = int.from_bytes(os.urandom(7), "big")
+        self.fields = dict(repo="V1P3eR1/Core8-AI", run_id=unique_id,
+                           artifact_id=unique_id + 1, task_digest=digest,
                            patch_sha256="b"*64)
 
     def test_reserve_consume_commits(self):
         self.ledger.reserve(**self.fields)
-        self.assertEqual(self.ledger.state(repo=self.fields["repo"], run_id=123,
-                                           artifact_id=456), "RESERVED")
+        self.assertEqual(self.ledger.state(repo=self.fields["repo"], run_id=self.fields["run_id"],
+                                           artifact_id=self.fields["artifact_id"]), "RESERVED")
         self.ledger.mark_consumed(**self.fields)
-        self.assertEqual(self.ledger.state(repo=self.fields["repo"], run_id=123,
-                                           artifact_id=456), "CONSUMED")
+        self.assertEqual(self.ledger.state(repo=self.fields["repo"], run_id=self.fields["run_id"],
+                                           artifact_id=self.fields["artifact_id"]), "CONSUMED")
 
     def test_replay_different_artifact_cannot_reuse_task(self):
         self.ledger.reserve(**self.fields)
         with self.assertRaises(ReplayBlocked):
-            self.ledger.reserve(**{**self.fields, "run_id": 124, "artifact_id": 457})
-        self.assertEqual(self.ledger.state(repo=self.fields["repo"], run_id=123,
-                                           artifact_id=456), "RESERVED")
+            self.ledger.reserve(**{**self.fields, "run_id": self.fields["run_id"]+1, "artifact_id": self.fields["artifact_id"]+1})
+        self.assertEqual(self.ledger.state(repo=self.fields["repo"], run_id=self.fields["run_id"],
+                                           artifact_id=self.fields["artifact_id"]), "RESERVED")
 
     def test_failed_consumption_preserves_reservation(self):
         self.ledger.reserve(**self.fields)
         with self.assertRaises(ReplayBlocked):
             self.ledger.mark_consumed(**{**self.fields, "patch_sha256": "c"*64})
-        self.assertEqual(self.ledger.state(repo=self.fields["repo"], run_id=123,
-                                           artifact_id=456), "RESERVED")
+        self.assertEqual(self.ledger.state(repo=self.fields["repo"], run_id=self.fields["run_id"],
+                                           artifact_id=self.fields["artifact_id"]), "RESERVED")
 
     def test_parallel_distinct_runs_only_one_commits(self):
         results = []
         failures = []
         mutex = threading.Lock()
         def worker(i):
-            args = {**self.fields, "run_id": 1000+i, "artifact_id": 2000+i}
+            args = {**self.fields, "run_id": self.fields["run_id"]+i+1, "artifact_id": self.fields["artifact_id"]+i+1}
             try:
                 PostgresReplayLedger(self.factory).reserve(**args)
                 outcome = "reserved"
@@ -86,7 +87,7 @@ class PostgreSQLLiveTests(unittest.TestCase):
         self.ledger.reserve(**self.fields)
         self.ledger.mark_consumed(**self.fields)
         with self.assertRaises(ReplayBlocked):
-            self.ledger.reserve(**{**self.fields, "run_id": 100, "artifact_id": 200})
+            self.ledger.reserve(**{**self.fields, "run_id": self.fields["run_id"]+1, "artifact_id": self.fields["artifact_id"]+1})
         with self.assertRaises(ReplayBlocked):
             self.ledger.mark_consumed(**self.fields)
 
