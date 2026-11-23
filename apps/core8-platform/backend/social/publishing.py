@@ -171,6 +171,9 @@ async def published_last_24h(account_id: str | None) -> int:
 # ── Approve / schedule (human-triggered) ───────────────────────────────────
 
 async def approve_item(item_id: str, actor: str) -> dict:
+    # Enforce the human-review boundary in the service layer, not only the API.
+    if not actor or actor.startswith("worker:") or actor.startswith("system:"):
+        raise GateError("human_approval_required", "Human reviewer required")
     item = await get_item(item_id)
     if not item:
         raise GateError("not_found", "פריט לא נמצא")
