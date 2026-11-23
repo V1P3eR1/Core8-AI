@@ -6,6 +6,8 @@ A fabricated StoredKeyApproval is not proof of human approval or identity.
 Never expose this ledger via a request handler or grant API users SQL writes.
 """
 import re
+
+from psycopg.pq import TransactionStatus
 from key_approval_candidate import IndependentApprovalLedger, StoredKeyApproval
 from tenant_access import FinanceAccessDenied
 
@@ -54,9 +56,11 @@ def provision_test_approval(conn, *, namespace, approval):
 class PostgresApprovalCandidate(IndependentApprovalLedger):
     """Consume once using a conditional SQL update + same-transaction audit insert.
 
-    Expiry uses PostgreSQL server clock, never request-provided time.\n    Use autocommit connections, or ensure any enclosing transaction commits
-    BEFORE performing external watermark CAS. This sandbox adapter does NOT
-    provide atomic commits across PostgreSQL, approvals and external floor.
+    Expiry uses PostgreSQL server clock, never request-provided time.
+    Only dedicated autocommit, IDLE connections are accepted. This avoids
+    returning success inside a caller-controlled transaction that can roll
+    back after an external watermark is advanced. The cross-service commit
+    gap still exists and requires explicit audited recovery.
     """
 
     def __init__(self, conn, *, namespace):
@@ -69,6 +73,13 @@ class PostgresApprovalCandidate(IndependentApprovalLedger):
         _validate(expected)
         if type(approval_id) is not str or approval_id != expected.approval_id:
             return False
+        # Disallow deferred commits and savepoints. Successful consumption
+        # must have committed before the caller can invoke external key CAS.
+        # A transaction begun by any caller (including autocommit=True with an
+        # outer transaction context) is not safe for this integration boundary.
+        if (self.conn.autocommit is not True or
+                self.conn.info.transaction_status != TransactionStatus.IDLE):
+            raise FinanceAccessDenied("Finance key approval denied")
         with self.conn.transaction():
             row = self.conn.execute(
                 """UPDATE finance_key_approval_candidate
