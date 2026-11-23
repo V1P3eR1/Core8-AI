@@ -88,6 +88,25 @@ class ContinuityTests(unittest.TestCase):
         with self.assertRaisesRegex(SnapshotBlocked, "incomplete_check_inventory"):
             summarize_pr(fake_pr(74), checks, 74)
 
+    def test_merged_pr_green_checks_are_historical_only(self):
+        pr = fake_pr(74)
+        pr["state"] = "closed"
+        pr["merged_at"] = "2026-11-23T07:00:00Z"
+        summary = summarize_pr(pr, fake_checks(), 74)
+        self.assertEqual(summary["state"], "merged")
+        self.assertEqual(summary["check_state"], "historical_only")
+
+    def test_mismatched_check_run_sha_fails_closed(self):
+        checks = fake_checks()
+        checks["check_runs"][0]["head_sha"] = "f" * 40
+        with self.assertRaisesRegex(SnapshotBlocked, "check_head_sha_mismatch"):
+            summarize_pr(fake_pr(74), checks, 74)
+
+    def test_matching_check_run_sha_is_allowed(self):
+        checks = fake_checks()
+        checks["check_runs"][0]["head_sha"] = SHA
+        self.assertEqual(summarize_pr(fake_pr(74), checks, 74)["check_state"], "passed")
+
     def test_wrong_repo_rejected(self):
         pr = fake_pr(74)
         pr["head"]["repo"]["full_name"] = "attacker/repo"
@@ -101,7 +120,9 @@ class ContinuityTests(unittest.TestCase):
     def test_closed_unmerged_not_reported_as_merged(self):
         pr = fake_pr(74)
         pr["state"] = "closed"
-        self.assertEqual(summarize_pr(pr, fake_checks(), 74)["state"], "closed")
+        summary = summarize_pr(pr, fake_checks(), 74)
+        self.assertEqual(summary["state"], "closed")
+        self.assertEqual(summary["check_state"], "historical_only")
 
     def test_inconsistent_merge_rejected(self):
         pr = fake_pr(74)
