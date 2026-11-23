@@ -44,6 +44,24 @@ class ApprovalEvidenceTests(unittest.TestCase):
     def test_edited_comment(self):
         self.comment["updated_at"] = "2026-11-23T09:00:00Z"
         with self.assertRaises(EvidenceBlocked): self.verify()
+    def test_invalid_approval_timestamp_rejected(self):
+        bad_values = (
+            "2026-11-23T08:00:00", "2026-11-23T08:00:00+02:00",
+            "2026-02-30T08:00:00Z", "2026-11-23T25:00:00Z",
+            "yesterday", "", None, "2026-11-23T08:00:00.1234567890Z",
+        )
+        for value in bad_values:
+            with self.subTest(value=value):
+                self.comment["created_at"] = value
+                self.comment["updated_at"] = value
+                with self.assertRaisesRegex(EvidenceBlocked, "approval_comment_mismatch"):
+                    self.verify()
+
+    def test_valid_fractional_utc_timestamp_accepted(self):
+        self.comment["created_at"] = "2026-11-23T08:00:00.123456Z"
+        self.comment["updated_at"] = self.comment["created_at"]
+        self.assertEqual(self.verify()["comment_id"], 456)
+
     def test_wrong_author(self):
         self.comment["user"]["id"] = 888
         with self.assertRaises(EvidenceBlocked): self.verify()
