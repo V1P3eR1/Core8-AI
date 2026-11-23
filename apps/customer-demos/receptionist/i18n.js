@@ -116,7 +116,7 @@
       'choice.name.sample': 'Use fictional sample: {name}',
       'choice.contact.sample': 'Use fictional sample: {contact}',
       'choice.contact.skip': 'Skip',
-      'choice.draft.handoff': 'Send to human review',
+      'choice.draft.handoff': 'Simulate human handoff',
       'choice.draft.change_slot': 'Pick another slot',
       'choice.slot': '{slot}',
       'choice.service': '{service}',
@@ -129,14 +129,14 @@
       'bot.ask_slot': 'Here are three hypothetical openings (mock availability, not a real calendar). Which one works best?',
       'bot.slot_retry': 'Please choose one of the three hypothetical slots below (or type 1, 2 or 3).',
       'bot.draft_confirmation': 'I prepared a draft request for {slot}. Nothing was booked and nothing was sent — a staff member has to review and confirm it.',
-      'bot.draft_hint': 'The draft is ready. You can send it to human review or pick another slot using the buttons below.',
+      'bot.draft_hint': 'The draft is ready. Simulate a human handoff or choose another slot. No message will be sent.',
       'bot.hours_answer': 'Or Clinic\'s sample opening hours are Sunday–Thursday, {open}–{close} (fictional). Would you like to book a visit?',
       'bot.pricing_answer': 'Prices are not part of this demo. In a real setup I would answer only from the clinic\'s approved price list, or pass the question to staff. Would you like to book a visit or talk to a person?',
       'bot.cancel_answer': 'Changing or cancelling an existing appointment needs a staff member.',
       'bot.urgent_answer': 'This sounds urgent. I can\'t give medical advice. In a real emergency, contact your local emergency services right away.',
       'bot.unknown_retry': 'I\'m not sure I understood. You can pick one of the options below or rephrase.',
       'bot.unclear_escalate': 'I still couldn\'t understand, and I\'d rather not guess.',
-      'bot.handoff_notice': 'I\'m passing this conversation to a human team member. (Simulation: in this demo nobody was actually notified.)',
+      'bot.handoff_notice': 'Human handoff simulation completed. No notification was sent and this conversation is not monitored.',
       'bot.paused_after_handoff': 'This conversation is waiting for a human in the simulation. Use “Reset demo” to start again.',
 
       'audit.session_started': 'Demo session started — state lives in this tab\'s memory only',
@@ -265,7 +265,7 @@
       'choice.name.sample': 'שם בדוי לדוגמה: {name}',
       'choice.contact.sample': 'פרט בדוי לדוגמה: {contact}',
       'choice.contact.skip': 'דילוג',
-      'choice.draft.handoff': 'שליחה לבדיקת איש צוות',
+      'choice.draft.handoff': 'הדמיית העברה לאיש צוות',
       'choice.draft.change_slot': 'בחירת מועד אחר',
       'choice.slot': '{slot}',
       'choice.service': '{service}',
@@ -278,14 +278,14 @@
       'bot.ask_slot': 'הנה שלושה מועדים היפותטיים (זמינות לדוגמה, לא יומן אמיתי). איזה מועד הכי מתאים?',
       'bot.slot_retry': 'נא לבחור אחד משלושת המועדים ההיפותטיים שלמטה (או להקליד 1, 2 או 3).',
       'bot.draft_confirmation': 'הכנתי טיוטת בקשה למועד {slot}. לא נקבע תור ולא נשלחה שום הודעה — איש צוות צריך לבדוק ולאשר את הבקשה.',
-      'bot.draft_hint': 'הטיוטה מוכנה. אפשר לשלוח אותה לבדיקת איש צוות או לבחור מועד אחר בעזרת הכפתורים שלמטה.',
+      'bot.draft_hint': 'הטיוטה מוכנה. אפשר להדגים העברה לאיש צוות או לבחור מועד אחר. לא תישלח הודעה.',
       'bot.hours_answer': 'שעות הפעילות לדוגמה של מרפאת אור: ימים א׳–ה׳, {open}–{close} (בדיוני). לקבוע תור?',
       'bot.pricing_answer': 'מחירים אינם חלק מההדגמה. במערכת אמיתית הייתי עונה רק מתוך מחירון שהמרפאה אישרה, או מעבירה את השאלה לצוות. לקבוע תור או לדבר עם נציג?',
       'bot.cancel_answer': 'שינוי או ביטול של תור קיים דורשים טיפול של איש צוות.',
       'bot.urgent_answer': 'זה נשמע דחוף. אינני יכולה לתת ייעוץ רפואי. במקרה חירום אמיתי יש לפנות מיד לשירותי החירום.',
       'bot.unknown_retry': 'לא בטוחה שהבנתי. אפשר לבחור באחת האפשרויות שלמטה או לנסח מחדש.',
       'bot.unclear_escalate': 'עדיין לא הצלחתי להבין, ואני מעדיפה לא לנחש.',
-      'bot.handoff_notice': 'אני מעבירה את השיחה לאיש צוות אנושי. (סימולציה: בהדגמה הזו אף אחד לא קיבל הודעה בפועל.)',
+      'bot.handoff_notice': 'הדמיית העברה לאיש צוות הושלמה. בפועל לא נשלחה הודעה והשיחה אינה מנוטרת.',
       'bot.paused_after_handoff': 'השיחה ממתינה לאיש צוות במסגרת הסימולציה. כדי להתחיל מחדש לחצו על ״איפוס ההדגמה״.',
 
       'audit.session_started': 'סשן הדגמה התחיל — המצב נשמר בזיכרון הלשונית בלבד',
@@ -355,3 +355,4 @@
 
   return { LANGS: LANGS, STRINGS: S, t: t, resolve: resolve, fmtSlot: fmtSlot };
 });
+

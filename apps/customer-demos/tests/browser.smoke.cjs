@@ -154,7 +154,7 @@ async function runScenario(browser, mode, url, isLocal) {
 
   await check(tag + 'manual handoff is shown as simulated, with nobody notified', async () => {
     await choice(page, 'draft:handoff').click();
-    assert.match(await page.locator('.msg--agent').last().innerText(), /nobody was actually notified/);
+    assert.match(await page.locator('.msg--agent').last().innerText(), /Human handoff simulation completed\. No notification was sent and this conversation is not monitored\./);
     assert.match(await text(page, 'lead-handoff-status'), /Simulated — pending human review \(nobody was notified\)/);
     assert.equal(await text(page, 'lead-booking-status'), 'NOT CREATED');
     assert.equal(await text(page, 'lead-message-status'), 'NOT SENT');
@@ -213,7 +213,7 @@ async function runScenario(browser, mode, url, isLocal) {
     assert.equal(await page.locator('[data-testid="intent-panel"] [data-intent]').getAttribute('data-intent'), 'urgent');
     const msgs = await page.locator('.msg--agent').allInnerTexts();
     assert.ok(msgs.some((m) => /אינני יכולה לתת ייעוץ רפואי/.test(m)), 'no medical advice');
-    assert.ok(msgs.some((m) => /אף אחד לא קיבל הודעה בפועל/.test(m)), 'simulated handoff notice');
+    assert.ok(msgs.some((m) => /הדמיית העברה לאיש צוות הושלמה\. בפועל לא נשלחה הודעה והשיחה אינה מנוטרת\./.test(m)), 'simulated handoff notice');
     assert.equal(await page.locator('[data-testid="slots-panel"] .slots__item').count(), 0);
     assert.equal(await page.locator('[data-testid="lead-panel"] [data-handoff]').getAttribute('data-handoff'), 'SIMULATED_PENDING_HUMAN_REVIEW');
     await shot('06-urgent-escalation-he');
@@ -347,3 +347,4 @@ async function runScenario(browser, mode, url, isLocal) {
   console.log('Screenshots: ' + path.relative(REPO, EVIDENCE));
   process.exit(failed ? 1 : 0);
 })().catch((err) => { console.error(err); process.exit(2); });
+

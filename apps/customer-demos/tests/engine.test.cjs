@@ -5,6 +5,18 @@ const ENGINE = require('../receptionist/engine.js');
 const I18N = require('../receptionist/i18n.js');
 const FX = require('../receptionist/fixtures.js');
 
+test('handoff actions and results explicitly describe simulation in both languages', () => {
+  for (const [lang, simulation, notSent, notMonitored] of [
+    ['en', /simulat/i, /No notification was sent/, /not monitored/],
+    ['he', /הדמי/, /לא נשלחה הודעה/, /אינה מנוטרת/]
+  ]) {
+    assert.match(I18N.t(lang, 'choice.draft.handoff'), simulation);
+    assert.match(I18N.t(lang, 'bot.handoff_notice'), simulation);
+    assert.match(I18N.t(lang, 'bot.handoff_notice'), notSent);
+    assert.match(I18N.t(lang, 'bot.handoff_notice'), notMonitored);
+  }
+});
+
 // Thursday 19 Nov 2026, 10:00 local time.
 const fixedClock = () => new Date(2026, 10, 19, 10, 0, 0);
 const newEngine = () => ENGINE.createEngine({ clock: fixedClock });
@@ -296,3 +308,4 @@ test('every suggested reply and bot message renders in both languages', () => {
     }
   }
 });
+
