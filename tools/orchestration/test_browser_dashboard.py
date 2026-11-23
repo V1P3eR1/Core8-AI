@@ -60,6 +60,14 @@ class BrowserDashboardTests(unittest.TestCase):
     def test_no_prs_has_empty_state(self):
         self.assertIn("לא נמצאו Pull Requests", render_html(sample()))
 
+    def test_synthetic_demo_has_warning_and_no_fake_pr_links(self):
+        demo = sample([pr(901001)])
+        demo["demo"] = True
+        html = render_html(demo)
+        self.assertIn("דמו סינתטי בלבד", html)
+        self.assertIn("דוגמה #901001", html)
+        self.assertNotIn("/pull/901001", html)
+
     def test_too_many_rows_refused(self):
         with self.assertRaises(DashboardError):
             render_html(sample([pr(i + 1) for i in range(61)]))
