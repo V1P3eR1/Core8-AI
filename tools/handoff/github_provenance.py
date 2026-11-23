@@ -17,7 +17,7 @@ HEX40 = re.compile(r"^[a-f0-9]{40}$")
 HEX64 = re.compile(r"^[a-f0-9]{64}$")
 MAX_REPLY = 150_000
 # Disallow arbitrary URLs, encoded paths, traversal and alternate API scopes.
-ALLOWED_RESOURCE = re.compile(r"^actions/(?:runs|artifacts)/[1-9][0-9]*$")
+ALLOWED_RESOURCE = re.compile(r"^(?:actions/(?:runs|artifacts)|issues(?:/comments)?)/[1-9][0-9]*$")
 
 
 class EvidenceBlocked(ValueError):
