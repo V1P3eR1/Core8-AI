@@ -91,5 +91,5 @@ def test_combined_schedule_request_does_not_mutate_existing_synthetic_item(api):
     assert after.status_code == 200, after.text
     assert after.json()["scheduled_for"] == before.json()["scheduled_for"]
     assert after.json()["status"] == before.json()["status"]
-    assert after.json()["approvals"] == before.json()["approvals"]
+    assert after.json()["approval"] == before.json()["approval"]
     assert after.json()["publications"] == before.json()["publications"]
