@@ -28,6 +28,7 @@ def fake_runs(number=74):
              "release preflight (offline)" if number in (55, 70) else
              "Finance OS sandbox unit tests" if number == 64 else
              "backend-tests" if number == 81 else
+             "customer-demos-ci" if number in (82, 83) else
              "social-content-draft-contract" if number == 84 else
              "lead-contract-offline" if number == 85 else
              "Handoff contract tests"]
@@ -54,15 +55,19 @@ class ContinuityTests(unittest.TestCase):
         self.assertTrue(all(p.startswith(("/pulls/", "/actions/runs?")) for p in calls))
 
     def test_known_suites_green(self):
-        for n in (55, 64, 65, 67, 70, 74, 80, 81, 84, 85):
+        for n in (55, 64, 65, 67, 70, 74, 80, 81, 82, 83, 84, 85):
             with self.subTest(n=n):
                 self.assertEqual(summarize_pr(fake_pr(n), fake_runs(n), n)["check_state"], "passed")
 
-    def test_demo_without_dedicated_suite_is_not_green(self):
+    def test_demo_without_pr_triggered_ci_is_not_green(self):
         for n in (82, 83):
             with self.subTest(n=n):
-                self.assertEqual(summarize_pr(fake_pr(n), fake_runs(n), n)["check_state"],
-                                 "suite_policy_missing")
+                runs = fake_runs(n)
+                runs["workflow_runs"] = [run("secret-scan"),
+                                         run("customer-demos-ci", event="push")]
+                runs["total_count"] = 2
+                self.assertEqual(summarize_pr(fake_pr(n), runs, n)["check_state"],
+                                 "missing_required_workflows")
 
     def test_missing_required_workflow_is_not_green(self):
         r = fake_runs(85)
