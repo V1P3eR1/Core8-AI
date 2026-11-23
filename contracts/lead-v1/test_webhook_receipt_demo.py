@@ -70,6 +70,9 @@ class WebhookReceiptTests(unittest.TestCase):
     def test_invalid_delivery_id_denied(self):
         self.assertEqual(self.receive(delivery="",signature_hex="0"*64)["reason"],"invalid_delivery_id")
         self.assertEqual(self.counts(),(0,0,0))
+    def test_non_ascii_delivery_id_denied_before_signature(self):
+        self.assertEqual(self.receive(delivery="D-\u2603",signature_hex="0"*64)["reason"],"invalid_delivery_id")
+        self.assertEqual(self.counts(),(0,0,0))
     def test_claimed_tenant_does_not_change_receipt_tenant(self):
         raw=json.dumps({"submission_id":"S1","name":"Synthetic","consent":True,
                         "tenant_id":"other"}).encode()
