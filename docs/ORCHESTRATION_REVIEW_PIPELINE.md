@@ -48,3 +48,23 @@ of the immutable protected record and re-check live Notion task approval.
 GitHub Actions run metadata alone does not identify the triggering comment ID.
 This module must never be exposed as an authorization endpoint or used to
 unlock Claude payments, a privileged writer, merges or deployments.
+
+
+## Approval-comment chronology (2026-11-23)
+
+Read-only GitHub approval evidence now includes the provider-authenticated
+`comment_created_at`. Review evidence binding enforces the order
+
+`protected_gate.approved_at <= verified_comment.created_at <= artifact.created_at <= now < artifact.expires_at`.
+
+This rejects delayed or replayed approval comments associated with an older
+artifact, plus missing, ambiguous, or offset-encoded comment times. The
+protected gate's schema remains strict: the independently verified comment
+timestamp stays with the GitHub evidence, not inside the gate record.
+
+**Operational prerequisite:** the value `protected_gate.approved_at` must
+represent a trustworthy private approval timestamp, no later than the GitHub
+approval comment. Do not substitute the timestamp of a later Notion re-read
+or an arbitrary operator-provided field. These chronology checks are
+review-only evidence and cannot substitute for independent authenticity
+of the protected gate or live Notion approval.
