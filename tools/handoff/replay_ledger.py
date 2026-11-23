@@ -44,6 +44,16 @@ class ReplayLedger:
                     PRIMARY KEY(repo, run_id, artifact_id)
                 )"""
             )
+            # Preserve at-most-once semantics across DIFFERENT runs/artifacts
+            # for the same approved task revision. An existing ledger with
+            # ambiguous duplicate tasks must fail closed on migration.
+            try:
+                db.execute(
+                    "CREATE UNIQUE INDEX IF NOT EXISTS reservations_one_task "
+                    "ON reservations(repo, task_digest)"
+                )
+            except sqlite3.IntegrityError:
+                raise ReplayBlocked("ambiguous_existing_task_reservations") from None
 
     def _connect(self):
         db = sqlite3.connect(self.path, timeout=5, isolation_level=None)
