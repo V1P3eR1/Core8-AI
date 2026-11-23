@@ -380,7 +380,7 @@ async def _is_auto(pub: dict) -> bool:
     if not pub.get("approval_id"):
         return False
     row = await fetch_one("SELECT approved_by FROM sm_approvals WHERE id=?", (pub["approval_id"],))
-    return bool(row and (row["approved_by"] or "").startswith("worker:auto"))
+    return bool(row and (row["approved_by"] or "").startswith("worker:"))
 
 
 async def _credentials(mode: str, item: dict) -> tuple[str, str]:
