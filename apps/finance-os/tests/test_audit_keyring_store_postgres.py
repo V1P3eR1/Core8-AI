@@ -38,11 +38,7 @@ class AuditKeyringStorePostgresTests(unittest.TestCase):
         source = (Path(__file__).resolve().parents[1] / "sql" /
                   "audit_keyring_store_candidate.sql").read_text()
         with psycopg.connect(cls.dsn) as db:
-            for piece in source.split(";"):
-                clean = "\n".join(x for x in piece.splitlines()
-                                  if not x.lstrip().startswith("--")).strip()
-                if clean:
-                    db.execute(clean)
+            db.execute(source)
 
     @classmethod
     def tearDownClass(cls):
