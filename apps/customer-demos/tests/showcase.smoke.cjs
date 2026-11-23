@@ -34,6 +34,25 @@ const {chromium} = require(process.env.PLAYWRIGHT_MODULE || 'playwright');
     assert.ok(await desktop.evaluate(() => document.documentElement.scrollWidth <= innerWidth),
       'horizontal overflow on 1280px desktop');
     assert.ok(await desktop.getByText('Start with the business problem').isVisible());
+    // Keyboard-only navigation: every CTA must be focusable and retain a
+    // visible focus indicator in the screenshot/review build.
+    const navLinks = desktop.locator('nav a');
+    assert.equal(await navLinks.count(), 3);
+    for (let i = 0; i < 3; i++) {
+      await navLinks.nth(i).focus();
+      assert.equal(await navLinks.nth(i).evaluate(el => document.activeElement === el), true);
+      const appearance = await navLinks.nth(i).evaluate(el => {
+        const style = getComputedStyle(el);
+        return {style:style.outlineStyle,width:parseFloat(style.outlineWidth)};
+      });
+      assert.notEqual(appearance.style, 'none', 'navigation focus must be visible');
+      assert.ok(appearance.width >= 2, 'keyboard outline too thin');
+    }
+    const headings = await desktop.locator('article[aria-labelledby]').evaluateAll(els =>
+      els.map(el => ({target:el.getAttribute('aria-labelledby'),
+        found:!!el.querySelector('#' + el.getAttribute('aria-labelledby'))})));
+    assert.equal(headings.length, 5);
+    assert.ok(headings.every(h => h.found), 'each article must have a resolvable accessible title');
     await desktop.screenshot({path:path.join(out,'desktop-1280.png'),fullPage:true});
     await desktop.close();
     console.log('Review mobile-390.png, desktop-1280.png and showcase-a4.pdf in',out);
