@@ -21,7 +21,7 @@ def verify_rotating_credential(credential, timestamp, raw_body, signature_hex, *
         return {"ok": False, "reason": "signature_mismatch"}
     if now > previous_until or not isinstance(previous, bytes) or not previous:
         return {"ok": False, "reason": "signature_mismatch"}
-    alternate = verify(previous, timestamp, raw_body, signature_hex, now=now)
+    alternate = verify(previous, timestamp, raw_body, signature_hex, now=now, delivery_id=delivery_id)
     if alternate["ok"]:
         return {"ok": True, "key_version": "previous"}
     return {"ok": False, "reason": "signature_mismatch"}
