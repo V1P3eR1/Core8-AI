@@ -145,3 +145,42 @@ def test_historical_worker_approval_cancels_before_provider_calls(monkeypatch):
         "mode": "mock", "approval_id": "synthetic-worker-approval",
     }))
     assert result["state"] == "cancelled"
+
+
+def test_publication_rejects_approval_id_mismatch_before_provider(monkeypatch):
+    """A newer valid approval cannot authorize a queued publication using another ID."""
+    import asyncio
+    from social import publishing
+
+    async def no_auto(pub):
+        return False
+    async def item(item_id):
+        return {"id": item_id}
+    async def raw(item_id):
+        return {"id": item_id}
+    async def approval(row):
+        return {"valid": True, "approval": {"id": "new-human-approval", "approved_by": "admin"}}
+    async def state(pub_id, value, **fields):
+        assert value == "cancelled"
+        assert fields["last_error"] == "human_approval_required"
+    async def status(*args, **kwargs):
+        return None
+    async def row(query, args):
+        return {"id": args[0], "state": "cancelled"}
+    async def forbidden(*args, **kwargs):
+        raise AssertionError("provider operation or gate report reached")
+
+    monkeypatch.setattr(publishing, "_is_auto", no_auto)
+    monkeypatch.setattr(publishing, "get_item", item)
+    monkeypatch.setattr(publishing, "get_item_raw", raw)
+    monkeypatch.setattr(publishing, "check_item_approval", approval)
+    monkeypatch.setattr(publishing, "_set_state", state)
+    monkeypatch.setattr(publishing, "set_status", status)
+    monkeypatch.setattr(publishing, "fetch_one", row)
+    monkeypatch.setattr(publishing, "gate_report", forbidden)
+    monkeypatch.setattr(publishing, "get_provider", lambda mode: object())
+    result = asyncio.run(publishing.run_publication({
+        "id": "queued-publication", "content_item_id": "synthetic-item",
+        "approval_id": "old-human-approval", "mode": "mock",
+    }))
+    assert result["state"] == "cancelled"
