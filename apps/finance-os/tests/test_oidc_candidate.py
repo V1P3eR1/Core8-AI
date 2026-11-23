@@ -37,7 +37,7 @@ class OidcCandidateTests(unittest.TestCase):
     def claims(self):
         now = int(time.time())
         return {"sub": "sub_test_123", "iss": self.issuer, "aud": self.audience,
-                "iat": now, "nbf": now, "exp": now+300}
+                "iat": now, "nbf": now, "exp": now+300, "token_use": "access"}
 
     def signed(self, claims=None, key=None, headers=None, algorithm="RS256"):
         return jwt.encode(claims if claims is not None else self.claims(),
@@ -69,6 +69,18 @@ class OidcCandidateTests(unittest.TestCase):
             with self.subTest(token=token[:10]):
                 with self.assertRaises(FinanceAccessDenied):
                     self.verify(token)
+
+    def test_id_token_cannot_be_reused_as_finance_access_token(self):
+        # A valid signature, issuer and audience are insufficient when the
+        # token was issued as an ID token rather than an access token.
+        for claims in (
+            {**self.claims(), "token_use": "id"},
+            {k: v for k, v in self.claims().items() if k != "token_use"},
+            {**self.claims(), "token_use": ["access"]},
+        ):
+            with self.subTest(token_use=claims.get("token_use")):
+                with self.assertRaises(FinanceAccessDenied):
+                    self.verify(self.signed(claims))
 
     def test_verified_token_still_requires_active_tenant_membership(self):
         from membership_candidate import resolve_finance_membership
