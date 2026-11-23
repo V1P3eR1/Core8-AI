@@ -209,6 +209,11 @@ def publish(api, *, repo, base_sha, bundle_raw, bundle_hash, scope_sha, artifact
     tree = api.call("POST", "git/trees", {"base_tree": base_tree, "tree": entries})
     commit = api.call("POST", "git/commits", {"message": "Core8 review artifact " + idem[:16],
                                                 "tree": tree["sha"], "parents": [base_sha]})
+    # Recheck main immediately before exposing a new remote branch. This
+    # reduces the race window if main advances while Git objects are prepared.
+    latest = api.call("GET", "git/ref/heads/main")
+    if (latest.get("object") or {}).get("sha") != base_sha:
+        raise PublishBlocked("base_advanced_during_publish")
     api.call("POST", "git/refs", {"ref": "refs/heads/" + branch, "sha": commit["sha"]})
     description = (marker + "\nDraft review of an already human-approved Claude artifact.\n"
                    + "Scope SHA256: " + scope_sha + "\nArtifact SHA256: " + artifact_sha
