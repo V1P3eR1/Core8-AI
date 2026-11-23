@@ -30,3 +30,21 @@ def test_social_content_list_allows_admin(api):
 def test_social_content_detail_admin_missing_item_returns_404(api):
     response = api.c.get("/api/social/items/nonexistent-synthetic-id", headers=api.admin)
     assert response.status_code == 404, response.text
+
+
+@pytest.mark.parametrize("headers_kind,expected", [
+    ("anonymous", 401),
+    ("operator", 403),
+    ("admin", 409),
+])
+def test_schedule_does_not_implicitly_approve_when_date_supplied(api, headers_kind, expected):
+    """Reject combined schedule+approval before touching any content or publication."""
+    headers = None if headers_kind == "anonymous" else (
+        api.admin if headers_kind == "admin" else api.user("operator-social-schedule@core8.test")
+    )
+    response = api.c.post(
+        "/api/social/items/nonexistent-synthetic-id/schedule",
+        json={"scheduled_for": "2026-12-03T10:00"},
+        headers=headers,
+    )
+    assert response.status_code == expected, response.text
