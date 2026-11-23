@@ -51,11 +51,14 @@ jobs:
         run: python tools/orchestration/dev_loop_health.py
       - name: Render private-safe engineering summary
         run: python tools/orchestration/dashboard_report.py core8-dev-loop-report.json
+      - name: Render standalone RTL browser dashboard
+        run: python tools/orchestration/browser_dashboard.py core8-dev-loop-report.json
       - uses: actions/upload-artifact@v4
         with:
           name: core8-dev-loop-report
           path: |
             core8-dev-loop-report.json
             core8-dev-loop-report.md
+            core8-dev-loop-dashboard.html
           retention-days: 7
           if-no-files-found: error
