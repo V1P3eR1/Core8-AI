@@ -11,6 +11,7 @@ import sys
 
 from dashboard_report import DashboardError, MAX_SIZE, SCHEMA, VALID_STATES
 from private_task_summary import PrivateSummaryError
+from private_storage import PrivateStorageError, safe_read_private_json, exclusive_private_write
 
 VALID_NOTION = frozenset({
     "Queued", "In progress", "Review", "Blocked", "Closed - unverified",
@@ -91,19 +92,15 @@ def main():
         raise SystemExit("usage: private_dashboard.py private-counts.json github-health.json output.html")
     if __import__("os").environ.get("GITHUB_ACTIONS") == "true":
         raise SystemExit("private_dashboard_forbidden_in_github_actions")
-    def load(name):
-        path = Path(name)
-        if not path.is_file() or path.stat().st_size > MAX_SIZE:
-            raise DashboardError("invalid_local_input")
-        return json.loads(path.read_text(encoding="utf-8"))
     try:
-        out = private_html(load(sys.argv[1]), load(sys.argv[2]))
-        path = Path(sys.argv[3])
-        if path.suffix.lower() != ".html" or path.is_symlink():
-            raise DashboardError("invalid_output_path")
-        path.write_text(out, encoding="utf-8")
+        # The Notion aggregate must be read from a private input directory.
+        # The GitHub snapshot contains no customer scope, but still bound size.
+        private = safe_read_private_json(sys.argv[1], MAX_SIZE, require_private=True)
+        github = safe_read_private_json(sys.argv[2], MAX_SIZE)
+        out = private_html(private, github)
+        exclusive_private_write(sys.argv[3], out)
         print("private_dashboard_written_locally")
-    except (OSError, UnicodeError, ValueError):
+    except (OSError, UnicodeError, ValueError, PrivateStorageError):
         print("private_dashboard_rejected", file=sys.stderr)
         raise SystemExit(1) from None
 
