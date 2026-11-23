@@ -16,6 +16,8 @@ WORKFLOW_PATH = ".github/workflows/claude-issues.yml"
 HEX40 = re.compile(r"^[a-f0-9]{40}$")
 HEX64 = re.compile(r"^[a-f0-9]{64}$")
 MAX_REPLY = 150_000
+# Disallow arbitrary URLs, encoded paths, traversal and alternate API scopes.
+ALLOWED_RESOURCE = re.compile(r"^actions/(?:runs|artifacts)/[1-9][0-9]*$")
 
 
 class EvidenceBlocked(ValueError):
@@ -103,6 +105,8 @@ class GitHubReadOnly:
         self._opener = opener or build_opener(NoRedirect())
 
     def _get(self, resource):
+        if not isinstance(resource, str) or not ALLOWED_RESOURCE.fullmatch(resource):
+            raise EvidenceBlocked("github_resource_not_allowed")
         url = "https://api.github.com/repos/" + REPO + "/" + resource
         request = Request(url, headers={
             "Authorization": "Bearer " + self._token,
@@ -112,13 +116,26 @@ class GitHubReadOnly:
         }, method="GET")
         try:
             with self._opener.open(request, timeout=15) as response:
+                # A custom opener must not weaken the no-redirect trust boundary.
+                if callable(getattr(response, "geturl", None)) and response.geturl() != url:
+                    raise EvidenceBlocked("github_redirect_refused")
                 payload = response.read(MAX_REPLY + 1)
         except (HTTPError, URLError, TimeoutError, OSError):
             raise EvidenceBlocked("github_fetch_failed") from None
         if len(payload) > MAX_REPLY:
             raise EvidenceBlocked("github_response_too_large")
+        def unique_object(pairs):
+            result = {}
+            for key, value in pairs:
+                if key in result:
+                    raise EvidenceBlocked("github_duplicate_json_key")
+                result[key] = value
+            return result
+
         try:
-            doc = json.loads(payload)
+            doc = json.loads(payload, object_pairs_hook=unique_object)
+        except EvidenceBlocked:
+            raise
         except (UnicodeDecodeError, ValueError):
             raise EvidenceBlocked("github_response_invalid") from None
         if not isinstance(doc, dict):
