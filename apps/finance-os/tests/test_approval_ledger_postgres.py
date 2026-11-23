@@ -1,6 +1,7 @@
 """Disposable PostgreSQL approval ledger concurrency and audit tests."""
 import concurrent.futures
 import os
+import time
 import sys
 import threading
 import unittest
@@ -50,7 +51,7 @@ class ApprovalLedgerPostgresTests(unittest.TestCase):
             requester_subject="manager_ci",
             approver_subject="approver_ci",
             proposal_sha256="a" * 64,
-            expires_at=1900000300,
+            expires_at=int(time.time()) + 300,
         )
         with psycopg.connect(self.dsn, autocommit=True) as db:
             provision_test_approval(db, namespace=self.namespace,
@@ -63,11 +64,11 @@ class ApprovalLedgerPostgresTests(unittest.TestCase):
             db.execute("DELETE FROM finance_key_approval_candidate WHERE approval_id=%s",
                        (self.approval.approval_id,))
 
-    def consume(self, *, approval=None, namespace=None, now=1800000000):
+    def consume(self, *, approval=None, namespace=None):
         approval = approval or self.approval
         with psycopg.connect(self.dsn, autocommit=True) as db:
             return PostgresApprovalCandidate(
-                db, namespace=namespace or self.namespace, now=now
+                db, namespace=namespace or self.namespace
             ).consume(approval.approval_id, approval)
 
     def audit_count(self):
@@ -94,7 +95,17 @@ class ApprovalLedgerPostgresTests(unittest.TestCase):
 
     def test_expired_wrong_namespace_and_changed_approval_denied(self):
         from dataclasses import replace
-        self.assertFalse(self.consume(now=self.approval.expires_at))
+        with psycopg.connect(self.dsn, autocommit=True) as db:
+            db.execute(
+                "UPDATE finance_key_approval_candidate SET expires_at=%s WHERE approval_id=%s",
+                (int(time.time()) - 1, self.approval.approval_id),
+            )
+        self.assertFalse(self.consume())
+        with psycopg.connect(self.dsn, autocommit=True) as db:
+            db.execute(
+                "UPDATE finance_key_approval_candidate SET expires_at=%s WHERE approval_id=%s",
+                (self.approval.expires_at, self.approval.approval_id),
+            )
         self.assertFalse(self.consume(namespace="other_namespace"))
         self.assertFalse(self.consume(approval=replace(
             self.approval, proposal_sha256="b" * 64)))
@@ -111,7 +122,7 @@ class ApprovalLedgerPostgresTests(unittest.TestCase):
                     )
                     # Intentionally fails because the audit table was dropped.
                     PostgresApprovalCandidate(
-                        db, namespace=self.namespace, now=1800000000
+                        db, namespace=self.namespace
                     ).consume(self.approval.approval_id, self.approval)
             # The DROP is rolled back with the consumption.
         self.assertEqual(self.audit_count(), 0)
