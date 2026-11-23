@@ -144,6 +144,11 @@ def publish(api, *, repo, base_sha, bundle_raw, bundle_hash, scope_sha, artifact
     head = repo.split("/")[0] + ":" + branch
     marker = "<!-- core8-review:" + idem + " -->"
     query = parse.urlencode({"head": head, "base": "main", "state": "open"})
+    # Check current main even when reusing an existing Draft PR. A stale
+    # human-approved base cannot be silently accepted on a later retry.
+    current = api.call("GET", "git/ref/heads/main")
+    if (current.get("object") or {}).get("sha") != base_sha:
+        raise PublishBlocked("base_no_longer_main")
     existing = api.call("GET", "pulls?" + query)
     if existing:
         if len(existing) != 1:
@@ -195,10 +200,6 @@ def publish(api, *, repo, base_sha, bundle_raw, bundle_hash, scope_sha, artifact
             raise
     else:
         raise PublishBlocked("existing_branch_without_pr")
-    # A stale or unreviewed base must not be published against a newer main.
-    current = api.call("GET", "git/ref/heads/main")
-    if current.get("object", {}).get("sha") != base_sha:
-        raise PublishBlocked("base_no_longer_main")
     base = api.call("GET", "git/commits/" + base_sha)
     base_tree = base["tree"]["sha"]
     entries = []
