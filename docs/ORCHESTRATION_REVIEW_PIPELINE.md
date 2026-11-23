@@ -68,3 +68,30 @@ approval comment. Do not substitute the timestamp of a later Notion re-read
 or an arbitrary operator-provided field. These chronology checks are
 review-only evidence and cannot substitute for independent authenticity
 of the protected gate or live Notion approval.
+
+
+## Protected-gate authenticity verifier (2026-11-23)
+
+The review-only module at tools/handoff/authenticated_gate.py accepts an
+independently supplied **canonical UTF-8 JSON receipt**, a lower-case hex
+HMAC-SHA256 signature and a separately provisioned verifier key. It authenticates
+bytes with constant-time signature comparison and purpose separation, rejects
+noncanonical JSON, duplicate object keys, oversized receipts and missing or
+weak (<32-byte) keys. It then passes the authenticated record through the
+existing strict approval/comment/run/artifact binding and returns only
+BOUND_FOR_REVIEW_ONLY. The unit tests use synthetic secrets and never call
+Claude, Notion, or GitHub writes.
+
+The HMAC proves only knowledge of the verifier key, **not** that the genuine
+protected Notion gate approved the task: production requires an isolated trusted
+signer, key provenance/rotation controls, authenticated workflow identity,
+durable anti-replay, and independent re-check of private Notion approval.
+Never put the HMAC key in the repository, task fields, GitHub issue comments,
+generated artifacts, browser, or customer-facing logs. Do not allow arbitrary
+callers to submit their own key or signed receipt and call it authorization.
+Do not enable the paid implementation or publish job from this module alone.
+
+The ChatGPT Notion connector's current account-link error is separate from
+the repository code: restoring its eligible personal account link requires
+external OAuth/account authorization, and a successful GitHub CI run does
+not repair or bypass that identity failure.
