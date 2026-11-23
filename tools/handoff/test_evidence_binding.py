@@ -61,6 +61,24 @@ class EvidenceBindingTests(unittest.TestCase):
     def test_approval_after_creation(self):
         self.gate["approved_at"] = "2026-11-23T09:00:00Z"
         with self.assertRaises(EvidenceBlocked): self.check()
+    def test_ambiguous_or_malformed_evidence_times_block(self):
+        invalid = ("2026-11-23 08:00:00Z", "2026-11-23T08:00:00+00:00",
+                   "2026-02-30T08:00:00Z", "2026-11-23T25:00:00Z",
+                   "2026-11-23T08:00:00.1234567890Z")
+        for value in invalid:
+            with self.subTest(value=value):
+                self.gate["approved_at"] = value
+                with self.assertRaisesRegex(EvidenceBlocked, "invalid_provenance_time"):
+                    self.check()
+        self.gate["approved_at"] = "2026-11-23T08:00:00Z"
+        self.run["created_at"] = "2026-11-23 08:10:00Z"
+        with self.assertRaisesRegex(EvidenceBlocked, "invalid_provenance_time"):
+            self.check()
+
+    def test_fractional_utc_evidence_is_accepted(self):
+        self.gate["approved_at"] = "2026-11-23T08:00:00.123456Z"
+        self.assertEqual(self.check()["status"], "BOUND_FOR_REVIEW_ONLY")
+
     def test_expired_artifact(self):
         self.run["expires_at"] = "2026-11-23T09:00:00Z"
         with self.assertRaises(EvidenceBlocked): self.check()
