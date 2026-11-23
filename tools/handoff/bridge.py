@@ -184,6 +184,13 @@ class Bridge:
                                 status = {'started': 'In progress', 'review': 'Review',
                                           'failed': 'Blocked'}[match[2]]
                             elif draft and draft[1] == sha:
+                                pr_number = int(entry.rsplit('/pull/', 1)[1])
+                                try:
+                                    verify_live_draft_pr(self.gh, pr_number, sha)
+                                except Stop:
+                                    # A stale/closed/altered PR cannot remain in Review.
+                                    # Preserve the last verified non-draft audit state.
+                                    continue
                                 status = 'Review'
                 self.update(page, status, issue=issue, sha=sha)
                 print(json.dumps({'task': data['task'], 'issue': issue['number'], 'status': status, 'apply': self.apply}))
@@ -231,6 +238,37 @@ class Bridge:
         return number, data
 
 
+def verify_live_draft_pr(gh, pr_number, sha):
+    """Fresh read-only verification; a bot audit comment is not current PR state."""
+    pr = gh.call('GET', PREFIX + f'/pulls/{int(pr_number)}')
+    head = pr.get('head') or {}
+    base = pr.get('base') or {}
+    branch = head.get('ref') or ''
+    body_text = pr.get('body') or ''
+    # Draft publisher writes this exact provenance marker in the PR body.
+    if (pr.get('state') != 'open' or pr.get('draft') is not True
+            or not re.fullmatch(r'core8-review/[a-f0-9]{24}', branch)
+            or (head.get('repo') or {}).get('full_name') != REPO
+            or base.get('ref') != 'main'
+            or f'Scope SHA256: {sha}' not in body_text
+            or pr.get('html_url') != f'https://github.com/{REPO}/pull/{int(pr_number)}'):
+        raise Stop('unverified_draft_pr')
+    # The PR must be based on the exact current reviewed main commit.
+    # A matching title/body alone is not evidence of the underlying code.
+    head_sha = head.get('sha')
+    base_sha = base.get('sha')
+    if (not isinstance(head_sha, str) or not re.fullmatch(r'[0-9a-f]{40}', head_sha)
+            or not isinstance(base_sha, str) or not re.fullmatch(r'[0-9a-f]{40}', base_sha)):
+        raise Stop('unverified_draft_commit')
+    main_ref = gh.call('GET', PREFIX + '/git/ref/heads/main')
+    if (main_ref.get('object') or {}).get('sha') != base_sha:
+        raise Stop('stale_draft_base')
+    commit = gh.call('GET', PREFIX + f'/git/commits/{head_sha}')
+    parents = commit.get('parents') or []
+    if len(parents) != 1 or parents[0].get('sha') != base_sha:
+        raise Stop('unverified_draft_parent')
+
+
 def audit(gh, number, sha, state, pr_number=None):
     run = os.environ.get('GITHUB_RUN_ID', '')
     if (not re.fullmatch(r'[1-9][0-9]*', run)
@@ -242,33 +280,7 @@ def audit(gh, number, sha, state, pr_number=None):
     if state == 'draft':
         if type(pr_number) not in (str, int) or not re.fullmatch(r'[1-9][0-9]*', str(pr_number)):
             raise Stop('invalid_draft_pr_number')
-        pr = gh.call('GET', PREFIX + f'/pulls/{int(pr_number)}')
-        head = pr.get('head') or {}
-        base = pr.get('base') or {}
-        branch = head.get('ref') or ''
-        body_text = pr.get('body') or ''
-        # Draft publisher writes this exact provenance marker in the PR body.
-        if (pr.get('state') != 'open' or pr.get('draft') is not True
-                or not re.fullmatch(r'core8-review/[a-f0-9]{24}', branch)
-                or (head.get('repo') or {}).get('full_name') != REPO
-                or base.get('ref') != 'main'
-                or f'Scope SHA256: {sha}' not in body_text
-                or pr.get('html_url') != f'https://github.com/{REPO}/pull/{int(pr_number)}'):
-            raise Stop('unverified_draft_pr')
-        # The PR must be based on the exact current reviewed main commit.
-        # A matching title/body alone is not evidence of the underlying code.
-        head_sha = head.get('sha')
-        base_sha = base.get('sha')
-        if (not isinstance(head_sha, str) or not re.fullmatch(r'[0-9a-f]{40}', head_sha)
-                or not isinstance(base_sha, str) or not re.fullmatch(r'[0-9a-f]{40}', base_sha)):
-            raise Stop('unverified_draft_commit')
-        main_ref = gh.call('GET', PREFIX + '/git/ref/heads/main')
-        if (main_ref.get('object') or {}).get('sha') != base_sha:
-            raise Stop('stale_draft_base')
-        commit = gh.call('GET', PREFIX + f'/git/commits/{head_sha}')
-        parents = commit.get('parents') or []
-        if len(parents) != 1 or parents[0].get('sha') != base_sha:
-            raise Stop('unverified_draft_parent')
+        verify_live_draft_pr(gh, int(pr_number), sha)
         pr_link = f' https://github.com/{REPO}/pull/{int(pr_number)}'
     elif pr_number is not None:
         raise Stop('unexpected_draft_pr_number')
