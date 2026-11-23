@@ -107,3 +107,41 @@ def test_auto_scheduler_never_creates_worker_approvals(monkeypatch):
     monkeypatch.setattr(publishing, "_pub_settings", forbidden)
     import asyncio
     assert asyncio.run(publishing.auto_schedule_candidates()) == []
+
+
+def test_historical_worker_approval_cancels_before_provider_calls(monkeypatch):
+    """Historical automatic approval cannot trigger a provider call on retry."""
+    import asyncio
+    from social import publishing
+
+    async def is_auto(pub):
+        return True
+
+    async def get_item(item_id):
+        return None
+
+    async def set_state(pub_id, state, **fields):
+        assert pub_id == "synthetic-publication"
+        assert state == "cancelled"
+        assert fields["last_error"] == "human_approval_required"
+
+    async def fetch_one(query, args):
+        return {"id": args[0], "state": "cancelled"}
+
+    async def forbidden(*args, **kwargs):
+        raise AssertionError("unexpected publishing or provider operation")
+
+    monkeypatch.setattr(publishing, "_is_auto", is_auto)
+    monkeypatch.setattr(publishing, "get_item", get_item)
+    monkeypatch.setattr(publishing, "_set_state", set_state)
+    monkeypatch.setattr(publishing, "fetch_one", fetch_one)
+    monkeypatch.setattr(publishing, "set_status", forbidden)
+    monkeypatch.setattr(publishing, "gate_report", forbidden)
+    monkeypatch.setattr(publishing, "_credentials", forbidden)
+    monkeypatch.setattr(publishing, "_create_containers", forbidden)
+    monkeypatch.setattr(publishing, "get_provider", lambda mode: object())
+    result = asyncio.run(publishing.run_publication({
+        "id": "synthetic-publication", "content_item_id": "synthetic-item",
+        "mode": "mock", "approval_id": "synthetic-worker-approval",
+    }))
+    assert result["state"] == "cancelled"
