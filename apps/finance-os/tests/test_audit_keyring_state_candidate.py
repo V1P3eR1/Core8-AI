@@ -66,7 +66,7 @@ class AuditKeyringStateCandidateTests(unittest.TestCase):
 
     def test_reject_payload_tampering_wrong_mac_or_key_substitution(self):
         for args in (
-            {"blob": self.old_blob[:-1] + b" "},
+            {"blob": self.old_blob.replace(b"audit_old", b"audit_bad")},
             {"signing_key": b"wrong-mac-key-value-with-at-least-32bytes"},
             {"trusted_key_material": {OLD.kid: NEW.secret}},
             {"trusted_key_material": {OLD.kid: OLD.secret, NEW.kid: NEW.secret}},
