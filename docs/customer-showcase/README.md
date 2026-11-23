@@ -24,5 +24,9 @@ Do not import them into a publishing service as approved jobs.
 ## Review status
 Content is derived from the existing demo and the reviewed scope in PR #26.
 HTML structure, panel count, local-link targets and CSV shape checked locally.
+Node.js offline receptionist and showcase contract tests are automated by
+`.github/workflows/customer-demos-ci.yml` on review branches. The CI covers
+bilingual structure, relative links, CSP/remote-resource restrictions and
+unpublished DRAFT calendar data, but it does NOT execute Playwright.
 Visual rendering, mobile/RTL browser acceptance, video production and owner
 approval remain outstanding. No public deployment or social publishing.
