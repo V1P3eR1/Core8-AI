@@ -60,3 +60,7 @@ Added `signed_intake_demo.py` and `test_signed_intake_demo.py` (11 cases). The d
 ## Credential rotation policy fixture (2026-11-23)
 
 Added `credential_rotation_demo.py` with nine tests: active/current secret, bounded previous-key grace period, expiry, unknown key, inactive credential, old timestamp, tampering and malformed grace period. **This is a standalone policy fixture and is not wired into `signed_intake_demo.py` or `webhook_receipt_demo.py` yet.** Actual secret persistence, audit logging, rotation scheduling, per-provider signature semantics and emergency revocation remain unimplemented. The previous key must be removed after the grace period; never accept a previous key indefinitely.
+
+## Rotated credentials in atomic webhook intake (2026-11-23)
+
+Wired `verify_rotating_credential` into the offline `webhook_receipt_demo.py` before any database mutation. Added six integration tests for old/new key acceptance, expiry, rejection without consuming a receipt, and replay rejection across different valid signatures. Expired request timestamps remain explicit failures. Still **offline-only**; no production credential vault, audit trail or live HTTP endpoint.
