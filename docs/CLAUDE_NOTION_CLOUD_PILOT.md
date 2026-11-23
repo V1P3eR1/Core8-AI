@@ -80,3 +80,16 @@ Continue static and hosted offline checks, review-only PR updates and evidence c
 - [Secret scan #248](https://github.com/V1P3eR1/Core8-AI/actions/runs/45020444207): **PASS**. Latest PR branch commit `73a6ab1` adds independent-process contention coverage; an addressed review thread was resolved.
 - **Current Notion connector limitation:** A later access probe from this ChatGPT session returned `link_id must identify an eligible linked account` for both previously used connection identifiers. This is a session connector eligibility error, **not** proof that the Notion page was deleted, that a different chat cannot access it, or that the GitHub-hosted bridge is broken. Avoid instructing the owner to repeat connection changes solely on this evidence. No Notion writes were attempted.
 - **Next executable scope without owner action:** keep PR review-only, run offline CI, inspect logs and resolve code-review findings. Live Notion write, paid Claude execution, main merge and deployment remain separately gated.
+
+## Notion connector incident triage — 2026-11-23
+
+**Observed:** `notion_get_self({})`, `fetch(LEV OS page ID)`, and `search('LEV OS')` all fail with the identical error `link_id must identify an eligible linked account`, before any page response. Previous personal and business link identifiers also failed. This points to ChatGPT-side linked-account eligibility/routing, **not** a proven Notion page ACL, deletion, token failure in GitHub Actions, or bridge code defect. No writes or account changes were made.
+
+**Separate fault domains and recovery:**
+
+1. **ChatGPT connector routing:** First use `notion_get_self({})` to establish the current account. If it returns the eligibility error, stop page-level retries; they cannot establish page permissions. Escalate connector eligibility to the integration/provider layer with the exact error and timestamp, without publishing account identifiers or credentials. Other chats having worked previously does not establish this session's eligibility.
+2. **Notion workspace authorization:** Only after identity succeeds, fetch the target page by its exact ID and inspect workspace/parent. An actual `object_not_found` at that point may be an ACL or workspace mismatch; do not conflate it with connector eligibility.
+3. **GitHub-hosted bridge:** Independently verify `core8-sync` environment and `NOTION_TOKEN` presence (never values), the configured data-source ID, and a **manual dry-run**. ChatGPT's Notion connection does not supply GitHub Actions secrets. Do not enable `CORE8_SYNC_ENABLED` for diagnostics because cron runs apply mode.
+4. **Proof of recovery:** identity succeeds; target page fetch succeeds; approved public-only queue schema is readable; dry-run produces zero writes; then separately approved fictional-item apply is audited. Mark each separately PASS/FAIL/UNKNOWN.
+
+**Current recovery state:** ChatGPT connector routing FAIL; page-level access UNKNOWN; GitHub Actions live Notion credential readiness UNKNOWN; hosted offline contract tests PASS. No user reconnection requested on the basis of this error alone.
