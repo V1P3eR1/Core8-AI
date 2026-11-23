@@ -83,6 +83,9 @@ def summarize_pr(pr, checks, number):
     for c in checks["check_runs"]:
         if not isinstance(c, dict) or not isinstance(c.get("name"), str):
             raise SnapshotBlocked("invalid_check")
+        check_sha = c.get("head_sha")
+        if check_sha is not None and check_sha != sha:
+            raise SnapshotBlocked("check_head_sha_mismatch")
         name = c["name"]
         if name in records:  # Duplicate latest-name ambiguity must not falsely turn green.
             raise SnapshotBlocked("duplicate_check_names")
@@ -118,6 +121,9 @@ def summarize_pr(pr, checks, number):
     merged = pr.get("merged_at") is not None
     if merged and state != "closed":
         raise SnapshotBlocked("inconsistent_merge_state")
+    # Historical green checks are not a readiness signal on closed PRs.
+    if state == "closed":
+        check_state = "historical_only"
     return {
         "number": number, "url": f"https://github.com/{REPO}/pull/{number}",
         "head_sha": sha, "base_ref": base.get("ref") if isinstance(base.get("ref"), str) else None,
