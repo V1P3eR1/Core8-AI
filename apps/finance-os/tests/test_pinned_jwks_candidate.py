@@ -97,6 +97,32 @@ class PinnedJwksCandidateTests(unittest.TestCase):
         with self.assertRaises(FinanceAccessDenied):
             self.registry.replace({"keys": [self.old]}, generation=2, retire=["first"])
 
+    def test_preflight_does_not_change_generation_or_tombstones(self):
+        before = self.registry.snapshot()
+        self.assertTrue(
+            self.registry.preview_replace(
+                {"keys": [self.old, self.new]}, generation=2
+            )
+        )
+        self.assertEqual(self.registry.snapshot(), before)
+        with self.assertRaises(FinanceAccessDenied):
+            self.registry.preview_replace(
+                {"keys": [self.old]}, generation=2, retire=("first",)
+            )
+        self.assertEqual(self.registry.snapshot(), before)
+        self.assertEqual(
+            self.registry.replace(
+                {"keys": [self.old, self.new]}, generation=2
+            ), 2
+        )
+        self.registry.replace({"keys": [self.new]}, generation=3)
+        retired_state = self.registry.snapshot()
+        with self.assertRaises(FinanceAccessDenied):
+            self.registry.preview_replace(
+                {"keys": [self.old, self.new]}, generation=4
+            )
+        self.assertEqual(self.registry.snapshot(), retired_state)
+
     def test_unknown_or_stale_approval_input_denied(self):
         for generation in (0, -1, True, "2", 1):
             with self.subTest(generation=generation):
