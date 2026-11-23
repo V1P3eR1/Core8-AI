@@ -1,5 +1,7 @@
 """Unit tests for synthetic, locally pinned audit HMAC rotation."""
 import sqlite3
+import concurrent.futures
+import threading
 import sys
 import tempfile
 import unittest
@@ -101,6 +103,36 @@ class AuditRotationCandidateTests(unittest.TestCase):
                 with self.assertRaises(FinanceAccessDenied):
                     self.receiver_keys.rotate(**args)
                 self.assertEqual(self.receiver_keys.generation, 1)
+
+    def test_competing_rotations_one_generation_wins(self):
+        ring = AuditKeyringCandidate(active=OLD)
+        barrier = threading.Barrier(2)
+        def attempt(candidate):
+            barrier.wait(timeout=10)
+            try:
+                ring.rotate(expected_generation=1, new_active=candidate,
+                            retain=(OLD.kid,))
+                return "committed"
+            except FinanceAccessDenied:
+                return "stale"
+        with concurrent.futures.ThreadPoolExecutor(max_workers=2) as pool:
+            results = list(pool.map(attempt, (NEW, THIRD)))
+        self.assertCountEqual(results, ["committed", "stale"])
+        self.assertEqual(ring.generation, 2)
+        self.assertIn(ring.active_kid, (NEW.kid, THIRD.kid))
+
+    def test_parallel_signing_returns_consistent_key_ids_and_tags(self):
+        ring = AuditKeyringCandidate(active=OLD)
+        def perform(_):
+            return ring.sign(namespace=self.namespace, event_id=self.event,
+                             payload=self.payload)
+        with concurrent.futures.ThreadPoolExecutor(max_workers=6) as pool:
+            signed = list(pool.map(perform, range(30)))
+        for kid, sig in signed:
+            self.assertEqual(kid, OLD.kid)
+            ring.verify(namespace=self.namespace, event_id=self.event,
+                        payload=self.payload, kid=kid, signature=sig)
+        self.assertEqual(ring.generation, 1)
 
     def test_cross_namespace_and_signature_substitution_denied(self):
         kid, sig = self.sender_keys.sign(
