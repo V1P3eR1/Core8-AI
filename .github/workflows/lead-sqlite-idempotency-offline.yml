@@ -20,4 +20,4 @@ jobs:
         with:
           python-version: '3.12'
       - name: Disposable SQLite unit and concurrency tests
-        run: python -m unittest discover -s contracts/lead-v1 -p 'test_sqlite_*.py' -v
+        run: python -m unittest discover -s contracts/lead-v1 -p 'test_*.py' -v
