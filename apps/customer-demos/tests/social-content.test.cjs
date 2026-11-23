@@ -7,7 +7,33 @@ const path = require('node:path');
 const root = path.resolve(__dirname, '..', 'social-content');
 const csv = fs.readFileSync(path.join(root, 'calendar.csv'), 'utf8');
 const storyboard = fs.readFileSync(path.join(root, 'README.md'), 'utf8');
-const rows = csv.trimEnd().split(/\r?\n/).map(line => line.split(','));
+// Parse RFC 4180-style quoted fields, commas and escaped quotes without a dependency.
+function parseCsv(input) {
+  const rows = [];
+  let row = [], field = '', quoted = false;
+  for (let i = 0; i < input.length; i++) {
+    const ch = input[i];
+    if (quoted) {
+      if (ch === '"' && input[i + 1] === '"') { field += '"'; i++; }
+      else if (ch === '"') quoted = false;
+      else field += ch;
+    } else if (ch === '"') {
+      assert.equal(field, '', 'quote must begin a CSV field');
+      quoted = true;
+    } else if (ch === ',') {
+      row.push(field); field = '';
+    } else if (ch === '\n' || ch === '\r') {
+      if (ch === '\r' && input[i + 1] === '\n') i++;
+      row.push(field); rows.push(row); row = []; field = '';
+    } else {
+      field += ch;
+    }
+  }
+  assert.equal(quoted, false, 'unterminated quoted CSV field');
+  if (row.length || field) { row.push(field); rows.push(row); }
+  return rows;
+}
+const rows = parseCsv(csv);
 const expected = [
   'status', 'platform', 'account_placeholder', 'language', 'content_pillar',
   'draft_title', 'proposed_copy', 'asset_status', 'scheduled_at',
@@ -37,4 +63,14 @@ test('storyboards are marked as proposals and do not claim production assets', (
   assert.match(storyboard, /Educational reel/);
   assert.match(storyboard, /visual not produced/);
   assert.match(storyboard, /No content has been published/);
+});
+
+test('CSV parser supports quoted commas, escaped quotes and embedded newlines', () => {
+  assert.deepEqual(parseCsv('a,b\r\n"hello, world","say ""hi"""\r\n'), [
+    ['a', 'b'], ['hello, world', 'say "hi"']
+  ]);
+  assert.deepEqual(parseCsv('a,b\n"line 1\nline 2",ok\n'), [
+    ['a', 'b'], ['line 1\nline 2', 'ok']
+  ]);
+  assert.throws(() => parseCsv('a,"unclosed'), /unterminated/);
 });
