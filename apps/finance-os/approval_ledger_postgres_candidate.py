@@ -7,7 +7,6 @@ Never expose this ledger via a request handler or grant API users SQL writes.
 """
 import re
 
-from psycopg.pq import TransactionStatus
 from key_approval_candidate import IndependentApprovalLedger, StoredKeyApproval
 from tenant_access import FinanceAccessDenied
 
@@ -77,6 +76,7 @@ class PostgresApprovalCandidate(IndependentApprovalLedger):
         # must have committed before the caller can invoke external key CAS.
         # A transaction begun by any caller (including autocommit=True with an
         # outer transaction context) is not safe for this integration boundary.
+        from psycopg.pq import TransactionStatus
         if (self.conn.autocommit is not True or
                 self.conn.info.transaction_status != TransactionStatus.IDLE):
             raise FinanceAccessDenied("Finance key approval denied")
