@@ -22,7 +22,7 @@ class WebhookReceiptTests(unittest.TestCase):
     def receive(self,delivery="D1",raw=None,**kwargs):
         raw=make_body() if raw is None else raw
         args=dict(conn=self.db,delivery_id=delivery,raw_body=raw,timestamp=NOW,
-                  signature_hex=signature(SECRET,NOW,raw,delivery_id=delivery) if delivery and delivery.isascii() else "0"*64,credential_id="key",
+                  signature_hex=signature(SECRET,NOW,raw,delivery_id=delivery) if delivery and delivery.isascii() and delivery.isprintable() else "0"*64,credential_id="key",
                   credential_registry=REGISTRY,now=NOW,lead_id="L1")
         args.update(kwargs)
         return receive_once(**args)
@@ -72,6 +72,9 @@ class WebhookReceiptTests(unittest.TestCase):
         self.assertEqual(self.counts(),(0,0,0))
     def test_non_ascii_delivery_id_denied_before_signature(self):
         self.assertEqual(self.receive(delivery="D-\u2603",signature_hex="0"*64)["reason"],"invalid_delivery_id")
+        self.assertEqual(self.counts(),(0,0,0))
+    def test_control_character_delivery_id_denied_before_signature(self):
+        self.assertEqual(self.receive(delivery="D-\\n",signature_hex="0"*64)["reason"],"invalid_delivery_id")
         self.assertEqual(self.counts(),(0,0,0))
     def test_claimed_tenant_does_not_change_receipt_tenant(self):
         raw=json.dumps({"submission_id":"S1","name":"Synthetic","consent":True,
