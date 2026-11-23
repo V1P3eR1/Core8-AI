@@ -93,5 +93,33 @@ class TenantIntegrityPostgresTests(unittest.TestCase):
         )
 
 
+    def test_tenant_scoped_read_only_aggregate_excludes_other_tenant(self):
+        """One tenant's counts never include another tenant's inbox events."""
+        from tenant_access import VerifiedFinancePrincipal, FinanceAccessDenied
+        from tenant_queries import read_inbox_status_counts
+
+        self.db.execute(
+            """INSERT INTO finance_stripe_event_inbox
+               (event_id, organization_id, event_type, source_object_id, event_created)
+               VALUES (%s, %s, 'invoice.paid', 'in_ci_other', now())""",
+            ("evt_other_" + uuid4().hex, self.tenant_b),
+        )
+        principal_a = VerifiedFinancePrincipal("user_test", self.tenant_a, "viewer")
+        principal_b = VerifiedFinancePrincipal("user_test", self.tenant_b, "viewer")
+        a_counts = read_inbox_status_counts(
+            self.db, principal=principal_a, tenant_id=self.tenant_a
+        )
+        b_counts = read_inbox_status_counts(
+            self.db, principal=principal_b, tenant_id=self.tenant_b
+        )
+        self.assertEqual(a_counts, {"received": 1})
+        self.assertEqual(b_counts, {"received": 1})
+        with self.assertRaises(FinanceAccessDenied):
+            read_inbox_status_counts(
+                self.db, principal=principal_a, tenant_id=self.tenant_b
+            )
+
+
+
 if __name__ == "__main__":
     unittest.main()
