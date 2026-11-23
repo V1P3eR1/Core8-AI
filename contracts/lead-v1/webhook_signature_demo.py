@@ -17,7 +17,7 @@ def signature(secret, timestamp, body, *, delivery_id=None):
     if delivery_id is None:
         data = str(timestamp).encode("ascii") + b"." + body
     else:
-        if not isinstance(delivery_id, str) or not (1 <= len(delivery_id) <= 256) or not delivery_id.isascii():
+        if not isinstance(delivery_id, str) or not (1 <= len(delivery_id) <= 256) or not delivery_id.isascii() or not delivery_id.isprintable():
             raise ValueError("invalid_delivery_id")
         # v2: explicit domain separator and length-prefixed delivery identity.
         identity = delivery_id.encode("ascii")
