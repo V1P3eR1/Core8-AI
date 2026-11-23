@@ -139,6 +139,129 @@ class AuditKeyringStorePostgresTests(unittest.TestCase):
         with self.assertRaises(FinanceAccessDenied):
             self.restore(2)
 
+    def test_external_floor_coordinator_success_and_stale_signed_restore(self):
+        from audit_external_floor_candidate import (
+            rotate_audit_with_floor, recover_audit_with_floor,
+        )
+        from external_floor_candidate import IndependentGenerationFloor
+        class FakeFloor(IndependentGenerationFloor):
+            version = 1
+            def read(self, namespace):
+                return self.version
+            def compare_and_advance(self, namespace, expected_generation, next_generation):
+                if self.version != expected_generation:
+                    return False
+                self.version = next_generation
+                return True
+        floor = FakeFloor()
+        with psycopg.connect(self.dsn, autocommit=True) as db:
+            old_row = db.execute(
+                "SELECT generation, signed_snapshot FROM finance_audit_keyring_store_candidate WHERE namespace=%s",
+                (self.namespace,),
+            ).fetchone()
+            proposed = recover_audit_with_floor(
+                db, namespace=self.namespace, floor=floor,
+                signing_key=MAC, trusted_key_material=MATERIAL,
+            )
+            proposed.rotate(expected_generation=1, new_active=NEW)
+            self.assertEqual(rotate_audit_with_floor(
+                db, namespace=self.namespace, floor=floor,
+                signing_key=MAC, trusted_key_material=MATERIAL,
+                expected_generation=1, new_registry=proposed,
+            ), 2)
+            self.assertEqual(floor.version, 2)
+            self.assertEqual(recover_audit_with_floor(
+                db, namespace=self.namespace, floor=floor,
+                signing_key=MAC, trusted_key_material=MATERIAL,
+            ).active_kid, NEW.kid)
+            db.execute(
+                "UPDATE finance_audit_keyring_store_candidate SET generation=%s,signed_snapshot=%s WHERE namespace=%s",
+                (old_row[0], old_row[1], self.namespace),
+            )
+            with self.assertRaises(FinanceAccessDenied):
+                recover_audit_with_floor(
+                    db, namespace=self.namespace, floor=floor,
+                    signing_key=MAC, trusted_key_material=MATERIAL,
+                )
+
+    def test_floor_cas_failure_and_invalid_proposal_do_not_write(self):
+        from audit_external_floor_candidate import rotate_audit_with_floor
+        from external_floor_candidate import IndependentGenerationFloor
+        class FakeFloor(IndependentGenerationFloor):
+            version = 1
+            calls = 0
+            def read(self, namespace):
+                return self.version
+            def compare_and_advance(self, namespace, expected_generation, next_generation):
+                self.calls += 1
+                return False
+        floor = FakeFloor()
+        with psycopg.connect(self.dsn, autocommit=True) as db:
+            invalid = AuditKeyringCandidate(active=NEW, generation=2)
+            with self.assertRaises(FinanceAccessDenied):
+                rotate_audit_with_floor(
+                    db, namespace=self.namespace, floor=floor,
+                    signing_key=MAC, trusted_key_material=MATERIAL,
+                    expected_generation=1, new_registry=invalid,
+                )
+            self.assertEqual(floor.calls, 0)
+            valid = AuditKeyringCandidate(
+                active=NEW, retired=(OLD.kid,), generation=2,
+            )
+            with self.assertRaises(FinanceAccessDenied):
+                rotate_audit_with_floor(
+                    db, namespace=self.namespace, floor=floor,
+                    signing_key=MAC, trusted_key_material=MATERIAL,
+                    expected_generation=1, new_registry=valid,
+                )
+            self.assertEqual(floor.calls, 1)
+            self.assertEqual(floor.version, 1)
+            self.assertEqual(db.execute(
+                "SELECT generation FROM finance_audit_keyring_store_candidate WHERE namespace=%s",
+                (self.namespace,),
+            ).fetchone()[0], 1)
+
+    def test_floor_advanced_but_database_failure_stays_fail_closed(self):
+        from audit_external_floor_candidate import (
+            rotate_audit_with_floor, recover_audit_with_floor,
+        )
+        from external_floor_candidate import IndependentGenerationFloor
+        class FakeFloor(IndependentGenerationFloor):
+            version = 1
+            def read(self, namespace):
+                return self.version
+            def compare_and_advance(self, namespace, expected_generation, next_generation):
+                if self.version != expected_generation:
+                    return False
+                self.version = next_generation
+                return True
+        floor = FakeFloor()
+        with psycopg.connect(self.dsn, autocommit=True) as db:
+            next_ring = self.restore(1)
+            next_ring.rotate(expected_generation=1, new_active=NEW)
+            db.execute(
+                "ALTER TABLE finance_audit_keyring_store_candidate ADD CONSTRAINT ci_reject_next CHECK (generation=1) NOT VALID"
+            )
+            try:
+                with self.assertRaises(psycopg.errors.CheckViolation):
+                    rotate_audit_with_floor(
+                        db, namespace=self.namespace, floor=floor,
+                        signing_key=MAC, trusted_key_material=MATERIAL,
+                        expected_generation=1, new_registry=next_ring,
+                    )
+            finally:
+                db.execute("ALTER TABLE finance_audit_keyring_store_candidate DROP CONSTRAINT ci_reject_next")
+            self.assertEqual(floor.version, 2)
+            self.assertEqual(db.execute(
+                "SELECT generation FROM finance_audit_keyring_store_candidate WHERE namespace=%s",
+                (self.namespace,),
+            ).fetchone()[0], 1)
+            with self.assertRaises(FinanceAccessDenied):
+                recover_audit_with_floor(
+                    db, namespace=self.namespace, floor=floor,
+                    signing_key=MAC, trusted_key_material=MATERIAL,
+                )
+
     def test_invalid_transition_and_reused_key_material_fail_closed(self):
         ring = self.restore(1)
         ring.rotate(expected_generation=1, new_active=NEW)
