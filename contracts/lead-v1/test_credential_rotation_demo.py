@@ -30,7 +30,7 @@ class RotationTests(unittest.TestCase):
     def test_inactive_credential_denied(self):
         self.assertEqual(self.check(NEW,self.credential(active=False))["reason"],"inactive_credential")
     def test_expired_signed_message_denied(self):
-        self.assertEqual(self.check(NEW,now=NOW+301)["reason"],"signature_mismatch")
+        self.assertEqual(self.check(NEW,now=NOW+301)["reason"],"outside_replay_window")
     def test_tampered_message_denied(self):
         r=verify_rotating_credential(self.credential(),NOW,BODY+b"x",
                                      signature(NEW,NOW,BODY),now=NOW)
