@@ -147,6 +147,24 @@ python tools/orchestration/private_dashboard.py private-counts.json github-healt
 
 The input files and resulting HTML must remain in an access-controlled private location, **not** under GitHub repository paths or CI artifact uploads. This is an offline operator-run pipeline, **not** an authenticated multi-user SaaS private dashboard or an auto-refreshing sync. A future hosted version requires OIDC/RBAC, server-side tenant boundaries, scoped secrets, durable audit, dedicated data retention policy and read-only service-to-service credentials. Do not enable Notion-to-GitHub exports or agent actions based solely on these aggregate snapshots.
 
+### Owner-only private vault guard (November 23, 2026)
+
+The offline private HTML generator now uses `private_storage.py`: it **refuses** a relative output path, any destination inside a Git checkout, symlinked input/output paths, output directories with group/world permissions, overwriting an existing HTML file, or execution within GitHub Actions. Private Notion aggregate JSON must be read from a pre-existing owner-only directory (e.g. permission `0700`), and the output HTML is created exclusively with permission `0600`. Tests cover accidental Git publishing, symlink escapes, directory permissions and overwrite prevention.
+
+Example on an owner-controlled Unix-like private machine, **outside any Git checkout**:
+
+```sh
+mkdir -p "$HOME/.core8-private/reports"
+chmod 700 "$HOME/.core8-private/reports"
+# Save sanitized, permission-controlled private-counts.json in that directory first.
+python tools/orchestration/private_dashboard.py \
+  "$HOME/.core8-private/reports/private-counts.json" \
+  "$HOME/.core8-private/reports/github-health.json" \
+  "$HOME/.core8-private/reports/dashboard-$(date +%Y%m%d-%H%M%S).html"
+```
+
+Do not store Notion OAuth tokens, task descriptions, or any personal LEV OS data in this repository. This is *local file protection*, not browser authentication, cloud deployment, end-to-end encryption or a working multi-user service.
+
 ### Safe activation checklist
 
 1. Inspect this PR diff and successful `Core8 development loop (read-only)` CI, security review, codeowners and actions-policy compatibility.
