@@ -22,7 +22,7 @@ class WebhookReceiptTests(unittest.TestCase):
     def receive(self,delivery="D1",raw=None,**kwargs):
         raw=make_body() if raw is None else raw
         args=dict(conn=self.db,delivery_id=delivery,raw_body=raw,timestamp=NOW,
-                  signature_hex=signature(SECRET,NOW,raw,delivery_id=delivery),credential_id="key",
+                  signature_hex=signature(SECRET,NOW,raw,delivery_id=delivery) if delivery else "0"*64,credential_id="key",
                   credential_registry=REGISTRY,now=NOW,lead_id="L1")
         args.update(kwargs)
         return receive_once(**args)
