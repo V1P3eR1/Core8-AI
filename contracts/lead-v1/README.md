@@ -14,3 +14,15 @@ The CLI uses only fictional, hard-coded data. It demonstrates a parsed Lead Tria
 Expected output fields: `adapter: PASS`, `contract: PASS`, `cross_tenant_rejected: true`, `simulated_only: true`, `approved: false`, `side_effects: NONE`.
 
 Contract proposal: [LEAD_INTEROPERABILITY_CONTRACT_DRAFT.md](../../docs/LEAD_INTEROPERABILITY_CONTRACT_DRAFT.md).
+
+## Simulation-only workflow review
+
+`transition-preview.cjs` implements a **pure demonstration** of allowed status transitions. `needs_review -> approved` requires a fictional reviewer role, verified source, explicit consent, matching trusted tenant context and `simulationOnly: true`. Rejection and return to review are modeled, but `sent` is never a permitted transition. The function cannot authenticate a user and **must not** be wired to a production endpoint.
+
+Run all regression tests:
+
+```sh
+node --test contracts/lead-v1/*.test.cjs
+```
+
+The browser UI uses the same structural validator as Node.js, but its scenario selection and synthetic context are not security controls. Actual tenant authorization, identity verification, consent audit and sending must be implemented on a trusted server with separate review.
