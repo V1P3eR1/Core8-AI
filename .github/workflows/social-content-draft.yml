@@ -1,0 +1,23 @@
+name: social-content-draft-contract
+
+on:
+  pull_request:
+    paths:
+      - "apps/customer-demos/social-content/**"
+      - "apps/customer-demos/tests/social-content.test.cjs"
+      - ".github/workflows/social-content-draft.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  draft-contract:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Validate two mock-only unpublished drafts and storyboards
+        run: node --test apps/customer-demos/tests/social-content.test.cjs

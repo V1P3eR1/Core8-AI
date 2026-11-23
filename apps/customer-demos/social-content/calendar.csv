@@ -1,0 +1,3 @@
+status,platform,account_placeholder,language,content_pillar,draft_title,proposed_copy,asset_status,scheduled_at,approval_status,publication_status
+DRAFT,INSTAGRAM_TBD,ACCOUNT_NOT_CONNECTED,he,ai_receptionist,איך עובד מענה ראשוני חכם?,הדגמה של תהליך קבלת פנייה וסיווג ראשוני בעסק. אין כאן לקוח אמיתי או חיבור למערכות חיות.,STORYBOARD_ONLY,TBD,NOT_APPROVED,NOT_PUBLISHED
+DRAFT,LINKEDIN_TBD,ACCOUNT_NOT_CONNECTED,en,human_handoff,Why human handoff matters,An illustrative AI receptionist workflow can prepare a request for human review. This is a simulation and does not book appointments or send messages.,STORYBOARD_ONLY,TBD,NOT_APPROVED,NOT_PUBLISHED
