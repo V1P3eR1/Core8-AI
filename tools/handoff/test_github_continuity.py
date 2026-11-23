@@ -42,8 +42,6 @@ class ContinuityTests(unittest.TestCase):
             calls.append(path)
             if path.startswith("/pulls/"):
                 return fake_pr(int(path.split("/")[-1]))
-            number = next((n for n in sum((list(v) for v in CHAINS.values()), [])
-                           if False), None)
             # A workflow snapshot must never need any task/approval API.
             return fake_runs()
         snapshot = make_snapshot(fetch, checked_at="2026-11-23T09:00:00+00:00")
