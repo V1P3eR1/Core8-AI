@@ -14,7 +14,7 @@ python tools/handoff/github_continuity.py --format json
 python -m unittest discover -s tools/handoff -p 'test_*.py' -v
 ```
 
-`GITHUB_TOKEN` may be passed through the environment for authenticated **GET-only** calls. A public repository can be queried without a token, subject to low API rate limits. Requests refuse HTTP redirects. Unexpected response formats, incomplete check-run inventories, ambiguous duplicate check names, missing check runs and foreign PR heads fail closed or are marked not green.
+`GITHUB_TOKEN` may be passed through the environment for authenticated **GET-only** calls. A public repository can be queried without a token, subject to low API rate limits. Requests refuse HTTP redirects. Unexpected response formats, incomplete check-run inventories, ambiguous duplicate check names, missing check runs and foreign PR heads fail closed or are marked not green. Every returned check run must identify the exact PR head SHA and the GitHub Actions app; unknown check providers and missing provenance block the snapshot. Closed or merged PRs show `historical_only`, never a current green readiness signal.
 
 The review-only workflow `.github/workflows/github-continuity.yml` is scheduled daily and can also be triggered manually **only after** it is separately reviewed and merged. Until then it is a draft. It uses read-only `contents`, `pull-requests`, `checks` permissions and writes a GitHub Actions run summary, not any repository contents, issues, Notion pages, approvals or customer records. Existing independent hourly monitoring is unaffected.
 
