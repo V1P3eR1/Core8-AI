@@ -148,6 +148,36 @@ class ApprovalLedgerPostgresTests(unittest.TestCase):
         self.assertEqual(self.audit_count(), 0)
         self.assertTrue(self.consume())
 
+    def test_unprivileged_database_role_cannot_read_or_modify_approvals(self):
+        # The disposable CI administrator may create a synthetic NOLOGIN
+        # role, but the role itself receives no approval or audit grants.
+        from psycopg import sql
+        role = "ci_approval_denied_" + uuid4().hex[:12]
+        with psycopg.connect(self.dsn, autocommit=True) as db:
+            db.execute(sql.SQL("CREATE ROLE {} NOLOGIN NOSUPERUSER NOBYPASSRLS").format(
+                sql.Identifier(role)
+            ))
+            try:
+                attempts = [
+                    ("SELECT approval_id FROM finance_key_approval_candidate", ()),
+                    ("UPDATE finance_key_approval_candidate SET consumed_at=now() WHERE approval_id=%s",
+                     (self.approval.approval_id,)),
+                    ("INSERT INTO finance_key_approval_audit_candidate (approval_id, action) VALUES (%s, 'consumed')",
+                     (self.approval.approval_id,)),
+                ]
+                for statement, args in attempts:
+                    with self.subTest(statement=statement):
+                        with self.assertRaises(psycopg.errors.InsufficientPrivilege):
+                            with db.transaction():
+                                db.execute(sql.SQL("SET LOCAL ROLE {}").format(
+                                    sql.Identifier(role)
+                                ))
+                                db.execute(statement, args)
+            finally:
+                db.execute(sql.SQL("DROP ROLE {}").format(sql.Identifier(role)))
+        self.assertEqual(self.audit_count(), 0)
+        self.assertTrue(self.consume())
+
     def test_provisioning_cannot_overwrite_existing_approval(self):
         with psycopg.connect(self.dsn, autocommit=True) as db:
             with self.assertRaises(FinanceAccessDenied):
