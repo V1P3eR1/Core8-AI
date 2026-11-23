@@ -70,6 +70,40 @@ class OidcCandidateTests(unittest.TestCase):
                 with self.assertRaises(FinanceAccessDenied):
                     self.verify(token)
 
+    def test_verified_token_still_requires_active_tenant_membership(self):
+        from membership_candidate import resolve_finance_membership
+        from tenant_access import require_finance_permission
+
+        class FakeMembershipDB:
+            def __init__(self, role, enabled):
+                self.role, self.enabled = role, enabled
+                self.params = None
+
+            def execute(self, sql, params):
+                self.params = params
+                return self
+
+            def fetchall(self):
+                return [(self.role, self.enabled)]
+
+        subject = self.verify(self.signed())
+        inactive = FakeMembershipDB("operator", False)
+        with self.assertRaises(FinanceAccessDenied):
+            resolve_finance_membership(inactive, subject=subject,
+                                       tenant_id="tenant_alpha")
+        active = FakeMembershipDB("viewer", True)
+        principal = resolve_finance_membership(active, subject=subject,
+                                                tenant_id="tenant_alpha")
+        self.assertEqual(active.params, ("sub_test_123", "tenant_alpha"))
+        require_finance_permission(principal, tenant_id="tenant_alpha",
+                                   action="finance:read")
+        with self.assertRaises(FinanceAccessDenied):
+            require_finance_permission(principal, tenant_id="tenant_beta",
+                                       action="finance:read")
+        with self.assertRaises(FinanceAccessDenied):
+            require_finance_permission(principal, tenant_id="tenant_alpha",
+                                       action="finance:operate")
+
     def test_reject_untrusted_header_key_urls_and_key_mismatch(self):
         for headers in ({"jku":"https://evil.example.test/key"},
                         {"x5u":"https://evil.example.test/cert"},
