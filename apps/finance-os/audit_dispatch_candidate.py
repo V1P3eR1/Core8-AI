@@ -14,7 +14,7 @@ from uuid import uuid4
 
 from tenant_access import FinanceAccessDenied
 
-_NAMESPACE = re.compile(r'^[a-z][a-z0-9_-]{2,63}
+_NAMESPACE = re.compile(r"^[a-z][a-z0-9_-]{2,63}$")
 
 @dataclass(frozen=True)
 class ClaimedAuditEvent:
