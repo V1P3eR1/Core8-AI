@@ -52,6 +52,15 @@ test('strictly offline HTML with no script, forms, trackers or remote assets', (
   }
 });
 
+test('print layout keeps pale text off white pages', () => {
+  const print = html.slice(html.indexOf('@media print'));
+  assert.match(print, /@page\s*\{margin:16mm\}/);
+  assert.match(print, /body\{background:white;color:#111/);
+  assert.match(print, /header p[^}]*color:#222/);
+  assert.match(print, /\.en[^}]*color:#222/);
+  assert.match(print, /nav\{display:none\}/);
+});
+
 test('calendar contains exactly two unscheduled DRAFT items', () => {
   const rows = csv.trim().split(/\r?\n/).map((line) => line.split(','));
   assert.deepEqual(rows[0], ['id', 'asset', 'language', 'status', 'publish_at', 'approval']);
