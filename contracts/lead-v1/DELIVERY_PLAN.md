@@ -9,7 +9,7 @@
 | ID | Deliverable | Dependency | Acceptance / exit gate | State |
 | --- | --- | --- | --- | --- |
 | P0 | Canonical lead schema and offline validator | none | Node tests, browser parity and tenant mismatch regression pass | Implemented in draft; CI passed on earlier commit |
-| P1 | Lead Triage offline preview adapter | P0 | unsigned/verified inputs, invalid consent, immutable input tests | Implemented in draft; consent behavior needs reconciliation |
+| P1 | Lead Triage offline preview adapter | P0 | unsigned/verified inputs, invalid consent, immutable input tests | Implemented in draft; invalid consent now rejected; awaiting latest CI |
 | P2 | Hebrew RTL browser sandbox | P0 | no network, no storage, no unsafe DOM API; four synthetic scenarios | Implemented in draft |
 | P3 | Review state machine | P0 | reviewer, source, consent and tenant gates; no simulated sending | Implemented in draft |
 | P4 | Tenant-scoped dedup preview | P0 | duplicate and cross-tenant collision tests | Implemented in draft |
@@ -22,7 +22,7 @@
 
 ## Immediate implementation sequence
 
-1. **P1 correctness:** reject malformed consent in the adapter rather than silently converting to false; add regression.
+1. **P1 correctness:** completed in draft: malformed consent now fails closed; verify latest CI.
 2. **P0 robustness:** extend malformed-input tests, ensure validator does not throw for unexpected shapes.
 3. **P5 verification:** add SQL contract tests that statically verify uniqueness and transactional design; this is *not* a substitute for real DB tests.
 4. **P6 preparation:** inspect current FastAPI/PostgreSQL schema and migrations before creating a compatible, isolated test-only implementation.
