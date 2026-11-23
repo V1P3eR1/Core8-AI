@@ -177,7 +177,7 @@ class ContractTests(unittest.TestCase):
             'user': {'login': 'github-actions[bot]'},
             'body': f'core8-run {sha} draft '
                     'https://github.com/V1P3eR1/Core8-AI/actions/runs/123 '
-                    'https://github.com/V1P3eR1/Core8-AI/pull/90'}]
+                    'https://github.com/V1P3eR1/Core8-AI/pull/90 ' + 'c' * 40}]
         self.b.sync()
         self.assertEqual(
             self.f.writes[-1][2]['properties']['Status']['select']['name'], 'Review')
@@ -189,7 +189,7 @@ class ContractTests(unittest.TestCase):
             'user': {'login': 'github-actions[bot]'},
             'body': f'core8-run {sha} draft '
                     'https://github.com/V1P3eR1/Core8-AI/actions/runs/123 '
-                    'https://github.com/V1P3eR1/Core8-AI/pull/90'}]
+                    'https://github.com/V1P3eR1/Core8-AI/pull/90 ' + 'c' * 40}]
         self.f.draft_closed = True
         self.b.sync()
         self.assertEqual(
@@ -202,11 +202,35 @@ class ContractTests(unittest.TestCase):
             'user': {'login': 'github-actions[bot]'},
             'body': f'core8-run {sha} draft '
                     'https://github.com/V1P3eR1/Core8-AI/actions/runs/123 '
-                    'https://github.com/V1P3eR1/Core8-AI/pull/90'}]
+                    'https://github.com/V1P3eR1/Core8-AI/pull/90 ' + 'c' * 40}]
         self.b.sync()
         self.assertEqual(
             self.f.writes[-1][2]['properties']['Status']['select']['name'], 'Review')
         self.f.draft_closed = True
+        self.b.sync()
+        self.assertEqual(
+            self.f.writes[-1][2]['properties']['Status']['select']['name'], 'Queued')
+
+    def test_force_pushed_draft_sha_mismatch_blocks_review(self):
+        self.export()
+        sha = digest(payload(self.f.page))
+        self.f.comments = [{
+            'user': {'login': 'github-actions[bot]'},
+            'body': f'core8-run {sha} draft '
+                    'https://github.com/V1P3eR1/Core8-AI/actions/runs/123 '
+                    'https://github.com/V1P3eR1/Core8-AI/pull/90 ' + 'e' * 40}]
+        self.b.sync()
+        self.assertEqual(
+            self.f.writes[-1][2]['properties']['Status']['select']['name'], 'Queued')
+
+    def test_legacy_draft_without_sha_not_trusted(self):
+        self.export()
+        sha = digest(payload(self.f.page))
+        self.f.comments = [{
+            'user': {'login': 'github-actions[bot]'},
+            'body': f'core8-run {sha} draft '
+                    'https://github.com/V1P3eR1/Core8-AI/actions/runs/123 '
+                    'https://github.com/V1P3eR1/Core8-AI/pull/90'}]
         self.b.sync()
         self.assertEqual(
             self.f.writes[-1][2]['properties']['Status']['select']['name'], 'Queued')
@@ -227,7 +251,7 @@ class ContractTests(unittest.TestCase):
         self.f.comments = [{'user': {'login': 'github-actions[bot]'},
                             'body': f'core8-run {sha} review '
                                     'https://github.com/V1P3eR1/Core8-AI/actions/runs/123 '
-                                    'https://github.com/V1P3eR1/Core8-AI/pull/90'}]
+                                    'https://github.com/V1P3eR1/Core8-AI/pull/90 ' + 'c' * 40}]
         self.b.sync()
         self.assertEqual(
             self.f.writes[-1][2]['properties']['Status']['select']['name'], 'Queued')
@@ -342,7 +366,7 @@ class AuditDraftTests(unittest.TestCase):
         body = self.gh.calls[-1][2]['body']
         self.assertEqual(body, 'core8-run ' + 'b' * 64 +
                          ' draft https://github.com/V1P3eR1/Core8-AI/actions/runs/120 '
-                         'https://github.com/V1P3eR1/Core8-AI/pull/90')
+                         'https://github.com/V1P3eR1/Core8-AI/pull/90 ' + 'c' * 40)
 
     def test_synthetic_github_draft_to_notion_status(self):
         # A complete zero-network callback rehearsal: the protected reporter
