@@ -483,9 +483,9 @@ class ScheduleIn(BaseModel):
 async def items_schedule(item_id: str, body: ScheduleIn, payload: dict = Depends(require_jwt)):
     try:
         if body.scheduled_for:
-            # schedule is part of the approval binding: set it, then approve, then queue
-            await content.update_item(item_id, {"scheduled_for": body.scheduled_for}, _actor(payload))
-            await publishing.approve_item(item_id, _actor(payload))
+            # Scheduling must not implicitly create approval. Update the schedule in a
+            # separate draft edit, then explicitly approve that exact content version.
+            raise HTTPException(409, "Update scheduled_for via PATCH /items/{item_id}, then approve and schedule separately")
         pub = await publishing.schedule_item(item_id, _actor(payload))
     except publishing.GateError as e:
         raise HTTPException(400, {"code": e.code, "codes": e.codes, "message": str(e)})

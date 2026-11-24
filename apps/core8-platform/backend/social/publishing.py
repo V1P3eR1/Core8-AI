@@ -171,6 +171,9 @@ async def published_last_24h(account_id: str | None) -> int:
 # ── Approve / schedule (human-triggered) ───────────────────────────────────
 
 async def approve_item(item_id: str, actor: str) -> dict:
+    # Enforce the human-review boundary in the service layer, not only the API.
+    if not actor or actor.startswith("worker:") or actor.startswith("system:"):
+        raise GateError("human_approval_required", "Human reviewer required")
     item = await get_item(item_id)
     if not item:
         raise GateError("not_found", "פריט לא נמצא")
@@ -211,6 +214,11 @@ async def schedule_item(item_id: str, actor: str, scheduled_for_local: str | Non
         raise GateError(failed[0]["code"], "חסימה: " + "; ".join(f"{c['label']}" for c in failed),
                         [c["code"] for c in failed])
     ap = await check_item_approval(await get_item_raw(item_id))
+    # Revalidate the exact approval returned by the second read before queueing.
+    approval = ap.get("approval") or {}
+    actor_id = approval.get("approved_by") or ""
+    if not ap.get("valid") or not approval.get("id") or not actor_id or actor_id.startswith(("worker:", "system:")):
+        raise GateError("human_approval_required", "Valid human approval required")
     key = f"{item_id}:{ap['binding']['binding_hash']}"
     existing = await fetch_one("SELECT * FROM sm_publications WHERE publication_key=?", (key,))
     if existing and existing["state"] not in ("cancelled", "failed"):
@@ -256,32 +264,13 @@ async def set_emergency_pause(active: bool, actor: str) -> dict:
 # ── Automatic mode (worker-triggered) ──────────────────────────────────────
 
 async def auto_schedule_candidates(actor: str = "worker:auto") -> list[dict]:
-    """In automatic mode, approve+queue items in 'needs_review' that pass EVERY auto gate.
-    Items with sensitive flags never pass. Returns the publications created."""
-    pub = await _pub_settings()
-    if pub.get("mode") != "automatic" or pub.get("emergency_pause"):
-        return []
-    out = []
-    for item in await fetch_all("SELECT id FROM sm_content_items WHERE status='needs_review' AND is_demo=0 "
-                                "AND scheduled_for IS NOT NULL ORDER BY scheduled_for"):
-        full = await get_item(item["id"])
-        acct = await connected_account()
-        if not acct:
-            break
-        if full.get("account_id") != acct["ig_user_id"]:
-            continue
-        # approval is created by the system *only* after all auto gates pass
-        pre = await gate_report(full, for_auto=True)
-        blocking = [c["code"] for c in pre["checks"] if not c["ok"] and c["code"] != "approval"]
-        if blocking:
-            continue
-        await create_approval(await get_item_raw(full["id"]), actor)
-        try:
-            out.append(await schedule_item(full["id"], actor))
-        except GateError as e:
-            await audit(actor, "auto_schedule_blocked", "content_item", full["id"], {"code": e.code, "msg": str(e)})
-    return out
+    """Fail closed: workers may not manufacture human approval or queue unapproved content.
 
+    Automatic publishing remains disabled until a separately reviewed and explicit
+    human-approval policy is implemented. Already-approved items are scheduled
+    through the existing explicit schedule endpoint, not this worker.
+    """
+    return []
 
 # ── Worker: claim + run one publication ────────────────────────────────────
 
@@ -322,10 +311,25 @@ async def run_publication(pub: dict, worker_id: str = "worker") -> dict:
     """Execute one claimed publication end-to-end. Returns the final row."""
     pub_id = pub["id"]
     item = await get_item(pub["content_item_id"])
-    provider = get_provider(pub["mode"])
     try:
+        # Historical worker-created approvals are not human consent. Cancel them
+        # before any provider action, including retries of already-claimed rows.
+        if await _is_auto(pub):
+            await _set_state(pub_id, "cancelled", last_error="human_approval_required", error_class="permanent")
+            if item:
+                await set_status(item["id"], "paused", worker_id, "Human approval required")
+            return await fetch_one("SELECT * FROM sm_publications WHERE id=?", (pub_id,))
         if not item:
             raise ProviderError("content item missing", retryable=False)
+        # A publication must execute under its own exact, still-active human approval.
+        # A later approval for the same item must not authorize an older queued row.
+        approval = await check_item_approval(await get_item_raw(item["id"]))
+        active = approval.get("approval") or {}
+        if (not approval.get("valid") or active.get("id") != pub.get("approval_id")
+                or (active.get("approved_by") or "").startswith(("worker:", "system:"))):
+            await _set_state(pub_id, "cancelled", last_error="human_approval_required", error_class="permanent")
+            await set_status(item["id"], "paused", worker_id, "Human approval required for this publication")
+            return await fetch_one("SELECT * FROM sm_publications WHERE id=?", (pub_id,))
         # Re-check every gate at execution time (settings may have changed since queueing).
         report = await gate_report(item, for_auto=await _is_auto(pub))
         failed = [c for c in report["checks"] if not c["ok"]]
@@ -339,6 +343,7 @@ async def run_publication(pub: dict, worker_id: str = "worker") -> dict:
                 await set_status(item["id"], "failed", worker_id, "נכשל בבדיקות לפני פרסום: " + ", ".join(codes))
             return await fetch_one("SELECT * FROM sm_publications WHERE id=?", (pub_id,))
 
+        provider = get_provider(pub["mode"])
         await set_status(item["id"], "publishing", worker_id)
         token, ig_user_id = await _credentials(pub["mode"], item)
 
@@ -383,7 +388,7 @@ async def _is_auto(pub: dict) -> bool:
     if not pub.get("approval_id"):
         return False
     row = await fetch_one("SELECT approved_by FROM sm_approvals WHERE id=?", (pub["approval_id"],))
-    return bool(row and (row["approved_by"] or "").startswith("worker:auto"))
+    return bool(row and (row["approved_by"] or "").startswith(("worker:", "system:")))
 
 
 async def _credentials(mode: str, item: dict) -> tuple[str, str]:
