@@ -369,6 +369,52 @@ class AuditKeyringStorePostgresTests(unittest.TestCase):
                     signing_key=MAC, trusted_key_material=MATERIAL,
                 )
 
+    def test_remote_floor_contract_drives_disposable_postgres_cas(self):
+        from remote_generation_floor_candidate import RemoteGenerationFloorCandidate
+        from audit_external_floor_candidate import (
+            rotate_audit_with_floor, recover_audit_with_floor,
+        )
+        class FakeAuthenticatedService:
+            # In-process protocol fixture, NOT an authenticated remote server.
+            def __init__(self):
+                self.version = 1
+            def exchange(self, *, endpoint, request, timeout_seconds):
+                if request["namespace"] != namespace:
+                    raise ValueError("wrong namespace")
+                if request["operation"] == "read":
+                    return {"namespace": namespace, "generation": self.version,
+                            "status": "ok"}
+                if self.version != request["expected_generation"]:
+                    return {"namespace": namespace, "generation": self.version,
+                            "status": "conflict"}
+                self.version = request["next_generation"]
+                return {"namespace": namespace, "generation": self.version,
+                        "status": "advanced"}
+        namespace = self.namespace
+        service = FakeAuthenticatedService()
+        floor = RemoteGenerationFloorCandidate(
+            endpoint="https://isolated-floor.example/v1/floor",
+            transport=service,
+        )
+        with psycopg.connect(self.dsn, autocommit=True) as db:
+            candidate = recover_audit_with_floor(
+                db, namespace=namespace, floor=floor,
+                signing_key=MAC, trusted_key_material=MATERIAL,
+            )
+            candidate.rotate(expected_generation=1, new_active=NEW)
+            self.assertEqual(
+                rotate_audit_with_floor(
+                    db, namespace=namespace, floor=floor,
+                    signing_key=MAC, trusted_key_material=MATERIAL,
+                    expected_generation=1, new_registry=candidate,
+                ), 2,
+            )
+            self.assertEqual(floor.read(namespace), 2)
+            self.assertEqual(recover_audit_with_floor(
+                db, namespace=namespace, floor=floor,
+                signing_key=MAC, trusted_key_material=MATERIAL,
+            ).active_kid, NEW.kid)
+
     def test_invalid_transition_and_reused_key_material_fail_closed(self):
         ring = self.restore(1)
         ring.rotate(expected_generation=1, new_active=NEW)
