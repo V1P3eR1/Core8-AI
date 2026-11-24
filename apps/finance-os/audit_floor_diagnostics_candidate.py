@@ -26,7 +26,7 @@ def diagnose_audit_keyring(conn, *, floor, namespace, signing_key,
     """Fail closed for unreadable floor; report DB mismatch without mutation.
 
     Statuses: healthy, floor_ahead, database_ahead, snapshot_invalid,
-    missing_database_state. No secrets or snapshot bytes are returned.
+    missing_database_state, indeterminate. No secrets or snapshot bytes are returned.
     Only a human-approved incident workflow may resolve discrepancies.
     """
     if (not isinstance(floor, IndependentGenerationFloor)
@@ -60,4 +60,14 @@ def diagnose_audit_keyring(conn, *, floor, namespace, signing_key,
     except Exception:
         return AuditFloorDiagnosis(namespace, "snapshot_invalid",
                                    generation, db_generation)
+    # A concurrent floor advance invalidates this observation. This is not
+    # a lease or authorization to sign, even when both reads agree.
+    try:
+        observed = floor.read(namespace)
+        if type(observed) is not int or observed < 1:
+            raise ValueError("invalid floor")
+    except Exception:
+        raise FinanceAccessDenied("Finance audit diagnostic denied") from None
+    if observed != generation:
+        return AuditFloorDiagnosis(namespace, "indeterminate", observed, db_generation)
     return AuditFloorDiagnosis(namespace, "healthy", generation, db_generation)
