@@ -215,3 +215,32 @@ def test_approval_service_rejects_nonhuman_actor_before_db(monkeypatch, actor):
     with pytest.raises(publishing.GateError) as exc:
         asyncio.run(publishing.approve_item("synthetic-item", actor))
     assert exc.value.code == "human_approval_required"
+
+
+@pytest.mark.parametrize("approval", [
+    {"valid": False, "approval": None},
+    {"valid": True, "approval": {"id": "a", "approved_by": "worker:auto"}},
+    {"valid": True, "approval": {"id": "a", "approved_by": "system:publisher"}},
+])
+def test_schedule_revalidates_approval_before_queue(monkeypatch, approval):
+    import asyncio
+    from social import publishing
+
+    async def item(item_id):
+        return {"id": item_id, "scheduled_for": "2027-01-01T10:00:00"}
+    async def gates(row):
+        return {"checks": []}
+    async def check(row):
+        return approval
+    async def forbidden(*args, **kwargs):
+        raise AssertionError("invalid approval reached queue insertion")
+
+    monkeypatch.setattr(publishing, "get_item", item)
+    monkeypatch.setattr(publishing, "get_item_raw", item)
+    monkeypatch.setattr(publishing, "gate_report", gates)
+    monkeypatch.setattr(publishing, "check_item_approval", check)
+    monkeypatch.setattr(publishing, "execute", forbidden)
+    monkeypatch.setattr(publishing, "fetch_one", forbidden)
+    with pytest.raises(publishing.GateError) as exc:
+        asyncio.run(publishing.schedule_item("synthetic-item", "admin"))
+    assert exc.value.code == "human_approval_required"
