@@ -415,6 +415,80 @@ class AuditKeyringStorePostgresTests(unittest.TestCase):
                 signing_key=MAC, trusted_key_material=MATERIAL,
             ).active_kid, NEW.kid)
 
+    def test_floor_ahead_recovery_preview_requires_review_without_write(self):
+        from tempfile import TemporaryDirectory
+        from sqlite_generation_floor_candidate import SQLiteGenerationFloorCandidate
+        from audit_keyring_state_candidate import export_audit_keyring_state
+        from audit_recovery_preflight_candidate import preview_floor_ahead_recovery
+        with TemporaryDirectory() as folder:
+            floor = SQLiteGenerationFloorCandidate(
+                path=str(Path(folder) / "floor.sqlite"))
+            floor.initialize_test_store()
+            floor.provision_test_namespace(self.namespace)
+            proposed = self.restore(1)
+            proposed.rotate(expected_generation=1, new_active=NEW,
+                            retain=(OLD.kid,))
+            blob = export_audit_keyring_state(proposed, signing_key=MAC)
+            with psycopg.connect(self.dsn, autocommit=True) as db:
+                before = db.execute(
+                    """SELECT generation, signed_snapshot FROM
+                       finance_audit_keyring_store_candidate WHERE namespace=%s""",
+                    (self.namespace,),
+                ).fetchone()
+                with self.assertRaises(FinanceAccessDenied):
+                    preview_floor_ahead_recovery(
+                        db, floor=floor, namespace=self.namespace,
+                        signing_key=MAC, trusted_key_material=MATERIAL,
+                        proposed_snapshot=blob,
+                    )
+                self.assertTrue(floor.compare_and_advance(self.namespace, 1, 2))
+                plan = preview_floor_ahead_recovery(
+                    db, floor=floor, namespace=self.namespace,
+                    signing_key=MAC, trusted_key_material=MATERIAL,
+                    proposed_snapshot=blob,
+                )
+                self.assertEqual(
+                    (plan.status, plan.database_generation,
+                     plan.floor_generation, plan.operator_review_required),
+                    ("review_required", 1, 2, True),
+                )
+                self.assertEqual(len(plan.candidate_sha256), 64)
+                self.assertEqual(db.execute(
+                    """SELECT generation, signed_snapshot FROM
+                       finance_audit_keyring_store_candidate WHERE namespace=%s""",
+                    (self.namespace,),
+                ).fetchone(), before)
+                self.assertEqual(floor.read(self.namespace), 2)
+                for bad_blob in (
+                    blob.replace(b"store_new", b"store_bad"),
+                    b"not valid signed state",
+                ):
+                    with self.subTest(bad_blob=bad_blob):
+                        with self.assertRaises(FinanceAccessDenied):
+                            preview_floor_ahead_recovery(
+                                db, floor=floor, namespace=self.namespace,
+                                signing_key=MAC, trusted_key_material=MATERIAL,
+                                proposed_snapshot=bad_blob,
+                            )
+                # A valid signed but unrelated keyring is not a valid rotation.
+                from audit_key_rotation_candidate import AuditKeyringCandidate
+                unrelated = AuditKeyringCandidate(active=OTHER, generation=2)
+                unrelated_blob = export_audit_keyring_state(
+                    unrelated, signing_key=MAC)
+                with self.assertRaises(FinanceAccessDenied):
+                    preview_floor_ahead_recovery(
+                        db, floor=floor, namespace=self.namespace,
+                        signing_key=MAC, trusted_key_material=MATERIAL,
+                        proposed_snapshot=unrelated_blob,
+                    )
+                self.assertTrue(floor.compare_and_advance(self.namespace, 2, 3))
+                with self.assertRaises(FinanceAccessDenied):
+                    preview_floor_ahead_recovery(
+                        db, floor=floor, namespace=self.namespace,
+                        signing_key=MAC, trusted_key_material=MATERIAL,
+                        proposed_snapshot=blob,
+                    )
+
     def test_invalid_transition_and_reused_key_material_fail_closed(self):
         ring = self.restore(1)
         ring.rotate(expected_generation=1, new_active=NEW)
