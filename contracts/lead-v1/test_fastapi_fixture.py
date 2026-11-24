@@ -74,6 +74,17 @@ class FastApiFixtureTests(unittest.TestCase):
         raw=json.dumps(payload).encode()
         response=self.send(payload=payload,signature_override=signature(_SECRET,NOW,raw))
         self.assertEqual(response.status_code,401)
+    def test_duplicate_security_header_rejected(self):
+        response=self.client.post("/offline-fixture/intake",content=b"{}",
+            headers=[("x-demo-timestamp",str(NOW)),("x-demo-timestamp",str(NOW))])
+        self.assertEqual(response.status_code,400)
+        self.assertEqual(response.json()["detail"],"duplicate_header")
+        self.assertEqual(self.app.state.fixture_db.execute("SELECT COUNT(*) FROM demo_receipts").fetchone()[0],0)
+    def test_content_length_mismatch_rejected(self):
+        response=self.client.post("/offline-fixture/intake",content=b"{}",
+            headers={"x-demo-timestamp":str(NOW),"content-length":"1"})
+        self.assertEqual(response.status_code,400)
+        self.assertEqual(response.json()["detail"],"content_length_mismatch")
     def test_invalid_timestamp_rejected(self):
         raw=json.dumps({"submission_id":"S1","name":"Synthetic","consent":True}).encode()
         response=self.client.post("/offline-fixture/intake",content=raw,
