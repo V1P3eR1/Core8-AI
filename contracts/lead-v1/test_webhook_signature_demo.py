@@ -28,6 +28,10 @@ class WebhookSignatureTests(unittest.TestCase):
         self.assertEqual(sig.verify(SECRET,NOW,BODY,"not-hex",now=NOW)["reason"],"invalid_signature")
     def test_non_ascii_signature_denied(self):
         self.assertEqual(sig.verify(SECRET,NOW,BODY,chr(233)*64,now=NOW)["reason"],"invalid_signature")
+    def test_noncanonical_signature_denied(self):
+        for malformed in ("g"*64, "A"*64, " "*64):
+            with self.subTest(malformed=malformed):
+                self.assertEqual(sig.verify(SECRET,NOW,BODY,malformed,now=NOW)["reason"],"invalid_signature")
     def test_oversized_body_denied(self):
         self.assertEqual(sig.verify(SECRET,NOW,b"x"*65537,self.signed(),now=NOW)["reason"],"invalid_body")
     def test_invalid_timestamp_denied(self):
