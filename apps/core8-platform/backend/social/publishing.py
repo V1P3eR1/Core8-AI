@@ -214,6 +214,11 @@ async def schedule_item(item_id: str, actor: str, scheduled_for_local: str | Non
         raise GateError(failed[0]["code"], "חסימה: " + "; ".join(f"{c['label']}" for c in failed),
                         [c["code"] for c in failed])
     ap = await check_item_approval(await get_item_raw(item_id))
+    # Revalidate the exact approval returned by the second read before queueing.
+    approval = ap.get("approval") or {}
+    actor_id = approval.get("approved_by") or ""
+    if not ap.get("valid") or not approval.get("id") or not actor_id or actor_id.startswith(("worker:", "system:")):
+        raise GateError("human_approval_required", "Valid human approval required")
     key = f"{item_id}:{ap['binding']['binding_hash']}"
     existing = await fetch_one("SELECT * FROM sm_publications WHERE publication_key=?", (key,))
     if existing and existing["state"] not in ("cancelled", "failed"):
