@@ -38,15 +38,38 @@ def stage_review(*, receipt, expected_record, patch_bytes, now, ledger_path,
         "GIT_CONFIG_SYSTEM": "/dev/null",
         "GIT_TERMINAL_PROMPT": "0",
     }
+    # Disable repo-configured filesystem-monitor hooks before invoking Git:
+    # local .git/config must never gain authority to execute helper commands.
+    safe_git = ["git", "-c", "core.fsmonitor=false",
+                "-c", "core.hooksPath=/dev/null", "--no-optional-locks",
+                "-C", str(checkout)]
     try:
         head = subprocess.run(
-            ["git", "-C", str(checkout), "rev-parse", "HEAD"],
+            [*safe_git, "rev-parse", "HEAD"],
             stdout=subprocess.PIPE, stderr=subprocess.DEVNULL,
             timeout=10, check=False, env=env)
         if head.returncode != 0 or head.stdout.decode("ascii", errors="replace").strip() != trusted_base:
             raise ReviewRejected("checkout_sha_mismatch")
+        # Do not allow a parent checkout or an unexpected subdirectory.
+        # Both can report the same HEAD while changing patch path semantics.
+        worktree = subprocess.run(
+            [*safe_git, "rev-parse", "--show-toplevel"],
+            stdout=subprocess.PIPE, stderr=subprocess.DEVNULL,
+            timeout=10, check=False, env=env)
+        if (worktree.returncode != 0 or
+                Path(os.fsdecode(worktree.stdout).strip()).resolve() != checkout):
+            raise ReviewRejected("checkout_not_git_root")
+        # A matching HEAD alone is insufficient: an untracked or modified
+        # checkout could supply unexpected context to a reviewed patch.
+        cleanliness = subprocess.run(
+            [*safe_git, "status", "--porcelain",
+             "--untracked-files=all", "--ignored"],
+            stdout=subprocess.PIPE, stderr=subprocess.DEVNULL,
+            timeout=10, check=False, env=env)
+        if cleanliness.returncode != 0 or cleanliness.stdout:
+            raise ReviewRejected("checkout_not_clean")
         result = subprocess.run(
-            ["git", "-C", str(checkout), "apply", "--check", "-"],
+            [*safe_git, "apply", "--check", "-"],
             input=patch_bytes, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
             timeout=15, check=False, env=env)
     except (OSError, subprocess.TimeoutExpired) as exc:

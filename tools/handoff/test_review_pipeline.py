@@ -16,9 +16,12 @@ class PipelineTests(unittest.TestCase):
         self.checkout.mkdir()
         subprocess.run(["git", "init", "-q", str(self.checkout)], check=True)
         (self.checkout / "docs").mkdir()
+        (self.checkout / "docs" / "existing.md").write_text("fixture\n")
+        subprocess.run(["git", "-C", str(self.checkout), "add",
+                        "docs/existing.md"], check=True)
         subprocess.run(["git", "-C", str(self.checkout), "-c", "user.name=Core8 Test",
                         "-c", "user.email=core8-test@example.invalid",
-                        "commit", "--allow-empty", "-qm", "initial fixture"], check=True)
+                        "commit", "-qm", "initial fixture"], check=True)
         self.base_sha = subprocess.check_output(
             ["git", "-C", str(self.checkout), "rev-parse", "HEAD"], text=True).strip()
         self.patch = (b"diff --git a/docs/demo.md b/docs/demo.md\n"
@@ -73,7 +76,54 @@ class PipelineTests(unittest.TestCase):
 
     def test_unappliable_patch_blocked_without_reservation(self):
         (self.checkout / "docs" / "demo.md").write_text("already exists")
-        with self.assertRaisesRegex(ReviewRejected, "git_apply_check_failed"):
+        with self.assertRaisesRegex(ReviewRejected, "checkout_not_clean"):
+            self.run_pipeline()
+        self.assertFalse(self.ledger_path.exists())
+
+    def test_untracked_file_blocks_without_reserving(self):
+        (self.checkout / "docs" / "untracked.txt").write_text("unexpected")
+        with self.assertRaisesRegex(ReviewRejected, "checkout_not_clean"):
+            self.run_pipeline()
+        self.assertFalse(self.ledger_path.exists())
+
+    def test_ignored_file_blocks_without_reserving(self):
+        (self.checkout / ".gitignore").write_text("ignored-runtime.txt\n")
+        subprocess.run(["git", "-C", str(self.checkout), "add", ".gitignore"],
+                       check=True)
+        subprocess.run(["git", "-C", str(self.checkout), "-c", "user.name=Core8 Test",
+                        "-c", "user.email=core8-test@example.invalid",
+                        "commit", "-qm", "Add ignore fixture"], check=True)
+        self.base_sha = subprocess.check_output(
+            ["git", "-C", str(self.checkout), "rev-parse", "HEAD"], text=True).strip()
+        self.expected["checkout_sha"] = self.base_sha
+        (self.checkout / "ignored-runtime.txt").write_text("untrusted")
+        with self.assertRaisesRegex(ReviewRejected, "checkout_not_clean"):
+            self.run_pipeline()
+        self.assertFalse(self.ledger_path.exists())
+
+    def test_repository_fsmonitor_helper_not_executed(self):
+        helper = self.base / "local-fsmonitor.sh"
+        marker = self.base / "fsmonitor-ran"
+        helper.write_text("#!/bin/sh\ntouch '" + str(marker) + "'\nexit 0\n")
+        helper.chmod(0o755)
+        subprocess.run(["git", "-C", str(self.checkout), "config",
+                        "core.fsmonitor", str(helper)], check=True)
+        result = self.run_pipeline()
+        self.assertEqual(result["status"], "RESERVED_FOR_REVIEW")
+        self.assertFalse(marker.exists())
+
+    def test_subdirectory_is_not_a_checkout_root(self):
+        directory = self.checkout / "docs"
+        with self.assertRaisesRegex(ReviewRejected, "checkout_not_git_root"):
+            stage_review(
+                receipt=self.receipt, expected_record=self.expected,
+                patch_bytes=self.patch, now=self.now,
+                ledger_path=self.ledger_path, checkout_path=directory)
+        self.assertFalse(self.ledger_path.exists())
+
+    def test_tracked_modification_blocks_without_reserving(self):
+        (self.checkout / "docs" / "existing.md").write_text("modified")
+        with self.assertRaisesRegex(ReviewRejected, "checkout_not_clean"):
             self.run_pipeline()
         self.assertFalse(self.ledger_path.exists())
 
