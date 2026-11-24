@@ -20,6 +20,10 @@ async def intake(request: Request,
                  x_demo_signature: str = Header(default=""),
                  x_demo_delivery_id: str = Header(default=""),
                  x_demo_credential_id: str = Header(default="")):
+    for name in ("x-demo-timestamp", "x-demo-signature", "x-demo-delivery-id",
+                 "x-demo-credential-id", "content-length"):
+        if len(request.headers.getlist(name)) > 1:
+            raise HTTPException(status_code=400, detail="duplicate_header")
     try:
         timestamp = int(x_demo_timestamp)
     except ValueError:
@@ -32,9 +36,11 @@ async def intake(request: Request,
             raise HTTPException(status_code=413, detail="request_too_large")
     body = bytearray()
     async for chunk in request.stream():
-        body.extend(chunk)
-        if len(body) > 65536:
+        if len(body) + len(chunk) > 65536:
             raise HTTPException(status_code=413, detail="request_too_large")
+        body.extend(chunk)
+    if declared_length is not None and len(body) != int(declared_length):
+        raise HTTPException(status_code=400, detail="content_length_mismatch")
     body = bytes(body)
     # One database per application instance for tests. Never shared with prod.
     conn = request.app.state.fixture_db
