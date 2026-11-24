@@ -91,7 +91,7 @@ class RemoteFloorContractTests(unittest.TestCase):
     def test_reject_ambiguous_cas_ack_and_false_conflict(self):
         for status, generation in (
             ("advanced", 1), ("ok", 2), ("conflict", 0),
-            ("conflict", 1 - 1), ("unknown", 2)
+            ("conflict", 1 - 1), ("conflict", 1), ("unknown", 2)
         ):
             with self.subTest(status=status, generation=generation):
                 self.transport.mutate_response = {
