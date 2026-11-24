@@ -85,6 +85,14 @@ class FastApiFixtureTests(unittest.TestCase):
             headers={"x-demo-timestamp":str(NOW),"content-length":"1"})
         self.assertEqual(response.status_code,400)
         self.assertEqual(response.json()["detail"],"content_length_mismatch")
+    def test_noncanonical_timestamp_rejected(self):
+        for timestamp in ("+1700000000", "1_700_000_000", "9"*13, " 1700000000"):
+            with self.subTest(timestamp=timestamp):
+                response=self.client.post("/offline-fixture/intake",content=b"{}",
+                    headers={"x-demo-timestamp":timestamp})
+                self.assertEqual(response.status_code,400)
+                self.assertEqual(response.json()["detail"],"invalid_timestamp")
+        self.assertEqual(self.app.state.fixture_db.execute("SELECT COUNT(*) FROM demo_receipts").fetchone()[0],0)
     def test_invalid_timestamp_rejected(self):
         raw=json.dumps({"submission_id":"S1","name":"Synthetic","consent":True}).encode()
         response=self.client.post("/offline-fixture/intake",content=raw,
