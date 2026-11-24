@@ -41,3 +41,11 @@ npm run lint && npm run build
 Env: copy `backend/.env.example` → `.env`. `SOCIAL_INSTAGRAM_MODE` stays `mock` until a Meta app and account exist. Demo records are `is_demo=1` and removable (`POST /api/social/demo/clear`).
 
 Invariants (enforced in code, keep them that way): approval binds account+caption+asset hashes+format+schedule+settings; any change invalidates it; the LLM never decides publishing; publish timeouts reconcile, never retry blindly; demo mode blocks live publishing; emergency pause cancels queued publications; no outbound DMs.
+
+## Shared execution efficiency
+- Discover available skills and tools; load only those relevant to the task. Use Caveman-style concise reporting and Superagents/Superpowers when installed and demonstrably useful; never assume availability.
+- Read targeted files/ranges, reuse approved decisions and existing artifacts, prefer deterministic scripts for routine operations, and avoid duplicate research or agent handoffs.
+- Choose the least costly capable model; use stronger reasoning for architecture, security and difficult debugging. Parallelize only independent tasks when benefit exceeds overhead.
+- Use caching and context compaction where supported. Track measured input/output/cached tokens, tool calls and cost per verified task; mark unavailable metrics as unknown.
+- Inspect, plan proportionately, execute, test, fix, verify, document, continue within approved scope. Preserve all existing approval, security and privacy gates. Never claim unavailable tools or tests ran.
+- Report completed work, evidence, blockers and next steps concisely. Optimize total cost without sacrificing correctness or quality.
