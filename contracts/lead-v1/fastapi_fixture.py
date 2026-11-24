@@ -24,6 +24,8 @@ async def intake(request: Request,
                  "x-demo-credential-id", "content-length"):
         if len(request.headers.getlist(name)) > 1:
             raise HTTPException(status_code=400, detail="duplicate_header")
+    if not x_demo_timestamp.isascii() or not x_demo_timestamp.isdecimal() or len(x_demo_timestamp) > 12:
+        raise HTTPException(status_code=400, detail="invalid_timestamp")
     try:
         timestamp = int(x_demo_timestamp)
     except ValueError:
