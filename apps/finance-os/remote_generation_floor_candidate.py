@@ -87,6 +87,6 @@ class RemoteGenerationFloorCandidate(IndependentGenerationFloor):
                 response["generation"] == next_generation):
             return True
         if (response["status"] == "conflict" and
-                response["generation"] >= expected_generation):
+                response["generation"] > expected_generation):
             return False
         raise FinanceAccessDenied("Finance remote floor denied")
