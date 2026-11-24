@@ -34,7 +34,7 @@ def verify(secret, timestamp, body, provided_signature, *, now=None, delivery_id
         return {"ok": False, "reason": "outside_replay_window"}
     if not isinstance(body, bytes) or len(body) > 65536:
         return {"ok": False, "reason": "invalid_body"}
-    if not isinstance(provided_signature, str) or len(provided_signature) != 64:
+    if not isinstance(provided_signature, str) or len(provided_signature) != 64 or not provided_signature.isascii():
         return {"ok": False, "reason": "invalid_signature"}
     try:
         expected = signature(secret, timestamp, body, delivery_id=delivery_id)
