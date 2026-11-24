@@ -79,7 +79,7 @@ class RemoteFloorContractTests(unittest.TestCase):
             {"namespace": "ci_tenant_one", "status": "advanced", "generation": 1},
             {"namespace": "ci_tenant_one", "status": "ok", "generation": 1,
              "secret": "unexpected"},
-            ["not a response"], None,
+            ["not a response"], 42,
         ):
             with self.subTest(response=response):
                 self.transport.mutate_response = response
