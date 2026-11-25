@@ -40,8 +40,14 @@ def receive_once(conn, *, delivery_id, raw_body, timestamp, signature_hex,
         return result
     def reject_constant(value):
         raise ValueError("invalid_json_constant")
+    def finite_float(value):
+        import math
+        number = float(value)
+        if not math.isfinite(number):
+            raise ValueError("invalid_json_number")
+        return number
     try:
-        payload = json.loads(raw_body, object_pairs_hook=unique_object, parse_constant=reject_constant)
+        payload = json.loads(raw_body, object_pairs_hook=unique_object, parse_constant=reject_constant, parse_float=finite_float)
     except (ValueError, TypeError, UnicodeDecodeError, RecursionError):
         return {"ok": False, "reason": "invalid_json"}
     if not isinstance(payload, dict) or payload.get("consent") is not True:
