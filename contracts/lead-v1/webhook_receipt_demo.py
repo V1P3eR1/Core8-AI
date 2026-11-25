@@ -31,9 +31,18 @@ def receive_once(conn, *, delivery_id, raw_body, timestamp, signature_hex,
     # Receipt and lead must share one SQLite transaction; no nested transaction.
     import json
     from offline_intake_demo import canonical_payload_digest
+    def unique_object(pairs):
+        result = {}
+        for key, value in pairs:
+            if key in result:
+                raise ValueError("duplicate_json_key")
+            result[key] = value
+        return result
+    def reject_constant(value):
+        raise ValueError("invalid_json_constant")
     try:
-        payload = json.loads(raw_body)
-    except (ValueError, TypeError, UnicodeDecodeError):
+        payload = json.loads(raw_body, object_pairs_hook=unique_object, parse_constant=reject_constant)
+    except (ValueError, TypeError, UnicodeDecodeError, RecursionError):
         return {"ok": False, "reason": "invalid_json"}
     if not isinstance(payload, dict) or payload.get("consent") is not True:
         return {"ok": False, "reason": "consent_required"}
