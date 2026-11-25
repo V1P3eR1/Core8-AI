@@ -108,6 +108,15 @@ class FastApiFixtureTests(unittest.TestCase):
                 self.assertEqual(response.json()["detail"],"invalid_json")
         for table in ("demo_receipts","demo_leads","demo_claims"):
             self.assertEqual(self.app.state.fixture_db.execute("SELECT COUNT(*) FROM "+table).fetchone()[0],0)
+    def test_invalid_unicode_scalar_rejected(self):
+        for field in ("name", "submission_id"):
+            payload={"submission_id":"S1","name":"Synthetic","consent":True}
+            payload[field]=chr(0xD800)
+            response=self.send(payload=payload)
+            self.assertEqual(response.status_code,400)
+            self.assertEqual(response.json()["detail"],"invalid_json")
+        for table in ("demo_receipts","demo_leads","demo_claims"):
+            self.assertEqual(self.app.state.fixture_db.execute("SELECT COUNT(*) FROM "+table).fetchone()[0],0)
     def test_invalid_timestamp_rejected(self):
         raw=json.dumps({"submission_id":"S1","name":"Synthetic","consent":True}).encode()
         response=self.client.post("/offline-fixture/intake",content=raw,
