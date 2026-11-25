@@ -137,8 +137,11 @@ async def consume_refresh_token(raw_token: str) -> dict | None:
         if not row:
             return None
         # Rotate: delete used token
-        await db.execute("DELETE FROM refresh_tokens WHERE id=?", (row["rt_id"],))
+        async with db.execute("DELETE FROM refresh_tokens WHERE id=?", (row["rt_id"],)) as deleted:
+            consumed = deleted.rowcount == 1
         await db.commit()
+        if not consumed:
+            return None
     return dict(row)
 
 
