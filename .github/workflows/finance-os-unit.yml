@@ -1,0 +1,76 @@
+name: Finance OS sandbox unit tests
+on:
+  pull_request:
+    paths:
+      - 'apps/finance-os/**'
+      - '.github/workflows/finance-os-unit.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  policy-tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install HTTP test dependencies
+        run: python -m pip install 'fastapi>=0.115,<1' 'httpx>=0.27,<1' 'PyJWT[crypto]>=2.9,<3'
+      - name: Safety policy unit tests (no secrets or Stripe account)
+        run: python -m unittest discover -s apps/finance-os/tests -v
+      - name: Compile syntax
+        run: python -m compileall -q apps/finance-os
+
+  container-build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build sandbox container without deployment
+        run: docker build --tag core8-finance-os:ci ./apps/finance-os
+      - name: Verify merchant binding module exists in image
+        run: docker run --rm --entrypoint python core8-finance-os:ci -c 'import merchant_binding, event_policy, main'
+
+  sandbox-postgresql:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_USER: finance
+          POSTGRES_PASSWORD: integration_only
+          POSTGRES_DB: finance
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U finance -d finance"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      DATABASE_URL: postgresql://finance:integration_only@127.0.0.1:5432/finance
+      APP_ENV: test
+      ENABLE_STRIPE_WRITES: "false"
+      STRIPE_EXPECT_LIVEMODE: "false"
+      STRIPE_WEBHOOK_SECRET: whsec_ci_integration_only
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install dependencies
+        run: python -m pip install 'fastapi>=0.115,<1' 'httpx>=0.27,<1' 'psycopg[binary]>=3.2,<4' 'PyJWT[crypto]>=2.9,<3'
+      - name: Bootstrap disposable test database
+        run: |
+          python - <<'PY'
+          import os
+          from pathlib import Path
+          import psycopg
+          schema = '\n'.join(line for line in Path('apps/finance-os/sql/schema.sql').read_text().splitlines() if not line.lstrip().startswith('--'))
+          with psycopg.connect(os.environ['DATABASE_URL']) as db:
+              for statement in schema.split(';'):
+                  if statement.strip():
+                      db.execute(statement)
+          PY
+      - name: Run sandbox PostgreSQL integration tests
+        run: python -m unittest discover -s apps/finance-os/tests -v

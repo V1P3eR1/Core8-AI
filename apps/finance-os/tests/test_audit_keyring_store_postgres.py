@@ -1,0 +1,521 @@
+"""Disposable PostgreSQL audit keyring snapshot CAS and restore regressions."""
+import concurrent.futures
+import os
+import sys
+import threading
+import unittest
+from pathlib import Path
+from uuid import uuid4
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+try:
+    import psycopg
+    READY = os.getenv("APP_ENV") == "test" and bool(os.getenv("DATABASE_URL"))
+except ImportError:
+    READY = False
+
+from audit_key_rotation_candidate import AuditKeyringCandidate, PinnedAuditKey
+from audit_keyring_store_candidate import (
+    initialize_audit_keyring_store, recover_audit_keyring_store,
+    advance_audit_keyring_store,
+)
+from tenant_access import FinanceAccessDenied
+
+MAC = b"synthetic-test-metadata-mac-key-32bytes-minimum"
+OLD = PinnedAuditKey("store_old", b"synthetic-old-audit-signing-key-material-over-32")
+NEW = PinnedAuditKey("store_new", b"synthetic-new-audit-signing-key-material-over-32")
+OTHER = PinnedAuditKey("store_other", b"synthetic-other-audit-signing-key-over-32")
+MATERIAL = {k.kid: k.secret for k in (OLD, NEW, OTHER)}
+
+
+@unittest.skipUnless(READY, "requires explicitly disposable PostgreSQL test DB")
+class AuditKeyringStorePostgresTests(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        if not READY:
+            return
+        cls.dsn = os.environ["DATABASE_URL"]
+        source = (Path(__file__).resolve().parents[1] / "sql" /
+                  "audit_keyring_store_candidate.sql").read_text()
+        with psycopg.connect(cls.dsn) as db:
+            db.execute(source)
+
+    @classmethod
+    def tearDownClass(cls):
+        if READY:
+            with psycopg.connect(cls.dsn) as db:
+                db.execute("DROP TABLE IF EXISTS finance_audit_keyring_store_candidate")
+
+    def setUp(self):
+        self.namespace = "ci_audit_store_" + uuid4().hex[:12]
+        with psycopg.connect(self.dsn, autocommit=True) as db:
+            initialize_audit_keyring_store(
+                db, namespace=self.namespace,
+                registry=AuditKeyringCandidate(active=OLD),
+                signing_key=MAC,
+            )
+
+    def tearDown(self):
+        with psycopg.connect(self.dsn) as db:
+            db.execute(
+                "DELETE FROM finance_audit_keyring_store_candidate WHERE namespace=%s",
+                (self.namespace,),
+            )
+
+    def restore(self, generation):
+        with psycopg.connect(self.dsn, autocommit=True) as db:
+            return recover_audit_keyring_store(
+                db, namespace=self.namespace, signing_key=MAC,
+                external_generation=generation,
+                trusted_key_material=MATERIAL,
+            )
+
+    def advance(self, next_key, *, retain=(), generation=1):
+        ring = self.restore(generation)
+        ring.rotate(expected_generation=generation, new_active=next_key,
+                    retain=retain)
+        with psycopg.connect(self.dsn, autocommit=True) as db:
+            return advance_audit_keyring_store(
+                db, namespace=self.namespace, signing_key=MAC,
+                expected_generation=generation, external_generation=generation + 1,
+                new_registry=ring, trusted_key_material=MATERIAL,
+            )
+
+    def test_restart_revocation_and_stale_floor_denied(self):
+        self.assertEqual(self.restore(1).active_kid, OLD.kid)
+        self.assertEqual(self.advance(NEW, retain=(OLD.kid,)), 2)
+        self.assertEqual(self.advance(NEW, generation=2), 3)
+        reopened = self.restore(3)
+        self.assertEqual(reopened.active_kid, NEW.kid)
+        with self.assertRaises(FinanceAccessDenied):
+            reopened.rotate(expected_generation=3, new_active=OLD)
+        with self.assertRaises(FinanceAccessDenied):
+            self.restore(2)
+        with self.assertRaises(FinanceAccessDenied):
+            self.restore(4)
+
+    def test_concurrent_competing_writers_one_wins(self):
+        barrier = threading.Barrier(2)
+        def attempt(key):
+            ring = self.restore(1)
+            ring.rotate(expected_generation=1, new_active=key, retain=(OLD.kid,))
+            barrier.wait(timeout=10)
+            try:
+                with psycopg.connect(self.dsn, autocommit=True) as db:
+                    advance_audit_keyring_store(
+                        db, namespace=self.namespace, signing_key=MAC,
+                        expected_generation=1, external_generation=2,
+                        new_registry=ring, trusted_key_material=MATERIAL,
+                    )
+                return "committed"
+            except FinanceAccessDenied:
+                return "stale"
+        with concurrent.futures.ThreadPoolExecutor(max_workers=2) as pool:
+            results = list(pool.map(attempt, (NEW, OTHER)))
+        self.assertCountEqual(results, ["committed", "stale"])
+        self.assertIn(self.restore(2).active_kid, (NEW.kid, OTHER.kid))
+
+    def test_signed_row_tampering_and_old_row_restore_denied(self):
+        with psycopg.connect(self.dsn, autocommit=True) as db:
+            old_gen, old_blob = db.execute(
+                "SELECT generation, signed_snapshot FROM finance_audit_keyring_store_candidate WHERE namespace=%s",
+                (self.namespace,),
+            ).fetchone()
+        self.advance(NEW)
+        with psycopg.connect(self.dsn, autocommit=True) as db:
+            db.execute(
+                """UPDATE finance_audit_keyring_store_candidate
+                   SET generation=%s, signed_snapshot=%s WHERE namespace=%s""",
+                (old_gen, old_blob, self.namespace),
+            )
+        with self.assertRaises(FinanceAccessDenied):
+            self.restore(2)
+        with psycopg.connect(self.dsn, autocommit=True) as db:
+            db.execute(
+                """UPDATE finance_audit_keyring_store_candidate
+                   SET generation=2, signed_snapshot=%s WHERE namespace=%s""",
+                (b"corrupt", self.namespace),
+            )
+        with self.assertRaises(FinanceAccessDenied):
+            self.restore(2)
+
+    def test_external_floor_coordinator_success_and_stale_signed_restore(self):
+        from audit_external_floor_candidate import (
+            rotate_audit_with_floor, recover_audit_with_floor,
+        )
+        from external_floor_candidate import IndependentGenerationFloor
+        class FakeFloor(IndependentGenerationFloor):
+            version = 1
+            def read(self, namespace):
+                return self.version
+            def compare_and_advance(self, namespace, expected_generation, next_generation):
+                if self.version != expected_generation:
+                    return False
+                self.version = next_generation
+                return True
+        floor = FakeFloor()
+        with psycopg.connect(self.dsn, autocommit=True) as db:
+            old_row = db.execute(
+                "SELECT generation, signed_snapshot FROM finance_audit_keyring_store_candidate WHERE namespace=%s",
+                (self.namespace,),
+            ).fetchone()
+            proposed = recover_audit_with_floor(
+                db, namespace=self.namespace, floor=floor,
+                signing_key=MAC, trusted_key_material=MATERIAL,
+            )
+            proposed.rotate(expected_generation=1, new_active=NEW)
+            self.assertEqual(rotate_audit_with_floor(
+                db, namespace=self.namespace, floor=floor,
+                signing_key=MAC, trusted_key_material=MATERIAL,
+                expected_generation=1, new_registry=proposed,
+            ), 2)
+            self.assertEqual(floor.version, 2)
+            self.assertEqual(recover_audit_with_floor(
+                db, namespace=self.namespace, floor=floor,
+                signing_key=MAC, trusted_key_material=MATERIAL,
+            ).active_kid, NEW.kid)
+            db.execute(
+                "UPDATE finance_audit_keyring_store_candidate SET generation=%s,signed_snapshot=%s WHERE namespace=%s",
+                (old_row[0], old_row[1], self.namespace),
+            )
+            with self.assertRaises(FinanceAccessDenied):
+                recover_audit_with_floor(
+                    db, namespace=self.namespace, floor=floor,
+                    signing_key=MAC, trusted_key_material=MATERIAL,
+                )
+
+    def test_floor_cas_failure_and_invalid_proposal_do_not_write(self):
+        from audit_external_floor_candidate import rotate_audit_with_floor
+        from external_floor_candidate import IndependentGenerationFloor
+        class FakeFloor(IndependentGenerationFloor):
+            version = 1
+            calls = 0
+            def read(self, namespace):
+                return self.version
+            def compare_and_advance(self, namespace, expected_generation, next_generation):
+                self.calls += 1
+                return False
+        floor = FakeFloor()
+        with psycopg.connect(self.dsn, autocommit=True) as db:
+            invalid = AuditKeyringCandidate(active=NEW, generation=2)
+            with self.assertRaises(FinanceAccessDenied):
+                rotate_audit_with_floor(
+                    db, namespace=self.namespace, floor=floor,
+                    signing_key=MAC, trusted_key_material=MATERIAL,
+                    expected_generation=1, new_registry=invalid,
+                )
+            self.assertEqual(floor.calls, 0)
+            valid = AuditKeyringCandidate(
+                active=NEW, retired=(OLD.kid,), generation=2,
+            )
+            with self.assertRaises(FinanceAccessDenied):
+                rotate_audit_with_floor(
+                    db, namespace=self.namespace, floor=floor,
+                    signing_key=MAC, trusted_key_material=MATERIAL,
+                    expected_generation=1, new_registry=valid,
+                )
+            self.assertEqual(floor.calls, 1)
+            self.assertEqual(floor.version, 1)
+            self.assertEqual(db.execute(
+                "SELECT generation FROM finance_audit_keyring_store_candidate WHERE namespace=%s",
+                (self.namespace,),
+            ).fetchone()[0], 1)
+
+    def test_floor_advanced_but_database_failure_stays_fail_closed(self):
+        from audit_external_floor_candidate import (
+            rotate_audit_with_floor, recover_audit_with_floor,
+        )
+        from external_floor_candidate import IndependentGenerationFloor
+        class FakeFloor(IndependentGenerationFloor):
+            version = 1
+            def read(self, namespace):
+                return self.version
+            def compare_and_advance(self, namespace, expected_generation, next_generation):
+                if self.version != expected_generation:
+                    return False
+                self.version = next_generation
+                return True
+        floor = FakeFloor()
+        with psycopg.connect(self.dsn, autocommit=True) as db:
+            next_ring = self.restore(1)
+            next_ring.rotate(expected_generation=1, new_active=NEW)
+            db.execute(
+                "ALTER TABLE finance_audit_keyring_store_candidate ADD CONSTRAINT ci_reject_next CHECK (generation=1) NOT VALID"
+            )
+            try:
+                with self.assertRaises(psycopg.errors.CheckViolation):
+                    rotate_audit_with_floor(
+                        db, namespace=self.namespace, floor=floor,
+                        signing_key=MAC, trusted_key_material=MATERIAL,
+                        expected_generation=1, new_registry=next_ring,
+                    )
+            finally:
+                db.execute("ALTER TABLE finance_audit_keyring_store_candidate DROP CONSTRAINT ci_reject_next")
+            self.assertEqual(floor.version, 2)
+            self.assertEqual(db.execute(
+                "SELECT generation FROM finance_audit_keyring_store_candidate WHERE namespace=%s",
+                (self.namespace,),
+            ).fetchone()[0], 1)
+            with self.assertRaises(FinanceAccessDenied):
+                recover_audit_with_floor(
+                    db, namespace=self.namespace, floor=floor,
+                    signing_key=MAC, trusted_key_material=MATERIAL,
+                )
+
+    def test_file_backed_floor_interoperates_with_postgres_and_restart(self):
+        from tempfile import TemporaryDirectory
+        from sqlite_generation_floor_candidate import SQLiteGenerationFloorCandidate
+        from audit_external_floor_candidate import (
+            rotate_audit_with_floor, recover_audit_with_floor,
+        )
+        with TemporaryDirectory() as directory:
+            floor_path = str(Path(directory) / "separate-floor.sqlite")
+            floor = SQLiteGenerationFloorCandidate(path=floor_path)
+            floor.initialize_test_store()
+            floor.provision_test_namespace(self.namespace)
+            with psycopg.connect(self.dsn, autocommit=True) as db:
+                old_snapshot = db.execute(
+                    """SELECT generation, signed_snapshot
+                         FROM finance_audit_keyring_store_candidate
+                        WHERE namespace=%s""", (self.namespace,),
+                ).fetchone()
+                ring = recover_audit_with_floor(
+                    db, namespace=self.namespace, floor=floor,
+                    signing_key=MAC, trusted_key_material=MATERIAL,
+                )
+                ring.rotate(expected_generation=1, new_active=NEW)
+                self.assertEqual(rotate_audit_with_floor(
+                    db, namespace=self.namespace, floor=floor,
+                    signing_key=MAC, trusted_key_material=MATERIAL,
+                    expected_generation=1, new_registry=ring,
+                ), 2)
+                reopened_floor = SQLiteGenerationFloorCandidate(path=floor_path)
+                self.assertEqual(reopened_floor.read(self.namespace), 2)
+                self.assertEqual(recover_audit_with_floor(
+                    db, namespace=self.namespace, floor=reopened_floor,
+                    signing_key=MAC, trusted_key_material=MATERIAL,
+                ).active_kid, NEW.kid)
+                # Database rollback alone cannot revive the old signed row.
+                db.execute(
+                    """UPDATE finance_audit_keyring_store_candidate
+                          SET generation=%s, signed_snapshot=%s
+                        WHERE namespace=%s""",
+                    (old_snapshot[0], old_snapshot[1], self.namespace),
+                )
+                with self.assertRaises(FinanceAccessDenied):
+                    recover_audit_with_floor(
+                        db, namespace=self.namespace, floor=reopened_floor,
+                        signing_key=MAC, trusted_key_material=MATERIAL,
+                    )
+
+    def test_read_only_floor_diagnostics_cover_recovery_states(self):
+        from tempfile import TemporaryDirectory
+        from sqlite_generation_floor_candidate import SQLiteGenerationFloorCandidate
+        from audit_floor_diagnostics_candidate import diagnose_audit_keyring
+        with TemporaryDirectory() as directory:
+            floor = SQLiteGenerationFloorCandidate(
+                path=str(Path(directory) / "separate-floor.sqlite")
+            )
+            floor.initialize_test_store()
+            floor.provision_test_namespace(self.namespace)
+            with psycopg.connect(self.dsn, autocommit=True) as db:
+                def check():
+                    return diagnose_audit_keyring(
+                        db, floor=floor, namespace=self.namespace,
+                        signing_key=MAC, trusted_key_material=MATERIAL,
+                    )
+                self.assertEqual(check().status, "healthy")
+                self.assertTrue(floor.compare_and_advance(self.namespace, 1, 2))
+                result = check()
+                self.assertEqual((result.status, result.floor_generation,
+                                  result.database_generation),
+                                 ("floor_ahead", 2, 1))
+                self.assertEqual(floor.read(self.namespace), 2)
+                db.execute(
+                    """UPDATE finance_audit_keyring_store_candidate
+                          SET generation=3 WHERE namespace=%s""",
+                    (self.namespace,),
+                )
+                self.assertEqual(check().status, "database_ahead")
+                db.execute(
+                    """UPDATE finance_audit_keyring_store_candidate
+                          SET generation=2, signed_snapshot=%s
+                        WHERE namespace=%s""",
+                    (b"corrupt", self.namespace),
+                )
+                self.assertEqual(check().status, "snapshot_invalid")
+                db.execute(
+                    "DELETE FROM finance_audit_keyring_store_candidate WHERE namespace=%s",
+                    (self.namespace,),
+                )
+                self.assertEqual(check().status, "missing_database_state")
+                self.assertEqual(floor.read(self.namespace), 2)
+
+    def test_floor_diagnostics_do_not_trust_invalid_floor(self):
+        from audit_floor_diagnostics_candidate import diagnose_audit_keyring
+        from external_floor_candidate import IndependentGenerationFloor
+        class BadFloor(IndependentGenerationFloor):
+            def read(self, namespace):
+                return None
+        with psycopg.connect(self.dsn, autocommit=True) as db:
+            with self.assertRaises(FinanceAccessDenied):
+                diagnose_audit_keyring(
+                    db, floor=BadFloor(), namespace=self.namespace,
+                    signing_key=MAC, trusted_key_material=MATERIAL,
+                )
+            with self.assertRaises(FinanceAccessDenied):
+                diagnose_audit_keyring(
+                    db, floor=object(), namespace=self.namespace,
+                    signing_key=MAC, trusted_key_material=MATERIAL,
+                )
+
+    def test_remote_floor_contract_drives_disposable_postgres_cas(self):
+        from remote_generation_floor_candidate import RemoteGenerationFloorCandidate
+        from audit_external_floor_candidate import (
+            rotate_audit_with_floor, recover_audit_with_floor,
+        )
+        class FakeAuthenticatedService:
+            # In-process protocol fixture, NOT an authenticated remote server.
+            def __init__(self):
+                self.version = 1
+            def exchange(self, *, endpoint, request, timeout_seconds):
+                if request["namespace"] != namespace:
+                    raise ValueError("wrong namespace")
+                if request["operation"] == "read":
+                    return {"namespace": namespace, "generation": self.version,
+                            "status": "ok"}
+                if self.version != request["expected_generation"]:
+                    return {"namespace": namespace, "generation": self.version,
+                            "status": "conflict"}
+                self.version = request["next_generation"]
+                return {"namespace": namespace, "generation": self.version,
+                        "status": "advanced"}
+        namespace = self.namespace
+        service = FakeAuthenticatedService()
+        floor = RemoteGenerationFloorCandidate(
+            endpoint="https://isolated-floor.example/v1/floor",
+            transport=service,
+        )
+        with psycopg.connect(self.dsn, autocommit=True) as db:
+            candidate = recover_audit_with_floor(
+                db, namespace=namespace, floor=floor,
+                signing_key=MAC, trusted_key_material=MATERIAL,
+            )
+            candidate.rotate(expected_generation=1, new_active=NEW)
+            self.assertEqual(
+                rotate_audit_with_floor(
+                    db, namespace=namespace, floor=floor,
+                    signing_key=MAC, trusted_key_material=MATERIAL,
+                    expected_generation=1, new_registry=candidate,
+                ), 2,
+            )
+            self.assertEqual(floor.read(namespace), 2)
+            self.assertEqual(recover_audit_with_floor(
+                db, namespace=namespace, floor=floor,
+                signing_key=MAC, trusted_key_material=MATERIAL,
+            ).active_kid, NEW.kid)
+
+    def test_floor_ahead_recovery_preview_requires_review_without_write(self):
+        from tempfile import TemporaryDirectory
+        from sqlite_generation_floor_candidate import SQLiteGenerationFloorCandidate
+        from audit_keyring_state_candidate import export_audit_keyring_state
+        from audit_recovery_preflight_candidate import preview_floor_ahead_recovery
+        with TemporaryDirectory() as folder:
+            floor = SQLiteGenerationFloorCandidate(
+                path=str(Path(folder) / "floor.sqlite"))
+            floor.initialize_test_store()
+            floor.provision_test_namespace(self.namespace)
+            proposed = self.restore(1)
+            proposed.rotate(expected_generation=1, new_active=NEW,
+                            retain=(OLD.kid,))
+            blob = export_audit_keyring_state(proposed, signing_key=MAC)
+            with psycopg.connect(self.dsn, autocommit=True) as db:
+                before = db.execute(
+                    """SELECT generation, signed_snapshot FROM
+                       finance_audit_keyring_store_candidate WHERE namespace=%s""",
+                    (self.namespace,),
+                ).fetchone()
+                with self.assertRaises(FinanceAccessDenied):
+                    preview_floor_ahead_recovery(
+                        db, floor=floor, namespace=self.namespace,
+                        signing_key=MAC, trusted_key_material=MATERIAL,
+                        proposed_snapshot=blob,
+                    )
+                self.assertTrue(floor.compare_and_advance(self.namespace, 1, 2))
+                plan = preview_floor_ahead_recovery(
+                    db, floor=floor, namespace=self.namespace,
+                    signing_key=MAC, trusted_key_material=MATERIAL,
+                    proposed_snapshot=blob,
+                )
+                self.assertEqual(
+                    (plan.status, plan.database_generation,
+                     plan.floor_generation, plan.operator_review_required),
+                    ("review_required", 1, 2, True),
+                )
+                self.assertEqual(len(plan.candidate_sha256), 64)
+                self.assertEqual(db.execute(
+                    """SELECT generation, signed_snapshot FROM
+                       finance_audit_keyring_store_candidate WHERE namespace=%s""",
+                    (self.namespace,),
+                ).fetchone(), before)
+                self.assertEqual(floor.read(self.namespace), 2)
+                for bad_blob in (
+                    blob.replace(b"store_new", b"store_bad"),
+                    b"not valid signed state",
+                ):
+                    with self.subTest(bad_blob=bad_blob):
+                        with self.assertRaises(FinanceAccessDenied):
+                            preview_floor_ahead_recovery(
+                                db, floor=floor, namespace=self.namespace,
+                                signing_key=MAC, trusted_key_material=MATERIAL,
+                                proposed_snapshot=bad_blob,
+                            )
+                # A valid signed but unrelated keyring is not a valid rotation.
+                from audit_key_rotation_candidate import AuditKeyringCandidate
+                unrelated = AuditKeyringCandidate(active=OTHER, generation=2)
+                unrelated_blob = export_audit_keyring_state(
+                    unrelated, signing_key=MAC)
+                with self.assertRaises(FinanceAccessDenied):
+                    preview_floor_ahead_recovery(
+                        db, floor=floor, namespace=self.namespace,
+                        signing_key=MAC, trusted_key_material=MATERIAL,
+                        proposed_snapshot=unrelated_blob,
+                    )
+                self.assertTrue(floor.compare_and_advance(self.namespace, 2, 3))
+                with self.assertRaises(FinanceAccessDenied):
+                    preview_floor_ahead_recovery(
+                        db, floor=floor, namespace=self.namespace,
+                        signing_key=MAC, trusted_key_material=MATERIAL,
+                        proposed_snapshot=blob,
+                    )
+
+    def test_invalid_transition_and_reused_key_material_fail_closed(self):
+        ring = self.restore(1)
+        ring.rotate(expected_generation=1, new_active=NEW)
+        with psycopg.connect(self.dsn, autocommit=True) as db:
+            for generation in (1, 3, True):
+                with self.subTest(generation=generation):
+                    with self.assertRaises(FinanceAccessDenied):
+                        advance_audit_keyring_store(
+                            db, namespace=self.namespace, signing_key=MAC,
+                            expected_generation=1, external_generation=generation,
+                            new_registry=ring, trusted_key_material=MATERIAL,
+                        )
+            with self.assertRaises(FinanceAccessDenied):
+                initialize_audit_keyring_store(
+                    db, namespace=self.namespace,
+                    registry=AuditKeyringCandidate(active=OLD),
+                    signing_key=MAC,
+                )
+            with db.transaction():
+                with self.assertRaises(FinanceAccessDenied):
+                    advance_audit_keyring_store(
+                        db, namespace=self.namespace, signing_key=MAC,
+                        expected_generation=1, external_generation=2,
+                        new_registry=ring, trusted_key_material=MATERIAL,
+                    )
+        self.assertEqual(self.restore(1).active_kid, OLD.kid)
+
+
+if __name__ == "__main__":
+    unittest.main()

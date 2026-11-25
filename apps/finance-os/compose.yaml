@@ -1,0 +1,36 @@
+# Local sandbox only. Never configure a Stripe live key here.
+services:
+  postgres:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_USER: finance
+      POSTGRES_PASSWORD: local_sandbox_only
+      POSTGRES_DB: finance
+    volumes:
+      - finance_pgdata:/var/lib/postgresql/data
+      - ./sql/schema.sql:/docker-entrypoint-initdb.d/001-finance.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U finance -d finance"]
+      interval: 5s
+      retries: 10
+    networks: [finance_private]
+  api:
+    build: .
+    ports: ["127.0.0.1:8008:8080"]
+    environment:
+      APP_ENV: sandbox
+      ENABLE_STRIPE_WRITES: "false"
+      STRIPE_EXPECT_LIVEMODE: "false"
+      DATABASE_URL: postgresql://finance:local_sandbox_only@postgres:5432/finance
+      STRIPE_WEBHOOK_SECRET: ${STRIPE_WEBHOOK_SECRET:?Set a sandbox webhook signing secret}
+      FINANCE_WEBHOOK_ACCOUNT_ID: ${FINANCE_WEBHOOK_ACCOUNT_ID:?Set verified sandbox Stripe account ID}
+      FINANCE_WEBHOOK_TENANT_ID: ${FINANCE_WEBHOOK_TENANT_ID:?Set verified sandbox tenant ID}
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks: [finance_private]
+networks:
+  finance_private:
+    internal: true
+volumes:
+  finance_pgdata:
