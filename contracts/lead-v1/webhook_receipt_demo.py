@@ -57,7 +57,12 @@ def receive_once(conn, *, delivery_id, raw_body, timestamp, signature_hex,
         return {"ok": False, "reason": "invalid_submission"}
     if not isinstance(name, str) or not name.strip() or len(name) > 256:
         return {"ok": False, "reason": "invalid_name"}
-    digest = canonical_payload_digest(payload)
+    try:
+        digest = canonical_payload_digest(payload)
+        name.encode("utf-8")
+        submission.encode("utf-8")
+    except (ValueError, UnicodeError, RecursionError):
+        return {"ok": False, "reason": "invalid_json"}
     conn.execute("BEGIN IMMEDIATE")
     try:
         prior = conn.execute(
