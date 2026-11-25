@@ -96,6 +96,8 @@ class FastApiFixtureTests(unittest.TestCase):
     def test_ambiguous_json_rejected_without_receipt(self):
         for raw in (b'{"submission_id":"S1","name":"Synthetic","consent":false,"consent":true}',
                     b'{"submission_id":"S1","name":"Synthetic","consent":true,"extra":NaN}',
+                    b'{"submission_id":"S1","name":"Synthetic","consent":true,"extra":1e999}',
+                    b'{"submission_id":"S1","name":"Synthetic","consent":true,"extra":-1e999}',
                     b'{"submission_id":"S1","name":"Synthetic","consent":true,"extra":{"a":1,"a":2}}'):
             with self.subTest(raw=raw):
                 response=self.client.post("/offline-fixture/intake",content=raw,
