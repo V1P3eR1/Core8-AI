@@ -76,6 +76,27 @@ class WebhookReceiptTests(unittest.TestCase):
     def test_control_character_delivery_id_denied_before_signature(self):
         self.assertEqual(self.receive(delivery="D-\n",signature_hex="0"*64)["reason"],"invalid_delivery_id")
         self.assertEqual(self.counts(),(0,0,0))
+    def test_identical_delivery_and_submission_are_isolated_by_tenant(self):
+        other_secret=b"synthetic-other-secret"
+        registry={**REGISTRY,"other":{"active":True,"tenant_id":"tenant-B",
+                                     "source_system":"form","secret":other_secret}}
+        self.assertTrue(self.receive(credential_registry=registry)["ok"])
+        raw=make_body(name="Other Synthetic")
+        signed=signature(other_secret,NOW,raw,delivery_id="D1")
+        self.assertEqual(self.receive(raw=raw,credential_id="other",
+            credential_registry=registry)["reason"],"signature_mismatch")
+        self.assertEqual(self.counts(),(1,1,1))
+        result=self.receive(raw=raw,credential_id="other",
+            credential_registry=registry,signature_hex=signed)
+        self.assertTrue(result["ok"])
+        self.assertFalse(result["replayed_lead"])
+        self.assertEqual(self.counts(),(2,2,2))
+        self.assertEqual(self.db.execute(
+            "SELECT tenant_id,name FROM demo_leads ORDER BY tenant_id").fetchall(),
+            [("tenant-A","Synthetic"),("tenant-B","Other Synthetic")])
+        self.assertEqual(self.receive(raw=raw,credential_id="other",
+            credential_registry=registry,signature_hex=signed)["reason"],"delivery_replayed")
+        self.assertEqual(self.counts(),(2,2,2))
     def test_claimed_tenant_does_not_change_receipt_tenant(self):
         raw=json.dumps({"submission_id":"S1","name":"Synthetic","consent":True,
                         "tenant_id":"other"}).encode()
