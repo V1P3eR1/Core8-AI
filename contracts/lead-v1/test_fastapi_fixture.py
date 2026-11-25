@@ -93,6 +93,19 @@ class FastApiFixtureTests(unittest.TestCase):
                 self.assertEqual(response.status_code,400)
                 self.assertEqual(response.json()["detail"],"invalid_timestamp")
         self.assertEqual(self.app.state.fixture_db.execute("SELECT COUNT(*) FROM demo_receipts").fetchone()[0],0)
+    def test_ambiguous_json_rejected_without_receipt(self):
+        for raw in (b'{"submission_id":"S1","name":"Synthetic","consent":false,"consent":true}',
+                    b'{"submission_id":"S1","name":"Synthetic","consent":true,"extra":NaN}',
+                    b'{"submission_id":"S1","name":"Synthetic","consent":true,"extra":{"a":1,"a":2}}'):
+            with self.subTest(raw=raw):
+                response=self.client.post("/offline-fixture/intake",content=raw,
+                    headers={"x-demo-timestamp":str(NOW),
+                             "x-demo-signature":signature(_SECRET,NOW,raw,delivery_id="D1"),
+                             "x-demo-delivery-id":"D1","x-demo-credential-id":"demo"})
+                self.assertEqual(response.status_code,400)
+                self.assertEqual(response.json()["detail"],"invalid_json")
+        for table in ("demo_receipts","demo_leads","demo_claims"):
+            self.assertEqual(self.app.state.fixture_db.execute("SELECT COUNT(*) FROM "+table).fetchone()[0],0)
     def test_invalid_timestamp_rejected(self):
         raw=json.dumps({"submission_id":"S1","name":"Synthetic","consent":True}).encode()
         response=self.client.post("/offline-fixture/intake",content=raw,
