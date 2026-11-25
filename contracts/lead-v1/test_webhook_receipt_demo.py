@@ -97,6 +97,23 @@ class WebhookReceiptTests(unittest.TestCase):
         self.assertEqual(self.receive(raw=raw,credential_id="other",
             credential_registry=registry,signature_hex=signed)["reason"],"delivery_replayed")
         self.assertEqual(self.counts(),(2,2,2))
+    def test_same_tenant_different_sources_have_independent_claims(self):
+        other_secret=b"synthetic-source-secret"
+        registry={**REGISTRY,"second":{"active":True,"tenant_id":"tenant-A",
+                                       "source_system":"second-form","secret":other_secret}}
+        self.assertTrue(self.receive(credential_registry=registry)["ok"])
+        raw=make_body(name="Second Source")
+        signed=signature(other_secret,NOW,raw,delivery_id="D1")
+        result=self.receive(raw=raw,credential_id="second",credential_registry=registry,
+                            signature_hex=signed,lead_id="L2")
+        self.assertTrue(result["ok"])
+        self.assertFalse(result["replayed_lead"])
+        self.assertEqual(self.counts(),(2,2,2))
+        self.assertEqual(self.db.execute(
+            "SELECT source_system,lead_id FROM demo_claims ORDER BY source_system").fetchall(),
+            [("form","L1"),("second-form","L2")])
+        self.assertEqual(self.receive(credential_registry=registry)["reason"],"delivery_replayed")
+        self.assertEqual(self.counts(),(2,2,2))
     def test_claimed_tenant_does_not_change_receipt_tenant(self):
         raw=json.dumps({"submission_id":"S1","name":"Synthetic","consent":True,
                         "tenant_id":"other"}).encode()
