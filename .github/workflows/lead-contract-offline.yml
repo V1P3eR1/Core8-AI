@@ -1,0 +1,26 @@
+name: lead-contract-offline
+
+on:
+  pull_request:
+    paths:
+      - "contracts/lead-v1/**"
+      - ".github/workflows/lead-contract-offline.yml"
+  push:
+    paths:
+      - "contracts/lead-v1/**"
+      - ".github/workflows/lead-contract-offline.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Offline canonical lead and pilot adapter regression tests
+        run: node --test contracts/lead-v1/*.test.cjs
