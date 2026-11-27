@@ -114,6 +114,19 @@ class WebhookReceiptTests(unittest.TestCase):
             [("form","L1"),("second-form","L2")])
         self.assertEqual(self.receive(credential_registry=registry)["reason"],"delivery_replayed")
         self.assertEqual(self.counts(),(2,2,2))
+    def test_receipt_write_failure_rolls_back_lead_and_allows_retry(self):
+        self.db.execute("""CREATE TRIGGER reject_receipt BEFORE INSERT ON demo_receipts
+            BEGIN SELECT RAISE(ABORT, 'injected receipt failure'); END""")
+        self.db.commit()
+        with self.assertRaises(sqlite3.IntegrityError):
+            self.receive()
+        self.assertEqual(self.counts(),(0,0,0))
+        self.assertFalse(self.db.in_transaction)
+        self.db.execute("DROP TRIGGER reject_receipt")
+        self.db.commit()
+        self.assertTrue(self.receive()["ok"])
+        self.assertEqual(self.counts(),(1,1,1))
+        self.assertEqual(self.receive()["reason"],"delivery_replayed")
     def test_claimed_tenant_does_not_change_receipt_tenant(self):
         raw=json.dumps({"submission_id":"S1","name":"Synthetic","consent":True,
                         "tenant_id":"other"}).encode()
