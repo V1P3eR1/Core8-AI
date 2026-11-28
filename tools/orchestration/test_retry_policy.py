@@ -80,6 +80,15 @@ class RetryPolicyTests(unittest.TestCase):
         self.assertEqual(decide(T, O, [attempt(NOW + timedelta(minutes=2))], NOW)["reason"], "invalid_attempt_history")
         self.assertEqual(decide(T, O, [], datetime(2026, 11, 22))["reason"], "clock_invalid")
 
+    def test_malformed_inputs_fail_closed(self):
+        cases = [(None, O, []), (T, None, []), (T, O, None), (T, O, [None]), (T, {**O, "state": []}, []), (T, O, [attempt(NOW, started_at=123)])]
+        for task, observation, history in cases:
+            with self.subTest(task=task, observation=observation, history=history):
+                d = decide(task, observation, history, NOW)
+                self.assertEqual(d["action"], "blocked")
+                self.assertFalse(d["execution_authorized"])
+                self.assertFalse(d["may_spend"])
+
     def test_invalid_identifiers_fail_closed(self):
         self.assertEqual(decide({**T, "scope_digest": "oops"}, O, [], NOW)["reason"], "invalid_task_identity")
         self.assertEqual(decide(T, {**O, "head_sha": "notSHA"}, [], NOW)["reason"], "invalid_current_ci_snapshot")
