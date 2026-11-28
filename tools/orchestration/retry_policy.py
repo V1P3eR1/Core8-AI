@@ -28,13 +28,17 @@ def decide(task, observation, history, now):
     observation: current PR SHA and normalized check state from the observer.
     history: attempts of that exact task+scope at previously approved SHAs.
     """
+    if not isinstance(task, dict) or not isinstance(observation, dict) or not isinstance(history, (list, tuple)):
+        return _decision("blocked", "invalid_input_shape", "", 0)
+    if any(not isinstance(item, dict) for item in history):
+        return _decision("blocked", "invalid_attempt_history", "", len(history))
     task_id = task.get("task_id", "")
     digest = task.get("scope_digest", "")
     sha = observation.get("head_sha", "")
     attempt = len(history)
     if not isinstance(task_id, str) or not 1 <= len(task_id) <= 100 or not DIGEST.fullmatch(str(digest)):
         return _decision("blocked", "invalid_task_identity", str(task_id)[:100], attempt)
-    if not SHA.fullmatch(str(sha)) or observation.get("state") not in ALLOWED_STATES:
+    if not SHA.fullmatch(str(sha)) or not isinstance(observation.get("state"), str) or observation.get("state") not in ALLOWED_STATES:
         return _decision("blocked", "invalid_current_ci_snapshot", task_id, attempt)
     if task.get("approved") is not True or task.get("approved_scope_digest") != digest:
         return _decision("blocked", "missing_exact_owner_approval", task_id, attempt)
@@ -58,7 +62,10 @@ def decide(task, observation, history, now):
     if history:
         previous = history[-1]
         try:
-            recorded = datetime.fromisoformat(previous["started_at"].replace("Z", "+00:00"))
+            raw_time = previous["started_at"]
+            if not isinstance(raw_time, str):
+                raise ValueError("invalid_time_type")
+            recorded = datetime.fromisoformat(raw_time.replace("Z", "+00:00"))
             if recorded.tzinfo is None or recorded > now:
                 raise ValueError("invalid_time")
         except (ValueError, TypeError, KeyError):
