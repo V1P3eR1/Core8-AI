@@ -1,0 +1,157 @@
+name: Core8 development loop (read-only)
+on:
+  pull_request:
+    paths:
+      - "tools/orchestration/**"
+      - ".github/workflows/dev-loop-health.yml"
+  workflow_dispatch:
+  schedule:
+    - cron: "15 * * * *"
+permissions:
+  contents: read
+concurrency:
+  group: core8-dev-loop-observe
+  cancel-in-progress: true
+jobs:
+  contract:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Deterministic orchestration contract
+        run: python -m unittest discover -s tools/orchestration -p 'test_*.py' -v
+      - name: Render synthetic dashboard preview (no network, no private data)
+        if: github.event_name == 'pull_request'
+        run: |
+          python tools/orchestration/demo_fixture.py
+          python tools/orchestration/dashboard_report.py core8-dev-loop-report.json
+          python tools/orchestration/browser_dashboard.py core8-dev-loop-report.json
+      - name: Upload synthetic demo preview
+        if: github.event_name == 'pull_request'
+        uses: actions/upload-artifact@v4
+        with:
+          name: core8-dashboard-SYNTHETIC-DEMO
+          path: |
+            core8-dev-loop-report.md
+            core8-dev-loop-dashboard.html
+          retention-days: 7
+          if-no-files-found: error
+  live-preview:
+    # Live evidence on the explicitly trusted same-repository draft branch.
+    # Read-only token; never execute PR bodies or private Notion scopes.
+    if: >-
+      github.event_name == 'pull_request' &&
+      github.event.pull_request.head.repo.full_name == github.repository &&
+      github.head_ref == 'feature/ceo-engineering-orchestration-v1'
+    needs: contract
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      pull-requests: read
+      checks: read
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Fetch current PR head check evidence (read-only)
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          CORE8_PREVIEW_PR: ${{ github.event.pull_request.number }}
+          CORE8_PREVIEW_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: python tools/orchestration/pr_live_preview.py
+      - name: Render current-head snapshot in Markdown and HTML
+        run: |
+          python tools/orchestration/dashboard_report.py core8-dev-loop-report.json
+          python tools/orchestration/browser_dashboard.py core8-dev-loop-report.json
+      - uses: actions/upload-artifact@v4
+        with:
+          name: core8-dashboard-LIVE-PR-SNAPSHOT
+          path: |
+            core8-dev-loop-report.json
+            core8-dev-loop-report.md
+            core8-dev-loop-dashboard.html
+          retention-days: 7
+          if-no-files-found: error
+  repo-wide-preview:
+    # Bounded current GitHub PR metadata only, on explicitly trusted PR branch.
+    if: >-
+      github.event_name == 'pull_request' &&
+      github.event.pull_request.head.repo.full_name == github.repository &&
+      github.head_ref == 'feature/ceo-engineering-orchestration-v1'
+    needs: contract
+    runs-on: ubuntu-24.04
+    timeout-minutes: 7
+    permissions:
+      contents: read
+      pull-requests: read
+      checks: read
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Capture up to 20 open PRs and current check runs
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: python tools/orchestration/repo_live_preview.py
+      - name: Render bounded repo snapshot
+        run: |
+          python tools/orchestration/dashboard_report.py core8-dev-loop-report.json
+          python tools/orchestration/browser_dashboard.py core8-dev-loop-report.json
+      - uses: actions/upload-artifact@v4
+        with:
+          name: core8-dashboard-REPO-LIVE-SNAPSHOT
+          path: |
+            core8-dev-loop-report.json
+            core8-dev-loop-report.md
+            core8-dev-loop-dashboard.html
+          retention-days: 7
+          if-no-files-found: error
+  observe:
+    # Explicit budget/operations switch; never begin hourly runs just by merging.
+    if: >-
+      vars.CORE8_DEV_LOOP_ENABLED == 'true' &&
+      github.event_name != 'pull_request' &&
+      github.ref == 'refs/heads/main'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      pull-requests: read
+      checks: read
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Read-only PR and check-run snapshot (no AI calls)
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: python tools/orchestration/dev_loop_health.py
+      - name: Render private-safe engineering summary
+        run: python tools/orchestration/dashboard_report.py core8-dev-loop-report.json
+      - name: Render standalone RTL browser dashboard
+        run: python tools/orchestration/browser_dashboard.py core8-dev-loop-report.json
+      - uses: actions/upload-artifact@v4
+        with:
+          name: core8-dev-loop-report
+          path: |
+            core8-dev-loop-report.json
+            core8-dev-loop-report.md
+            core8-dev-loop-dashboard.html
+          retention-days: 7
+          if-no-files-found: error
